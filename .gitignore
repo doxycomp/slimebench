@@ -8,6 +8,14 @@ dist-newstyle/
 # node (package-lock.json IS committed -- reproducible toolchain matters here)
 node_modules/
 
+# python
+__pycache__/
+*.py[cod]
+
+# haskell: build/ is covered above; the libgmp shim lives under it
+.stack-work/
+dist-newstyle/
+
 # generated web bundle (rebuild with: npm run build:web)
 impl/web/app.js
 

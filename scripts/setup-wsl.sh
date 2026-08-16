@@ -103,6 +103,11 @@ setup_rust() {
 
 setup_haskell() {
   log "haskell"
+  # GHC links against libgmp. GHCup installs the compiler but not this, and the
+  # failure ("cannot find -lgmp") only shows up at link time, not install time.
+  need_apt_update
+  apt_install libgmp-dev libnuma-dev
+
   if have ghc; then
     echo "  already installed: $(ghc --version)"
   else

@@ -1,0 +1,28 @@
+[package]
+name = "slimebench"
+version = "1.0.0"
+edition = "2021"
+publish = false
+description = "slimebench Rust implementation (SPEC-1)"
+
+[[bin]]
+name = "slimebench"
+path = "src/main.rs"
+
+[features]
+default = []
+# Replace every masked index with get_unchecked. The masks already make the
+# safe checks unreachable; this variant exists to measure what the compiler
+# cannot prove away.
+unchecked = []
+
+[profile.release]
+opt-level = 3
+lto = false
+codegen-units = 16
+panic = "abort"
+
+[profile.release-lto]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
