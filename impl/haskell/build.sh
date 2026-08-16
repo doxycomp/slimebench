@@ -27,8 +27,20 @@ case "$PROFILE" in
   *) echo "unknown profile '$PROFILE'" >&2; exit 2 ;;
 esac
 
+# Ubuntu installs LLVM's tools under /usr/lib/llvm-<v>/bin and only symlinks a
+# subset into /usr/bin -- opt and llc are not among them. GHC needs both on
+# PATH for -fllvm, so find the newest versioned directory and prepend it.
 if [ "$PROFILE" = "o2-llvm" ] && ! command -v opt >/dev/null 2>&1; then
-  echo "error: -fllvm needs LLVM's opt/llc on PATH (apt install llvm-18)" >&2
+  for d in $(ls -d /usr/lib/llvm-*/bin 2>/dev/null | sort -V -r); do
+    if [ -x "$d/opt" ] && [ -x "$d/llc" ]; then
+      export PATH="$d:$PATH"
+      echo "note: using LLVM from $d" >&2
+      break
+    fi
+  done
+fi
+if [ "$PROFILE" = "o2-llvm" ] && ! command -v opt >/dev/null 2>&1; then
+  echo "error: -fllvm needs LLVM's opt and llc (apt install llvm)" >&2
   exit 3
 fi
 
