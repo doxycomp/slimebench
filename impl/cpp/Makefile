@@ -1,20 +1,13 @@
-# slimebench -- C implementation.
+# slimebench -- C++ implementation.
 #
-# The compiler and the optimisation profile are the two axes we benchmark, so
-# both are variables and every combination lands in its own build directory:
+#   make CXX=g++     PROFILE=o3
+#   make CXX=clang++ PROFILE=ofast-native
+#   make all-profiles CXX=g++
 #
-#   make CC=gcc   PROFILE=o3
-#   make CC=clang PROFILE=ofast-native
-#   make all-profiles CC=gcc
-#
-# Binaries: build/<cc>-<profile>/slimebench-{headless,sdl2}
+# Binaries: build/<cxx>-<profile>/slimebench-{headless,sdl2,raylib}
 
-CC      ?= gcc
+CXX     ?= g++
 PROFILE ?= o2
-
-# --- optimisation profiles ---------------------------------------------------
-# Profiles marked (C) violate SPEC-1 section 1.2 on purpose: they are the
-# fast-math conformance class, and measuring what they buy is the point.
 
 ifeq ($(PROFILE),o0)
   OPTFLAGS := -O0
@@ -42,29 +35,24 @@ else
   $(error unknown PROFILE '$(PROFILE)')
 endif
 
-# SPEC-1 section 1.2: no FMA contraction, no reassociation. Overridden to empty
-# by the ofast profiles above.
+# SPEC-1 section 1.2: no FMA contraction, no reassociation.
 FPFLAGS ?= -ffp-contract=off -fno-fast-math
 
 WARN     := -Wall -Wextra -Wno-unused-parameter
-STD      := -std=c11
-# strict C11 hides clock_gettime; ask for POSIX 2008 explicitly rather than
-# falling back to -std=gnu11 (we want the same language across compilers).
-DEFS     := -D_POSIX_C_SOURCE=200809L
-CFLAGS   := $(STD) $(DEFS) $(WARN) $(OPTFLAGS) $(FPFLAGS) $(EXTRA_CFLAGS)
+STD      := -std=c++20
+CXXFLAGS := $(STD) $(WARN) $(OPTFLAGS) $(FPFLAGS) $(EXTRA_CXXFLAGS)
 LDFLAGS  := $(OPTFLAGS) $(EXTRA_LDFLAGS)
-LDLIBS   := -lm
 
-CCNAME   := $(notdir $(CC))
-BUILDDIR := build/$(CCNAME)-$(PROFILE)
+CXXNAME  := $(notdir $(CXX))
+BUILDDIR := build/$(CXXNAME)-$(PROFILE)
 
-CORE_SRC := sb_core.c sb_cli.c
-CORE_OBJ := $(addprefix $(BUILDDIR)/,$(CORE_SRC:.c=.o))
+CORE_SRC := sim.cpp cli.cpp
+CORE_OBJ := $(addprefix $(BUILDDIR)/,$(CORE_SRC:.cpp=.o))
+HEADERS  := dirtable.hpp sim.hpp cli.hpp
 
 HEADLESS := $(BUILDDIR)/slimebench-headless
 SDL2BIN  := $(BUILDDIR)/slimebench-sdl2
 RAYBIN   := $(BUILDDIR)/slimebench-raylib
-HEADERS  := dirtable.h sb_core.h sb_cli.h sb_render.h
 
 SDL2_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null)
 SDL2_LIBS   := $(shell pkg-config --libs   sdl2 2>/dev/null)
@@ -74,47 +62,44 @@ RAY_LIBS    := $(shell pkg-config --libs   raylib 2>/dev/null)
 .PHONY: all headless sdl2 raylib clean distclean all-profiles print-config
 
 all: headless
-
 headless: $(HEADLESS)
-
 sdl2: $(SDL2BIN)
-
 raylib: $(RAYBIN)
 
 $(BUILDDIR):
 	@mkdir -p $(BUILDDIR)
 
-$(BUILDDIR)/%.o: %.c $(HEADERS) | $(BUILDDIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILDDIR)/%.o: %.cpp $(HEADERS) | $(BUILDDIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(HEADLESS): $(CORE_OBJ) $(BUILDDIR)/main_headless.o
-	$(CC) $(LDFLAGS) $^ -o $@ $(LDLIBS)
+	$(CXX) $(LDFLAGS) $^ -o $@
 
-$(BUILDDIR)/main_sdl2.o: main_sdl2.c $(HEADERS) | $(BUILDDIR)
+$(BUILDDIR)/main_sdl2.o: main_sdl2.cpp $(HEADERS) | $(BUILDDIR)
 	@test -n "$(SDL2_LIBS)" || { echo "error: SDL2 not found (apt install libsdl2-dev)"; exit 1; }
-	$(CC) $(CFLAGS) $(SDL2_CFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(SDL2_CFLAGS) -c $< -o $@
 
 $(SDL2BIN): $(CORE_OBJ) $(BUILDDIR)/main_sdl2.o
-	$(CC) $(LDFLAGS) $^ -o $@ $(SDL2_LIBS) $(LDLIBS)
+	$(CXX) $(LDFLAGS) $^ -o $@ $(SDL2_LIBS)
 
-$(BUILDDIR)/main_raylib.o: main_raylib.c $(HEADERS) | $(BUILDDIR)
+$(BUILDDIR)/main_raylib.o: main_raylib.cpp $(HEADERS) | $(BUILDDIR)
 	@test -n "$(RAY_LIBS)" || { echo "error: raylib not found (scripts/setup-wsl.sh render)"; exit 1; }
-	$(CC) $(CFLAGS) $(RAY_CFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(RAY_CFLAGS) -c $< -o $@
 
 $(RAYBIN): $(CORE_OBJ) $(BUILDDIR)/main_raylib.o
-	$(CC) $(LDFLAGS) $^ -o $@ $(RAY_LIBS) $(LDLIBS)
+	$(CXX) $(LDFLAGS) $^ -o $@ $(RAY_LIBS)
 
 PROFILES := o0 o1 o2 o3 os o3-native o3-lto o3-native-lto ofast ofast-native
 
 all-profiles:
 	@for p in $(PROFILES); do \
-	  echo "==> $(CCNAME) $$p"; \
-	  $(MAKE) --no-print-directory CC=$(CC) PROFILE=$$p headless || exit 1; \
+	  echo "==> $(CXXNAME) $$p"; \
+	  $(MAKE) --no-print-directory CXX=$(CXX) PROFILE=$$p headless || exit 1; \
 	done
 
 print-config:
-	@echo "CC=$(CC)  PROFILE=$(PROFILE)"
-	@echo "CFLAGS=$(CFLAGS)"
+	@echo "CXX=$(CXX)  PROFILE=$(PROFILE)"
+	@echo "CXXFLAGS=$(CXXFLAGS)"
 	@echo "OUT=$(BUILDDIR)"
 
 clean:

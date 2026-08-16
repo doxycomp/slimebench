@@ -15,13 +15,22 @@ Simulation läuft, und einem Harness für Performance- und Footprint-Vergleiche
 
 | Sprache | headless | SDL2 | raylib | Konformität |
 |---|:-:|:-:|:-:|:-:|
-| C | ✅ | ✅ | ⬜ | Stufe A (Referenz) |
+| C | ✅ | ✅ | ✅ | Stufe A (Referenz) |
+| C++ | ✅ | ✅ | ✅ | Stufe A |
+| Rust (safe + unchecked) | ✅ | ⬜ | ⬜ | Stufe A |
+| Haskell | ✅ | ⬜ | ⬜ | Stufe A |
 | TypeScript / Node | ✅ | — | — | Stufe A |
 | TypeScript / Canvas | — | ✅ Browser | — | Stufe A |
-| C++, Rust, Haskell, Python, Perl | ⬜ | ⬜ | ⬜ | — |
+| Python / numpy | ✅ | ⬜ | ⬜ | Stufe A, nur `deferred` |
+| Python / pur | ✅ | ⬜ | ⬜ | Stufe B, A mit `--strict-f32` |
+| Perl | ✅ | ⬜ | ⬜ | Stufe B, A mit `--strict-f32` |
 
-C (gcc), Node und Chrome erzeugen nach 300 Ticks auf 1024² mit 262 144 Agenten
-**byteidentische** Grids.
+**Alle acht Sprachen bestehen `bench/run.py conformance`.** Sechs davon
+bit-exakt gegen die C-Referenz über Grid- *und* Agenten-Prüfsumme, bei
+`micro`/`tiny`/`small` × `serial`/`deferred` × Tick-Ständen {1, 10, 100, 1000}.
+Python und Perl erreichen mit `--strict-f32` ebenfalls Bit-Exaktheit.
+
+Messwerte: [docs/RESULTS.md](docs/RESULTS.md).
 
 ## Schnellstart
 
@@ -40,10 +49,16 @@ Dasselbe in TypeScript, mit identischem Ergebnis:
 node --experimental-strip-types impl/ts/src/main-node.ts --preset small --ticks 600
 ```
 
-Prüfen, dass alle Implementierungen bit-exakt übereinstimmen:
+Prüfen, dass alle Implementierungen übereinstimmen:
 
 ```bash
 python3 bench/run.py conformance
+```
+
+Weitere Toolchains nachinstallieren (phasenweise: `base`, `render`, `rust`, `haskell`, `scripting`, `gpu`):
+
+```bash
+scripts/setup-wsl.sh all
 ```
 
 Benchmarken (vom Linux-Dateisystem aus, sonst misst du die 9p-Brücke):
@@ -77,8 +92,15 @@ make -C impl/c CC=gcc PROFILE=o3-native sdl2 && ./impl/c/build/gcc-o3-native/sli
   die Deposits ihrer Vorgänger im selben Tick sehen — schön, aber prinzipiell
   nicht deterministisch parallelisierbar. `deferred` löst das und ist die
   Grundlage aller Parallel-, SIMD- und GPU-Varianten.
+- **Warum numpy nur `deferred` kann.** `serial` hat eine sequenzielle
+  Abhängigkeit durch das Grid, die sich nicht vektorisieren lässt. Die
+  Implementierung lehnt den Modus mit klarer Meldung ab, statt still etwas
+  anderes zu rechnen — siehe Docstring in
+  [slimebench_numpy.py](impl/python/slimebench_numpy.py).
+- **Was Bounds-Checking in Rust kostet.** Im Diffusionspass ein Drittel, im
+  Agenten-Pass nichts. Siehe [docs/RESULTS.md](docs/RESULTS.md).
 - **Warum `-O3` hier langsamer ist als `-O2`.** Siehe
-  [BUILDPLAN Phase 5](docs/BUILDPLAN.md).
+  [docs/RESULTS.md](docs/RESULTS.md).
 
 ## Herkunft
 

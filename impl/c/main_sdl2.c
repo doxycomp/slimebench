@@ -10,6 +10,7 @@
 #include <stdlib.h>
 
 #include "sb_cli.h"
+#include "sb_render.h"
 
 int main(int argc, char **argv) {
     sb_config cfg;
@@ -46,8 +47,8 @@ int main(int argc, char **argv) {
     const size_t cells = (size_t)cfg.width * cfg.height;
     uint8_t *gray = (uint8_t *)malloc(cells);
 
-    uint32_t frames = 0;
-    uint64_t fps_t0 = sb_now_ns();
+    sb_render_stats stats;
+    sb_rs_init(&stats, cfg.ticks == 0xFFFFFFFFu ? 100000 : cfg.ticks);
     int running = 1;
 
     for (uint32_t t = 0; running && t < cfg.ticks; t++) {
@@ -59,7 +60,9 @@ int main(int argc, char **argv) {
                 running = 0;
         }
 
-        sb_tick(&sim);
+        if (!opt.freeze_sim) sb_tick(&sim);
+
+        const uint64_t r0 = sb_now_ns();
         sb_render_gray(&sim, gray, opt.display_max);
 
         void *pixels = NULL;
@@ -78,18 +81,22 @@ int main(int argc, char **argv) {
         SDL_RenderClear(ren);
         SDL_RenderCopy(ren, tex, NULL, NULL);
         SDL_RenderPresent(ren);
+        sb_rs_add(&stats, sb_now_ns() - r0);
 
-        if (++frames == 60) {
-            const uint64_t now = sb_now_ns();
-            const double fps = 60.0 * 1e9 / (double)(now - fps_t0);
-            char title[128];
-            snprintf(title, sizeof title, "slimebench -- C / SDL2 -- %.1f fps", fps);
+        if (stats.since_title >= 60) {
+            const double ms = sb_rs_recent_mean(&stats, 60);
+            char title[160];
+            snprintf(title, sizeof title,
+                     "slimebench -- C / SDL2 -- %.2f ms/frame (%.0f fps)",
+                     ms, ms > 0 ? 1000.0 / ms : 0.0);
             SDL_SetWindowTitle(win, title);
-            frames = 0;
-            fps_t0 = now;
+            stats.since_title = 0;
         }
     }
 
+    if (opt.want_json) sb_rs_emit_json(&stats, &sim, "c", "sdl2");
+
+    sb_rs_free(&stats);
     free(gray);
     SDL_DestroyTexture(tex);
     SDL_DestroyRenderer(ren);

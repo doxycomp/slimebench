@@ -1,14 +1,22 @@
 # slimebench target registry.
 #
-# One [[target]] per implementation. The (compiler x profile) cross product is
-# the compiler-comparison axis; every combination gets its own binary and its
-# own result row.
+# One [[target]] per implementation/backend. The (compiler x profile) cross
+# product is the compiler-comparison axis; every combination gets its own
+# binary and its own result row.
 #
 # Placeholders available in `build`, `binary` and `run`:
 #   {cc}       current compiler id
 #   {profile}  current profile id
 #   {binary}   resolved `binary` path (absolute)
 #   {dir}      target directory (absolute)
+#
+# Optional fields:
+#   updates            SPEC-1 5.5 modes the target implements (default both)
+#   conformance_set    "full" (micro+tiny+small) or "micro" (slow targets)
+#   tier               "A" bit-exact, "B" tolerance-based (SPEC-1 7)
+#   fastmath_profiles  profiles that deliberately break tier A -> class C
+#   headless_capable   false = built for footprint only, never timed
+#   extra_args         appended to every invocation
 
 # --------------------------------------------------------------------------- C
 
@@ -23,21 +31,96 @@ binary   = "build/{cc}-{profile}/slimebench-headless"
 run      = ["{binary}"]
 compilers = ["gcc", "clang"]
 profiles  = ["o0", "o2", "o3", "o3-native", "o3-native-lto", "ofast-native"]
-# Profiles that deliberately violate SPEC-1 section 1.2 -> conformance class C.
 fastmath_profiles = ["ofast", "ofast-native"]
 
 [[target]]
 id       = "c-sdl2"
 lang     = "C"
 backend  = "sdl2"
-class    = "S"
+class    = "R"
 dir      = "impl/c"
 build    = "make CC={cc} PROFILE={profile} sdl2"
 binary   = "build/{cc}-{profile}/slimebench-sdl2"
 run      = ["{binary}"]
 compilers = ["gcc"]
 profiles  = ["o3-native"]
-headless_capable = false     # excluded from timing runs, built for size only
+headless_capable = false
+
+# ------------------------------------------------------------------------- C++
+
+[[target]]
+id       = "c-raylib"
+lang     = "C"
+backend  = "raylib"
+class    = "R"
+dir      = "impl/c"
+build    = "make CC={cc} PROFILE={profile} raylib"
+binary   = "build/{cc}-{profile}/slimebench-raylib"
+run      = ["{binary}"]
+compilers = ["gcc"]
+profiles  = ["o3-native"]
+headless_capable = false
+
+# ------------------------------------------------------------------------- C++
+
+[[target]]
+id       = "cpp"
+lang     = "C++"
+backend  = "headless"
+class    = "S"
+dir      = "impl/cpp"
+build    = "make CXX={cc} PROFILE={profile} headless"
+binary   = "build/{cc}-{profile}/slimebench-headless"
+run      = ["{binary}"]
+compilers = ["g++", "clang++"]
+profiles  = ["o0", "o2", "o3", "o3-native", "o3-native-lto", "ofast-native"]
+fastmath_profiles = ["ofast", "ofast-native"]
+
+[[target]]
+id       = "cpp-sdl2"
+lang     = "C++"
+backend  = "sdl2"
+class    = "R"
+dir      = "impl/cpp"
+build    = "make CXX={cc} PROFILE={profile} sdl2"
+binary   = "build/{cc}-{profile}/slimebench-sdl2"
+run      = ["{binary}"]
+compilers = ["g++"]
+profiles  = ["o3-native"]
+headless_capable = false
+
+[[target]]
+id       = "cpp-raylib"
+lang     = "C++"
+backend  = "raylib"
+class    = "R"
+dir      = "impl/cpp"
+build    = "make CXX={cc} PROFILE={profile} raylib"
+binary   = "build/{cc}-{profile}/slimebench-raylib"
+run      = ["{binary}"]
+compilers = ["g++"]
+profiles  = ["o3-native"]
+headless_capable = false
+
+# ------------------------------------------------------------------------ Rust
+
+[[target]]
+id       = "rust"
+lang     = "Rust"
+backend  = "headless"
+class    = "S"
+dir      = "impl/rust"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["cargo"]
+profiles  = [
+  "release",
+  "release-unchecked",
+  "release-native",
+  "release-native-unchecked",
+  "release-native-lto-unchecked",
+]
 
 # ------------------------------------------------------------------ TypeScript
 
@@ -51,62 +134,81 @@ run      = ["node", "--experimental-strip-types", "{dir}/src/main-node.ts"]
 compilers = ["node"]
 profiles  = ["default"]
 
-# --------------------------------------------------------------- placeholders
-# Uncomment as each phase of docs/BUILDPLAN.md lands.
+# ---------------------------------------------------------------------- Python
 
-# [[target]]
-# id = "cpp"
-# lang = "C++"
-# backend = "headless"
-# class = "S"
-# dir = "impl/cpp"
-# build = "make CXX={cc} PROFILE={profile} headless"
-# binary = "build/{cc}-{profile}/slimebench-headless"
-# run = ["{binary}"]
-# compilers = ["g++", "clang++"]
-# profiles = ["o2", "o3", "o3-native", "ofast-native"]
-# fastmath_profiles = ["ofast", "ofast-native"]
+[[target]]
+id       = "python-numpy"
+lang     = "Python"
+backend  = "numpy"
+class    = "S"
+dir      = "impl/python"
+run      = ["python3", "{dir}/slimebench_numpy.py"]
+compilers = ["python3"]
+profiles  = ["default"]
+# SPEC-1 5.5 'serial' has a sequential dependency through the grid that cannot
+# be vectorised. Documented in the module docstring; this is a finding.
+updates  = ["deferred"]
 
-# [[target]]
-# id = "rust"
-# lang = "Rust"
-# backend = "headless"
-# class = "S"
-# dir = "impl/rust"
-# build = "cargo build --profile {profile}"
-# binary = "target/{profile}/slimebench"
-# run = ["{binary}"]
-# compilers = ["rustc"]
-# profiles = ["release", "release-native", "release-lto"]
+[[target]]
+id       = "python-pure"
+lang     = "Python"
+backend  = "pure"
+class    = "S"
+dir      = "impl/python"
+run      = ["python3", "{dir}/slimebench_pure.py"]
+compilers = ["python3"]
+profiles  = ["default"]
+conformance_set = "micro"
+tier     = "B"
 
-# [[target]]
-# id = "python"
-# lang = "Python"
-# backend = "numpy"
-# class = "S"
-# dir = "impl/python"
-# run = ["python3", "{dir}/slimebench.py"]
-# compilers = ["cpython"]
-# profiles = ["default"]
+[[target]]
+id       = "python-pure-strict"
+lang     = "Python"
+backend  = "pure-strict"
+class    = "S"
+dir      = "impl/python"
+run      = ["python3", "{dir}/slimebench_pure.py"]
+compilers = ["python3"]
+profiles  = ["default"]
+conformance_set = "micro"
+extra_args = ["--strict-f32"]
 
-# [[target]]
-# id = "perl"
-# lang = "Perl"
-# backend = "headless"
-# class = "S"
-# dir = "impl/perl"
-# run = ["perl", "{dir}/slimebench.pl"]
-# compilers = ["perl"]
-# profiles = ["default"]
+# ------------------------------------------------------------------------ Perl
 
-# [[target]]
-# id = "haskell"
-# lang = "Haskell"
-# backend = "headless"
-# class = "S"
-# dir = "impl/haskell"
-# build = "cabal build -O2"
-# binary = "dist-newstyle/build/slimebench"
-# run = ["{binary}"]
-# compilers = ["ghc"]
-# profiles = ["o1", "o2"]
+[[target]]
+id       = "perl"
+lang     = "Perl"
+backend  = "headless"
+class    = "S"
+dir      = "impl/perl"
+run      = ["perl", "-I{dir}/lib", "{dir}/slimebench.pl"]
+compilers = ["perl"]
+profiles  = ["default"]
+conformance_set = "micro"
+tier     = "B"
+
+[[target]]
+id       = "perl-strict"
+lang     = "Perl"
+backend  = "strict-f32"
+class    = "S"
+dir      = "impl/perl"
+run      = ["perl", "-I{dir}/lib", "{dir}/slimebench.pl"]
+compilers = ["perl"]
+profiles  = ["default"]
+conformance_set = "micro"
+extra_args = ["--strict-f32"]
+
+# --------------------------------------------------------------------- Haskell
+
+[[target]]
+id       = "haskell"
+lang     = "Haskell"
+backend  = "headless"
+class    = "S"
+dir      = "impl/haskell"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["ghc"]
+profiles  = ["o1", "o2", "o2-llvm"]

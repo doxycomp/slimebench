@@ -20,32 +20,73 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
+import pathlib
 import shlex
 import shutil
 import statistics
+import struct
 import subprocess
 import sys
 import tempfile
 import time
 import tomllib
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 RESULTS = ROOT / "results"
 TESTVECTORS = ROOT / "spec" / "testvectors" / "SPEC-1.json"
 
-# Conformance matrix: preset x update mode x tick counts.
-CONFORMANCE_CASES = [
-    ("tiny", "serial", [1, 10, 100, 1000]),
-    ("tiny", "deferred", [1, 10, 100, 1000]),
-    ("small", "serial", [1, 10, 100]),
-    ("small", "deferred", [1, 10, 100]),
-]
+# Conformance matrix.
+#
+# Cases carry explicit dimensions rather than preset names so that the slow
+# interpreted targets have something they can actually finish: `micro` runs in
+# milliseconds even in pure Python, while the compiled targets also verify the
+# larger sizes where cache behaviour and index wrapping differ.
+CONFORMANCE_SIZES = {
+    "micro": ["--width", "128", "--height", "128", "--agents", "4096"],
+    "tiny": ["--preset", "tiny"],
+    "small": ["--preset", "small"],
+}
+CONFORMANCE_TICKS = {
+    "micro": [1, 10, 100],
+    "tiny": [1, 10, 100, 1000],
+    "small": [1, 10, 100],
+}
+# Which sizes a target runs, by its declared conformance_set.
+CONFORMANCE_SETS = {
+    "micro": ["micro"],
+    "full": ["micro", "tiny", "small"],
+}
+UPDATE_MODES = ["serial", "deferred"]
+
 REFERENCE_TARGET = "c"
 REFERENCE_CC = "gcc"
 REFERENCE_PROFILE = "o2"
+
+# SPEC-1 section 7.2 tolerances for conformance tier B.
+#
+# Split by what the metric actually measures, because a single tolerance is
+# wrong for both. Measured drift of the tier-B Python target against the C
+# reference at 128x128 / 4096 agents:
+#
+#     ticks        sum/mean     stddev     frac>1
+#         1         1.7e-10    1.8e-09          0
+#       100         5.1e-09    2.6e-04          0
+#      1000         8.6e-09    6.7e-04     7.3e-04
+#
+# sum and mean are near-conserved: total pheromone is set by the deposit rate
+# and the decay factor, essentially independent of where the agents went. They
+# stay at 1e-9 forever, so the tolerance can be *tighter* than originally
+# specified -- a wrong decay, deposit or kernel normalisation blows past 1e-6
+# immediately. stddev and frac>1 measure where the filaments ended up, which
+# genuinely diverges under chaos; holding them to 1e-4 would only ever flag
+# the chaos, never a bug.
+TIER_B_CONSERVED_REL_TOL = 1e-6      # sum, mean
+TIER_B_STRUCTURE_REL_TOL = 2e-2      # stddev
+TIER_B_STRUCTURE_ABS_TOL = 2e-2      # frac_gt1
 
 
 # --------------------------------------------------------------------------- #
@@ -67,6 +108,14 @@ class Target:
     binary: str | None = None
     fastmath_profiles: list[str] = field(default_factory=list)
     headless_capable: bool = True
+    # Update modes this target can implement at all (SPEC-1 section 5.5).
+    # The numpy target is deferred-only, and that is a finding, not a bug.
+    updates: list[str] = field(default_factory=lambda: list(UPDATE_MODES))
+    # "full" or "micro" -- see CONFORMANCE_SETS.
+    conformance_set: str = "full"
+    # "A" = bit-exact, "B" = tolerance-based (SPEC-1 section 7).
+    tier: str = "A"
+    extra_args: list[str] = field(default_factory=list)
 
     def subst(self, s: str, cc: str, profile: str) -> str:
         out = s.replace("{cc}", cc).replace("{profile}", profile)
@@ -103,6 +152,10 @@ def load_targets() -> dict[str, Target]:
             binary=t.get("binary"),
             fastmath_profiles=t.get("fastmath_profiles", []),
             headless_capable=t.get("headless_capable", True),
+            updates=t.get("updates", list(UPDATE_MODES)),
+            conformance_set=t.get("conformance_set", "full"),
+            tier=t.get("tier", "A"),
+            extra_args=t.get("extra_args", []),
         )
     return out
 
@@ -214,7 +267,16 @@ def strip_size(binary: Path) -> int | None:
 
 
 def sim_args(a: argparse.Namespace) -> list[str]:
-    args = ["--preset", a.preset, "--update", a.update, "--json", "--seed", str(a.seed)]
+    args = ["--update", a.update, "--json", "--seed", str(a.seed)]
+    if a.width or a.height or a.agents:
+        # Explicit dimensions: the only way to get one table that the
+        # interpreted targets can actually finish alongside the compiled ones.
+        if not (a.width and a.height and a.agents):
+            sys.exit("error: --width, --height and --agents must be given together")
+        args += ["--width", str(a.width), "--height", str(a.height),
+                 "--agents", str(a.agents)]
+    else:
+        args += ["--preset", a.preset]
     if a.ticks is not None:
         args += ["--ticks", str(a.ticks)]
     if a.warmup:
@@ -228,13 +290,17 @@ def cmd_bench(a: argparse.Namespace) -> int:
     targets = load_targets()
     selected = pick_targets(targets, a.targets)
     RESULTS.mkdir(exist_ok=True)
-    outpath = Path(a.out) if a.out else RESULTS / f"{a.preset}-{int(time.time())}.jsonl"
+    outpath = Path(a.out).resolve() if a.out else RESULTS / f"{a.preset}-{int(time.time())}.jsonl"
+    outpath.parent.mkdir(parents=True, exist_ok=True)
 
     rows: list[dict] = []
     with outpath.open("w", encoding="utf-8") as sink:
         for t in selected:
             if not t.headless_capable:
                 print(f"-- {t.id}: skipped (not headless-capable)")
+                continue
+            if a.update not in t.updates:
+                print(f"-- {t.id}: skipped (does not implement --update {a.update})")
                 continue
             for cc in filter_list(t.compilers, a.compilers):
                 if t.build and not shutil.which(cc):
@@ -246,7 +312,11 @@ def cmd_bench(a: argparse.Namespace) -> int:
                     sink.write(json.dumps(row) + "\n")
                     sink.flush()
 
-    print(f"\nwrote {outpath.relative_to(ROOT)}\n")
+    try:
+        shown = outpath.relative_to(ROOT)
+    except ValueError:
+        shown = outpath          # staged run: outside the repo tree
+    print(f"\nwrote {shown}\n")
     print(render_report(rows))
     return 0
 
@@ -261,7 +331,7 @@ def bench_one(t: Target, cc: str, profile: str, a: argparse.Namespace) -> dict:
         return {"target": t.id, "lang": t.lang, "cc": cc, "profile": profile,
                 "status": "build-failed", "log": build.log[-4000:]}
 
-    argv = [t.subst(x, cc, profile) for x in t.run] + sim_args(a)
+    argv = [t.subst(x, cc, profile) for x in t.run] + sim_args(a) + t.extra_args
     argv[0] = resolve_exe(argv[0])
 
     reps: list[dict] = []
@@ -288,7 +358,8 @@ def bench_one(t: Target, cc: str, profile: str, a: argparse.Namespace) -> dict:
     return {
         "target": t.id, "lang": t.lang, "backend": t.backend, "class": t.cls,
         "cc": cc, "profile": profile,
-        "conformance_class": t.conformance_class(profile),
+        "variant": best.get("variant"),
+        "conformance_class": "C" if profile in t.fastmath_profiles else t.tier,
         "status": "ok",
         "reps": a.reps,
         "deterministic_across_reps": len(hashes) == 1,
@@ -344,41 +415,79 @@ def indent(s: str, pad: str = "      ") -> str:
 # --------------------------------------------------------------------------- #
 
 
+def case_list(conformance_set: str, updates: list[str]) -> list[tuple[str, str, int]]:
+    """(size, update, ticks) triples a target should verify."""
+    out = []
+    for size in CONFORMANCE_SETS[conformance_set]:
+        for update in UPDATE_MODES:
+            if update not in updates:
+                continue
+            for n in CONFORMANCE_TICKS[size]:
+                out.append((size, update, n))
+    return out
+
+
+def grid_metrics(path: pathlib.Path) -> dict[str, float]:
+    """SPEC-1 section 7.2 tolerance metrics from a raw f32 dump."""
+    raw = path.read_bytes()
+    n = len(raw) // 4
+    vals = struct.unpack(f"<{n}f", raw)
+    total = math.fsum(vals)
+    mean = total / n
+    var = math.fsum((v - mean) ** 2 for v in vals) / n
+    return {
+        "sum": total,
+        "mean": mean,
+        "stddev": math.sqrt(var),
+        "frac_gt1": sum(1 for v in vals if v > 1.0) / n,
+    }
+
+
+def compare_metrics(got: dict[str, float], want: dict[str, float]) -> list[str]:
+    """Returns a list of human-readable failures (empty means pass)."""
+    bad = []
+
+    def rel(k: str) -> float:
+        w = want[k]
+        return abs(got[k] - w) / (abs(w) if abs(w) > 1e-12 else 1.0)
+
+    for k in ("sum", "mean"):
+        if rel(k) > TIER_B_CONSERVED_REL_TOL:
+            bad.append(f"{k} rel {rel(k):.3e} > {TIER_B_CONSERVED_REL_TOL:.0e}")
+    if rel("stddev") > TIER_B_STRUCTURE_REL_TOL:
+        bad.append(f"stddev rel {rel('stddev'):.3e} > {TIER_B_STRUCTURE_REL_TOL:.0e}")
+    d = abs(got["frac_gt1"] - want["frac_gt1"])
+    if d > TIER_B_STRUCTURE_ABS_TOL:
+        bad.append(f"frac_gt1 abs {d:.3e} > {TIER_B_STRUCTURE_ABS_TOL:.0e}")
+    return bad
+
+
+def run_case(t: Target, cc: str, profile: str, size: str, update: str, ticks: int,
+             dump: pathlib.Path | None = None) -> dict | None:
+    argv = [t.subst(x, cc, profile) for x in t.run]
+    argv[0] = resolve_exe(argv[0])
+    argv += CONFORMANCE_SIZES[size]
+    argv += ["--update", update, "--ticks", str(ticks), "--seed", "12345", "--json"]
+    argv += t.extra_args
+    if dump is not None:
+        argv += ["--dump-grid", str(dump)]
+    r = spawn_measured(argv, t.dir)
+    if not r.ok:
+        sys.stderr.write(r.stderr[-2000:] + "\n")
+        return None
+    return last_json_line(r.stdout)
+
+
 def cmd_conformance(a: argparse.Namespace) -> int:
     targets = load_targets()
 
     if a.write:
-        ref = targets[REFERENCE_TARGET]
-        b = do_build(ref, REFERENCE_CC, REFERENCE_PROFILE, a.verbose)
-        if not b.ok:
-            print(b.log)
-            return 1
-        vectors: dict[str, dict[str, str]] = {}
-        for preset, update, ticks in CONFORMANCE_CASES:
-            for n in ticks:
-                key = f"{preset}/{update}/{n}"
-                res = run_case(ref, REFERENCE_CC, REFERENCE_PROFILE, preset, update, n)
-                if res is None:
-                    print(f"  {key}: FAILED to produce a result")
-                    return 1
-                vectors[key] = {"grid_hash": res["grid_hash"],
-                                "agent_hash": res["agent_hash"]}
-                print(f"  {key}: grid={res['grid_hash']} agents={res['agent_hash']}")
-        TESTVECTORS.parent.mkdir(parents=True, exist_ok=True)
-        TESTVECTORS.write_text(json.dumps({
-            "spec": "SPEC-1",
-            "generated_by": f"{REFERENCE_TARGET} / {REFERENCE_CC} / {REFERENCE_PROFILE}",
-            "seed": 12345,
-            "dirtable_hash": res.get("dirtable_hash"),
-            "vectors": vectors,
-        }, indent=2) + "\n", encoding="utf-8")
-        print(f"\nwrote {TESTVECTORS.relative_to(ROOT)}")
-        return 0
+        return write_vectors(targets, a)
 
     if not TESTVECTORS.exists():
         sys.exit("error: no test vectors yet -- run: bench/run.py conformance --write")
     ref = json.loads(TESTVECTORS.read_text(encoding="utf-8"))
-    vectors = ref["vectors"]
+    cases = ref["cases"]
 
     failures = 0
     for t in pick_targets(targets, a.targets):
@@ -387,58 +496,114 @@ def cmd_conformance(a: argparse.Namespace) -> int:
         cc = t.compilers[0]
         profile = next((p for p in t.profiles if p not in t.fastmath_profiles),
                        t.profiles[0])
-        if t.build and not shutil.which(cc):
+        if t.build and not shutil.which(cc.split("/")[-1]):
             print(f"-- {t.id}: {cc} not installed, skipping")
             continue
 
         b = do_build(t, cc, profile, a.verbose)
         if not b.ok:
             print(f"-- {t.id}: BUILD FAILED")
+            print(indent(b.log[-2000:]))
             failures += 1
             continue
 
-        print(f"-- {t.id} ({cc}/{profile}) vs {ref['generated_by']}")
+        skipped = [m for m in UPDATE_MODES if m not in t.updates]
+        note = f"  [tier {t.tier}, {t.conformance_set} set"
+        note += f", no {'/'.join(skipped)}]" if skipped else "]"
+        print(f"-- {t.id} ({cc}/{profile}){note}")
+
         first_bad: str | None = None
-        for preset, update, ticks in CONFORMANCE_CASES:
-            for n in ticks:
-                key = f"{preset}/{update}/{n}"
-                want = vectors.get(key)
+        with tempfile.TemporaryDirectory() as td:
+            dump = pathlib.Path(td) / "grid.f32"
+            for size, update, n in case_list(t.conformance_set, t.updates):
+                key = f"{size}/{update}/{n}"
+                want = cases.get(key)
                 if want is None:
                     continue
-                got = run_case(t, cc, profile, preset, update, n)
+
+                need_dump = t.tier == "B"
+                got = run_case(t, cc, profile, size, update, n,
+                               dump if need_dump else None)
                 if got is None:
-                    print(f"   {key:24s} ERROR")
-                    failures += 1
-                    continue
-                gok = got["grid_hash"] == want["grid_hash"]
-                aok = got["agent_hash"] == want["agent_hash"]
-                if gok and aok:
-                    print(f"   {key:24s} ok")
-                else:
+                    print(f"   {key:22s} ERROR")
                     failures += 1
                     first_bad = first_bad or key
-                    print(f"   {key:24s} MISMATCH"
-                          f"  grid {'ok' if gok else got['grid_hash'] + ' != ' + want['grid_hash']}"
-                          f"  agents {'ok' if aok else got['agent_hash'] + ' != ' + want['agent_hash']}")
+                    continue
+
+                if t.tier == "A":
+                    gok = got["grid_hash"] == want["grid_hash"]
+                    aok = got["agent_hash"] == want["agent_hash"]
+                    if gok and aok:
+                        print(f"   {key:22s} ok")
+                    else:
+                        failures += 1
+                        first_bad = first_bad or key
+                        detail = []
+                        if not gok:
+                            detail.append(f"grid {got['grid_hash']} != {want['grid_hash']}")
+                        if not aok:
+                            detail.append(f"agents {got['agent_hash']} != {want['agent_hash']}")
+                        print(f"   {key:22s} MISMATCH  " + "  ".join(detail))
+                else:
+                    if got["grid_hash"] == want["grid_hash"]:
+                        print(f"   {key:22s} ok (bit-exact, better than tier B needs)")
+                        continue
+                    if not dump.exists():
+                        print(f"   {key:22s} ERROR (no --dump-grid output)")
+                        failures += 1
+                        continue
+                    bad = compare_metrics(grid_metrics(dump), want["metrics"])
+                    if not bad:
+                        print(f"   {key:22s} ok (within tier B tolerance)")
+                    else:
+                        failures += 1
+                        first_bad = first_bad or key
+                        print(f"   {key:22s} OUT OF TOLERANCE  " + "; ".join(bad))
+
         if first_bad:
             print(f"   -> first divergence at {first_bad}. "
                   f"Re-run that case with --hash-every 1 to find the exact tick.")
 
-    print("\nCONFORMANCE OK" if failures == 0 else f"\n{failures} MISMATCH(ES)")
+    print("\nCONFORMANCE OK" if failures == 0 else f"\n{failures} FAILURE(S)")
     return 0 if failures == 0 else 1
 
 
-def run_case(t: Target, cc: str, profile: str, preset: str, update: str,
-             ticks: int) -> dict | None:
-    argv = [t.subst(x, cc, profile) for x in t.run]
-    argv[0] = resolve_exe(argv[0])
-    argv += ["--preset", preset, "--update", update, "--ticks", str(ticks),
-             "--seed", "12345", "--json"]
-    r = spawn_measured(argv, t.dir)
-    if not r.ok:
-        sys.stderr.write(r.stderr[-2000:] + "\n")
-        return None
-    return last_json_line(r.stdout)
+def write_vectors(targets: dict[str, Target], a: argparse.Namespace) -> int:
+    ref = targets[REFERENCE_TARGET]
+    b = do_build(ref, REFERENCE_CC, REFERENCE_PROFILE, a.verbose)
+    if not b.ok:
+        print(b.log)
+        return 1
+
+    cases: dict[str, dict] = {}
+    dirtable_hash = None
+    with tempfile.TemporaryDirectory() as td:
+        dump = pathlib.Path(td) / "grid.f32"
+        for size, update, n in case_list("full", UPDATE_MODES):
+            key = f"{size}/{update}/{n}"
+            res = run_case(ref, REFERENCE_CC, REFERENCE_PROFILE, size, update, n, dump)
+            if res is None:
+                print(f"  {key}: FAILED to produce a result")
+                return 1
+            dirtable_hash = res.get("dirtable_hash")
+            cases[key] = {
+                "grid_hash": res["grid_hash"],
+                "agent_hash": res["agent_hash"],
+                "metrics": {k: round(v, 12) for k, v in grid_metrics(dump).items()},
+            }
+            print(f"  {key}: grid={res['grid_hash']} agents={res['agent_hash']}")
+
+    TESTVECTORS.parent.mkdir(parents=True, exist_ok=True)
+    TESTVECTORS.write_text(json.dumps({
+        "spec": "SPEC-1",
+        "generated_by": f"{REFERENCE_TARGET} / {REFERENCE_CC} / {REFERENCE_PROFILE}",
+        "seed": 12345,
+        "dirtable_hash": dirtable_hash,
+        "sizes": CONFORMANCE_SIZES,
+        "cases": cases,
+    }, indent=2) + "\n", encoding="utf-8")
+    print(f"\nwrote {TESTVECTORS.relative_to(ROOT)}")
+    return 0
 
 
 # --------------------------------------------------------------------------- #
@@ -454,16 +619,22 @@ def render_report(rows: list[dict]) -> str:
     ok.sort(key=lambda r: r["ms_total_best"])
     fastest = ok[0]["ms_total_best"]
 
-    head = ("| # | Sprache | Compiler | Profil | Konf. | ms total | ms/tick | "
-            "MAUPS | rel. | RSS MiB | Binär KiB | Build s |")
-    sep = "|---|---|---|---|:-:|---:|---:|---:|---:|---:|---:|---:|"
+    head = ("| # | Sprache | Backend | Compiler | Profil | Konf. | ms total | "
+            "ms/tick | Agent % | MAUPS | rel. | RSS MiB | Binär KiB | Build s |")
+    sep = "|---|---|---|---|---|:-:|---:|---:|---:|---:|---:|---:|---:|---:|"
     lines = [head, sep]
     for i, r in enumerate(ok, 1):
         binkb = f"{r['stripped_bytes']/1024:.0f}" if r.get("stripped_bytes") else "–"
+        phase = r["ms_agents"] + r["ms_diffuse"]
+        agent_pct = f"{100.0 * r['ms_agents'] / phase:.0f}" if phase > 0 else "–"
+        backend = r.get("backend", "")
+        if r.get("variant"):
+            backend = f"{backend}/{r['variant']}"
         lines.append(
-            f"| {i} | {r['lang']} | {r['cc']} | {r['profile']} | "
+            f"| {i} | {r['lang']} | {backend} | {r['cc']} | {r['profile']} | "
             f"{r['conformance_class']} | "
             f"{r['ms_total_best']:.0f} | {r['ms_per_tick_median']:.3f} | "
+            f"{agent_pct} | "
             f"{r['maups']:.1f} | {r['ms_total_best']/fastest:.2f}x | "
             f"{r['max_rss_kb']/1024:.0f} | {binkb} | {r['build_seconds']:.1f} |"
         )
@@ -491,8 +662,11 @@ def render_report(rows: list[dict]) -> str:
             for h, who in sorted(hs.items()):
                 lines.append(f"    - `{h}` — {', '.join(who)}")
         else:
-            lines.append(f"- `{case}` Stufe {cls}: {len(hs)} Ergebnisse "
-                         "(erwartet — fast-math ist nicht reproduzierbar):")
+            why = {
+                "B": "erwartet — Stufe B rechnet in Doubles, siehe SPEC 7.2",
+                "C": "erwartet — fast-math ist nicht bit-reproduzierbar",
+            }.get(cls, "erwartet")
+            lines.append(f"- `{case}` Stufe {cls}: {len(hs)} Ergebnisse ({why}):")
             for h, who in sorted(hs.items()):
                 lines.append(f"    - `{h}` — {', '.join(who)}")
 
@@ -542,6 +716,9 @@ def main() -> int:
     b = sub.add_parser("bench", help="build and time targets")
     b.add_argument("--preset", default="small",
                    choices=["tiny", "small", "medium", "large"])
+    b.add_argument("--width", type=int, help="overrides --preset (with --height/--agents)")
+    b.add_argument("--height", type=int)
+    b.add_argument("--agents", type=int)
     b.add_argument("--ticks", type=int)
     b.add_argument("--warmup", type=int, default=0)
     b.add_argument("--seed", type=int, default=12345)
