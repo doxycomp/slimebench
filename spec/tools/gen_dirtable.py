@@ -115,6 +115,181 @@ export const SIN: Float32Array = toF32(SIN_BITS);
     write(ROOT / "impl" / "ts" / "src" / "dirtable.ts", body)
 
 
+def emit_cpp(cos_b, sin_b, table_hash):
+    body = f"""/* {BANNER}
+ * SPEC-1 section 4: quantised direction table, NDIR={NDIR}.
+ */
+#pragma once
+
+#include <array>
+#include <cstdint>
+
+namespace sb {{
+
+inline constexpr std::uint32_t kNdir = {NDIR};
+inline constexpr std::uint32_t kDirTableHash = 0x{table_hash:08X}u;
+
+inline constexpr std::array<std::uint32_t, kNdir> kCosBits = {{{{
+{chr(10).join(rows(cos_b))}
+}}}};
+
+inline constexpr std::array<std::uint32_t, kNdir> kSinBits = {{{{
+{chr(10).join(rows(sin_b))}
+}}}};
+
+}}  // namespace sb
+"""
+    write(ROOT / "impl" / "cpp" / "dirtable.hpp", body)
+
+
+def emit_rust(cos_b, sin_b, table_hash):
+    body = f"""// {BANNER}
+// SPEC-1 section 4: quantised direction table, NDIR={NDIR}.
+
+pub const NDIR: u32 = {NDIR};
+
+// The hash is recomputed from the bit arrays at runtime; this constant exists
+// so the generated value is greppable and reviewable next to the data.
+#[allow(dead_code)]
+pub const DIRTABLE_HASH: u32 = 0x{table_hash:08X};
+
+pub static COS_BITS: [u32; {NDIR}] = [
+{chr(10).join(rows(cos_b))}
+];
+
+pub static SIN_BITS: [u32; {NDIR}] = [
+{chr(10).join(rows(sin_b))}
+];
+"""
+    write(ROOT / "impl" / "rust" / "src" / "dirtable.rs", body)
+
+
+def hex_lines(blob: bytes, per_line: int = 32) -> list[str]:
+    h = blob.hex().upper()
+    chunk = per_line * 2
+    return [h[i : i + chunk] for i in range(0, len(h), chunk)]
+
+
+def emit_python(blob: bytes, table_hash):
+    lines = "\n".join(f'    "{ln}"' for ln in hex_lines(blob))
+    body = f'''"""{BANNER}
+
+SPEC-1 section 4: quantised direction table, NDIR={NDIR}.
+
+Stored as a hex blob rather than {2 * NDIR} numeric literals: it keeps the
+module small, imports instantly, and round-trips the exact f32 bit patterns.
+"""
+
+import struct
+
+NDIR = {NDIR}
+DIRTABLE_HASH = 0x{table_hash:08X}
+
+_HEX = (
+{lines}
+)
+
+_BLOB = bytes.fromhex(_HEX)
+assert len(_BLOB) == NDIR * 8
+
+COS = struct.unpack_from(f"<{{NDIR}}f", _BLOB, 0)
+SIN = struct.unpack_from(f"<{{NDIR}}f", _BLOB, NDIR * 4)
+COS_BITS = struct.unpack_from(f"<{{NDIR}}I", _BLOB, 0)
+SIN_BITS = struct.unpack_from(f"<{{NDIR}}I", _BLOB, NDIR * 4)
+'''
+    write(ROOT / "impl" / "python" / "slimebench" / "dirtable.py", body)
+
+
+def emit_perl(blob: bytes, table_hash):
+    hl = hex_lines(blob)
+    hex_src = "\n".join(
+        [f'      "{hl[0]}"'] + [f'    . "{ln}"' for ln in hl[1:]]
+    )
+    body = f"""package Slimebench::DirTable;
+# {BANNER}
+# SPEC-1 section 4: quantised direction table, NDIR={NDIR}.
+
+use strict;
+use warnings;
+
+our $NDIR = {NDIR};
+our $DIRTABLE_HASH = 0x{table_hash:08X};
+
+my $HEX =
+{hex_src};
+
+my $BLOB = pack 'H*', $HEX;
+die "dirtable blob size" unless length($BLOB) == $NDIR * 8;
+
+our @COS      = unpack "f<$NDIR",  substr($BLOB, 0, $NDIR * 4);
+our @SIN      = unpack "f<$NDIR",  substr($BLOB, $NDIR * 4);
+our @COS_BITS = unpack "L<$NDIR",  substr($BLOB, 0, $NDIR * 4);
+our @SIN_BITS = unpack "L<$NDIR",  substr($BLOB, $NDIR * 4);
+
+1;
+"""
+    write(ROOT / "impl" / "perl" / "lib" / "Slimebench" / "DirTable.pm", body)
+
+
+def emit_haskell(blob: bytes, table_hash):
+    lines = hex_lines(blob)
+    joined = "\n  ".join(
+        (("  \"" if i == 0 else "++ \"") + ln + "\"") for i, ln in enumerate(lines)
+    )
+    body = f"""-- {BANNER}
+-- SPEC-1 section 4: quantised direction table, NDIR={NDIR}.
+--
+-- A hex blob rather than {2 * NDIR} Word32 literals: GHC spends real time
+-- typechecking large list literals, and this decodes in microseconds.
+module DirTable
+  ( ndir
+  , dirtableHash
+  , cosTable
+  , sinTable
+  , cosBits
+  , sinBits
+  ) where
+
+import Data.Array.Unboxed (UArray, listArray)
+import Data.Bits (shiftL, (.|.))
+import Data.Char (digitToInt)
+import Data.Word (Word32)
+import GHC.Float (castWord32ToFloat)
+
+ndir :: Int
+ndir = {NDIR}
+
+dirtableHash :: Word32
+dirtableHash = 0x{table_hash:08X}
+
+hexBlob :: String
+hexBlob =
+{joined}
+
+-- | Little-endian u32 words decoded from the hex blob.
+words32 :: [Word32]
+words32 = go hexBlob
+  where
+    go (a:b:c:d:e:f:g:h:rest) =
+      let byte x y = fromIntegral (digitToInt x * 16 + digitToInt y) :: Word32
+          b0 = byte a b
+          b1 = byte c d
+          b2 = byte e f
+          b3 = byte g h
+      in (b3 `shiftL` 24 .|. b2 `shiftL` 16 .|. b1 `shiftL` 8 .|. b0) : go rest
+    go _ = []
+
+cosBits, sinBits :: [Word32]
+cosBits = take ndir words32
+sinBits = take ndir (drop ndir words32)
+
+cosTable, sinTable :: UArray Int Float
+cosTable = listArray (0, ndir - 1) (map castWord32ToFloat cosBits)
+sinTable = listArray (0, ndir - 1) (map castWord32ToFloat sinBits)
+"""
+    write(ROOT / "impl" / "haskell" / "src" / "DirTable.hs", body)
+
+
 def emit_bin(cos_b, sin_b):
     blob = struct.pack(f"<{NDIR}I", *cos_b) + struct.pack(f"<{NDIR}I", *sin_b)
     p = ROOT / "spec" / "data" / f"dirtable_{NDIR}.bin"
@@ -134,8 +309,15 @@ def main() -> int:
     assert struct.unpack("<f", struct.pack("<I", sin_b[NDIR // 4]))[0] == 1.0
     assert struct.unpack("<f", struct.pack("<I", cos_b[NDIR // 2]))[0] == -1.0
 
+    blob = struct.pack(f"<{NDIR}I", *cos_b) + struct.pack(f"<{NDIR}I", *sin_b)
+
     emit_c(cos_b, sin_b, table_hash)
+    emit_cpp(cos_b, sin_b, table_hash)
+    emit_rust(cos_b, sin_b, table_hash)
     emit_ts(cos_b, sin_b, table_hash)
+    emit_python(blob, table_hash)
+    emit_perl(blob, table_hash)
+    emit_haskell(blob, table_hash)
     emit_bin(cos_b, sin_b)
     return 0
 

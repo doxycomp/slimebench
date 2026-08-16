@@ -3,62 +3,224 @@
   "generated_by": "c / gcc / o2",
   "seed": 12345,
   "dirtable_hash": "0x295E62DF",
-  "vectors": {
+  "sizes": {
+    "micro": [
+      "--width",
+      "128",
+      "--height",
+      "128",
+      "--agents",
+      "4096"
+    ],
+    "tiny": [
+      "--preset",
+      "tiny"
+    ],
+    "small": [
+      "--preset",
+      "small"
+    ]
+  },
+  "cases": {
+    "micro/serial/1": {
+      "grid_hash": "0xFF48C34A",
+      "agent_hash": "0x9A3257B8",
+      "metrics": {
+        "sum": 811056.7895870209,
+        "mean": 49.502977880067,
+        "stddev": 11.236870437092,
+        "frac_gt1": 1.0
+      }
+    },
+    "micro/serial/10": {
+      "grid_hash": "0xBF51AD4D",
+      "agent_hash": "0xD29FB94F",
+      "metrics": {
+        "sum": 738743.3961410522,
+        "mean": 45.089318612125,
+        "stddev": 8.270941803385,
+        "frac_gt1": 1.0
+      }
+    },
+    "micro/serial/100": {
+      "grid_hash": "0xAAAF1750",
+      "agent_hash": "0x28F0CB1F",
+      "metrics": {
+        "sum": 642076.8471314609,
+        "mean": 39.189260689176,
+        "stddev": 58.122592196608,
+        "frac_gt1": 0.96240234375
+      }
+    },
+    "micro/deferred/1": {
+      "grid_hash": "0x9ED3A301",
+      "agent_hash": "0x05604FF9",
+      "metrics": {
+        "sum": 811056.7896938324,
+        "mean": 49.502977886586,
+        "stddev": 11.237077822398,
+        "frac_gt1": 1.0
+      }
+    },
+    "micro/deferred/10": {
+      "grid_hash": "0x01FDFD08",
+      "agent_hash": "0x6E7FAB57",
+      "metrics": {
+        "sum": 738743.3942756653,
+        "mean": 45.089318498271,
+        "stddev": 8.398566783198,
+        "frac_gt1": 1.0
+      }
+    },
+    "micro/deferred/100": {
+      "grid_hash": "0x057E9E4A",
+      "agent_hash": "0x2A53586B",
+      "metrics": {
+        "sum": 642076.8464570045,
+        "mean": 39.189260648011,
+        "stddev": 60.419045313022,
+        "frac_gt1": 0.946838378906
+      }
+    },
     "tiny/serial/1": {
       "grid_hash": "0xB74FA014",
-      "agent_hash": "0x02E10ED9"
+      "agent_hash": "0x02E10ED9",
+      "metrics": {
+        "sum": 12937573.476140022,
+        "mean": 49.352926163254,
+        "stddev": 11.237246246959,
+        "frac_gt1": 1.0
+      }
     },
     "tiny/serial/10": {
       "grid_hash": "0x269B4737",
-      "agent_hash": "0x54D888AC"
+      "agent_hash": "0x54D888AC",
+      "metrics": {
+        "sum": 11797355.482944489,
+        "mean": 45.003339702394,
+        "stddev": 8.033592275996,
+        "frac_gt1": 1.0
+      }
     },
     "tiny/serial/100": {
       "grid_hash": "0x5CA0C726",
-      "agent_hash": "0x27A9398F"
+      "agent_hash": "0x27A9398F",
+      "metrics": {
+        "sum": 10273143.567285985,
+        "mean": 39.188932675499,
+        "stddev": 63.573442111664,
+        "frac_gt1": 0.908950805664
+      }
     },
     "tiny/serial/1000": {
       "grid_hash": "0xBE070C72",
-      "agent_hash": "0x4A34A138"
+      "agent_hash": "0x4A34A138",
+      "metrics": {
+        "sum": 10267306.278376453,
+        "mean": 39.166665185457,
+        "stddev": 177.704542770051,
+        "frac_gt1": 0.237312316895
+      }
     },
     "tiny/deferred/1": {
       "grid_hash": "0x1E1F6BE2",
-      "agent_hash": "0xDBA5DF8A"
+      "agent_hash": "0xDBA5DF8A",
+      "metrics": {
+        "sum": 12937573.476329803,
+        "mean": 49.352926163978,
+        "stddev": 11.23709879582,
+        "frac_gt1": 1.0
+      }
     },
     "tiny/deferred/10": {
       "grid_hash": "0x7D447E09",
-      "agent_hash": "0xA9B3D712"
+      "agent_hash": "0xA9B3D712",
+      "metrics": {
+        "sum": 11797355.475326538,
+        "mean": 45.003339673334,
+        "stddev": 8.17691766935,
+        "frac_gt1": 1.0
+      }
     },
     "tiny/deferred/100": {
       "grid_hash": "0xC5C53969",
-      "agent_hash": "0x83A1A028"
+      "agent_hash": "0x83A1A028",
+      "metrics": {
+        "sum": 10273143.559167325,
+        "mean": 39.188932644529,
+        "stddev": 61.88645850833,
+        "frac_gt1": 0.910373687744
+      }
     },
     "tiny/deferred/1000": {
       "grid_hash": "0xE3453085",
-      "agent_hash": "0xA6C555BA"
+      "agent_hash": "0xA6C555BA",
+      "metrics": {
+        "sum": 10267306.267855557,
+        "mean": 39.166665145323,
+        "stddev": 175.263942603576,
+        "frac_gt1": 0.233623504639
+      }
     },
     "small/serial/1": {
       "grid_hash": "0x8DD4BB3A",
-      "agent_hash": "0x9B19E5A4"
+      "agent_hash": "0x9B19E5A4",
+      "metrics": {
+        "sum": 51745180.15591717,
+        "mean": 49.348049312513,
+        "stddev": 11.224560049587,
+        "frac_gt1": 1.0
+      }
     },
     "small/serial/10": {
       "grid_hash": "0x74B649F8",
-      "agent_hash": "0x775E4C89"
+      "agent_hash": "0x775E4C89",
+      "metrics": {
+        "sum": 47186491.75566292,
+        "mean": 45.000545268691,
+        "stddev": 8.021166355366,
+        "frac_gt1": 1.0
+      }
     },
     "small/serial/100": {
       "grid_hash": "0xF499AD79",
-      "agent_hash": "0x195DAF52"
+      "agent_hash": "0x195DAF52",
+      "metrics": {
+        "sum": 41092563.08354728,
+        "mean": 39.188922008083,
+        "stddev": 63.14828405561,
+        "frac_gt1": 0.916180610657
+      }
     },
     "small/deferred/1": {
       "grid_hash": "0x83F13018",
-      "agent_hash": "0xF53955DA"
+      "agent_hash": "0xF53955DA",
+      "metrics": {
+        "sum": 51745180.15648079,
+        "mean": 49.34804931305,
+        "stddev": 11.225505800377,
+        "frac_gt1": 1.0
+      }
     },
     "small/deferred/10": {
       "grid_hash": "0xECAE62C9",
-      "agent_hash": "0x60C70B2B"
+      "agent_hash": "0x60C70B2B",
+      "metrics": {
+        "sum": 47186491.739364624,
+        "mean": 45.000545253148,
+        "stddev": 8.166327348313,
+        "frac_gt1": 1.0
+      }
     },
     "small/deferred/100": {
       "grid_hash": "0x31EF9974",
-      "agent_hash": "0x41AB894D"
+      "agent_hash": "0x41AB894D",
+      "metrics": {
+        "sum": 41092563.08489652,
+        "mean": 39.188922009369,
+        "stddev": 63.30317848451,
+        "frac_gt1": 0.915233612061
+      }
     }
   }
 }

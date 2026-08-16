@@ -429,22 +429,62 @@ TypeScript-Implementierung mit ihrem `Math.fround` um jede Operation — und die
 ist nachweislich Stufe A.
 
 Perl und reines Python haben nur kein billiges `fround`: die Rundung geht über
-`pack`/`unpack` bzw. `struct`, also einen Funktionsaufruf pro Operation. Der
-Diffusionskernel allein braucht neun davon pro Zelle. In Perl kostet das rund
-zwei Größenordnungen — die Sprache sähe dann nicht langsam aus, sondern
-absurd, und der Benchmark würde die Rundungsroutine messen statt die Sprache.
+`pack`/`unpack` bzw. `struct`, also einen Funktionsaufruf pro Operation — der
+Diffusionskernel allein braucht neun davon pro Zelle.
 
 Deshalb: **Default ist Stufe B**, das Flag `--strict-f32` schaltet auf Stufe A.
-Der Abstand zwischen beiden Läufen ist selbst ein Messergebnis (*"was kostet
-Bit-Exaktheit in dieser Sprache?"*) und gehört in den Report.
+Beide Implementierungen sind mit `--strict-f32` nachweislich bit-identisch mit
+der C-Referenz.
 
-Verifikation von Stufe B über Toleranzmetriken nach N Ticks:
+Der Abstand zwischen beiden Läufen ist selbst ein Messergebnis — *was kostet
+Bit-Exaktheit in dieser Sprache?* Gemessen bei 128×128 / 4096 Agenten:
 
-| Metrik | Toleranz |
-|---|---|
-| Gesamtmasse `Σ grid` | rel. 1e-4 |
-| Mittelwert / Standardabweichung | rel. 1e-4 |
-| Anteil Zellen > 1.0 | abs. 1e-3 |
+| Sprache | Stufe B | Stufe A (`--strict-f32`) | Aufschlag |
+|---|---:|---:|---:|
+| Python (pur) | 9.44 ms/Tick | 21.88 ms/Tick | **2.3×** |
+| Perl | 9.40 ms/Tick | 31.15 ms/Tick | **3.3×** |
+
+Das ist deutlich billiger als erwartet, und das ist selbst der interessante
+Befund: In einer Sprache, die pro Operation ohnehin einen Interpreter-Dispatch
+zahlt, verschwinden neun zusätzliche C-Level-Aufrufe pro Zelle weitgehend im
+schon vorhandenen Overhead. Die ursprüngliche Schätzung in dieser Spec lag bei
+zwei Größenordnungen — sie war schlicht falsch.
+
+> **Unterschied zwischen den beiden Stufe-B-Implementierungen:** Python legt das
+> Grid in einem `array('f')` ab, rundet also bei *jedem Store* auf f32 und
+> weicht nur in den Zwischenergebnissen ab. Ein Perl-Array speichert volle NVs,
+> rundet also gar nicht. Perls Stufe B driftet deshalb stärker als Pythons.
+
+Verifikation von Stufe B über Toleranzmetriken nach N Ticks. Die Toleranzen
+sind **nach Metrik getrennt**, weil eine einheitliche Zahl für beide Sorten
+falsch wäre:
+
+| Metrik | Toleranz | Warum |
+|---|---|---|
+| Gesamtmasse `Σ grid` | rel. **1e-6** | Erhaltungsgröße |
+| Mittelwert | rel. **1e-6** | Erhaltungsgröße |
+| Standardabweichung | rel. **2e-2** | strukturempfindlich |
+| Anteil Zellen > 1.0 | abs. **2e-2** | strukturempfindlich |
+
+Begründung, gemessen an der Stufe-B-Python-Implementierung gegen die
+C-Referenz (128×128, 4096 Agenten):
+
+| Ticks | `sum`/`mean` | `stddev` | `frac>1` |
+|---|---|---|---|
+| 1 | 1.7e-10 | 1.8e-09 | 0 |
+| 100 | 5.1e-09 | 2.6e-04 | 0 |
+| 1000 | 8.6e-09 | 6.7e-04 | 7.3e-04 |
+
+Gesamtmasse und Mittelwert sind nahezu erhalten: wie viel Pheromon im Grid
+steht, folgt aus Depositrate und Decay und hängt praktisch nicht davon ab,
+*wohin* die Agenten gelaufen sind. Sie bleiben bei 1e-9 — deshalb darf die
+Toleranz hier **enger** sein als ursprünglich spezifiziert. Ein falscher
+Decay-Wert, eine falsche Depositmenge oder eine falsch normierte Faltung
+sprengt 1e-6 sofort.
+
+Standardabweichung und der Anteil heller Zellen messen dagegen, *wo* die
+Filamente liegen. Das divergiert unter Chaos zwangsläufig. Hielte man sie auf
+1e-4, würde die Prüfung nur noch das Chaos melden und nie einen Bug.
 
 Default für: **Perl** und **reines Python**.
 
@@ -469,6 +509,7 @@ ist bedeutungslos.
 | **V** | SIMD (explizit oder auto-vektorisiert) | `deferred` | 1 |
 | **PV** | SIMD + Multi-Thread | `deferred` | N |
 | **G** | GPU-Compute | `deferred` | — |
+| **R** | Rendering-Backend (§11.1) | — | 1 |
 
 Klasse **S** ist die eigentliche Antwort auf "wie schnell ist Sprache X".
 Alles andere misst, wie gut das Ökosystem der Sprache Parallelisierung
@@ -512,6 +553,7 @@ jeder Compiler-Bug).
 --step F  --deposit F  --decay F
 --headless             kein Fenster (Default für Benchmark-Binaries)
 --render               Fenster öffnen
+--freeze-sim           Simulation anhalten (nur Render-Benchmark, §11.1)
 --json                 Ergebnis als JSON auf stdout (letzte Zeile)
 --hash-every N         Zwischen-Hashes auf stderr
 --dump-grid PATH       rohes f32-Grid am Ende schreiben (Debugging)
@@ -565,18 +607,64 @@ pixel = RGBA(u8, u8, u8, 255)
 Optionale Farbpaletten sind erlaubt, MÜSSEN aber hinter einem Flag liegen und
 sind nie Teil eines Benchmarks. Rendering wird in `--headless` **nie** ausgeführt.
 
+### 11.1 Render-Benchmark (Klasse R)
+
+Ein Rendering-Backend-Vergleich misst den Upload-Pfad
+Grid → Textur → Bildschirm. Läuft die Simulation dabei weiter, dominiert sie
+den Frame und die Backends sind ununterscheidbar.
+
+Deshalb: **`--freeze-sim`** hält die Simulation an; jeder Frame lädt dasselbe
+Grid erneut hoch. `--ticks N` bedeutet dann *N Frames*.
+
+Gemessen wird von `sb_render_gray` bis einschließlich Present/EndDrawing.
+Eventverarbeitung liegt außerhalb des Messfensters.
+
+Backends DÜRFEN das Pixelformat wählen, das ihre API am günstigsten
+entgegennimmt — ein erzwungenes gemeinsames Format würde genau den
+Unterschied wegnormieren, um den es geht. Das gewählte Format gehört
+dokumentiert.
+
+Ergebnis-JSON bei `--json`, letzte Zeile auf stdout:
+
+```json
+{
+  "schema": 1,
+  "impl": "c", "backend": "raylib", "class": "R",
+  "preset": "small", "width": 1024, "height": 1024,
+  "frames": 300,
+  "ms_render_mean": 2.107395,
+  "ms_render_median": 2.046034,
+  "ms_render_p99": 2.591799,
+  "fps_equiv": 488.75,
+  "mpixels_per_s": 512.5
+}
+```
+
+Klasse-R-Ergebnisse werden **nie** gegen Klasse-S-Ergebnisse gestellt.
+
 ---
 
 ## 12. Referenzvektoren
 
-`spec/testvectors/SPEC-1.json` enthält Grid- und Agenten-Hashes für
-`tiny`/`small` × `serial`/`deferred` × Tick `{1, 10, 100, 1000}`, erzeugt von
-der C-Referenzimplementierung (`impl/c`, gcc, `-O2 -ffp-contract=off`).
+`spec/testvectors/SPEC-1.json` enthält Grid-Hash, Agenten-Hash und die
+Stufe-B-Metriken für drei Größen × beide Update-Modi × mehrere Tick-Stände,
+erzeugt von der C-Referenzimplementierung (`impl/c`, gcc, `-O2 -ffp-contract=off`).
+
+| Größe | Dimensionen | Ticks | Zweck |
+|---|---|---|---|
+| `micro` | 128×128, 4 096 Agenten | 1, 10, 100 | auch für Perl und reines Python in Sekunden durchführbar |
+| `tiny` | 512×512, 65 536 Agenten | 1, 10, 100, 1000 | Standardfall |
+| `small` | 1024×1024, 262 144 Agenten | 1, 10, 100 | andere Cache- und Wrapping-Verhältnisse |
+
+Langsame Implementierungen deklarieren in `bench/targets.toml`
+`conformance_set = "micro"` und prüfen nur die kleinste Größe. Sie prüfen
+damit dieselben Vektoren wie alle anderen — nur weniger davon.
 
 Erzeugt und geprüft mit:
 
 ```bash
-bench/conformance.py --all
+python3 bench/run.py conformance --write   # neu erzeugen (nur aus der Referenz)
+python3 bench/run.py conformance           # alle Targets prüfen
 ```
 
 Wenn ein neuer Port abweicht, ist **im Zweifel der Port falsch**, nicht die
