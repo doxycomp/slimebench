@@ -361,6 +361,38 @@ Lastungleichheit — Physarum-Agenten ballen sich auf den Filamenten, also sind
 die Zeilenblöcke unterschiedlich stark belegt. Ein Thread, dessen Block ein
 dichtes Filament enthält, hält alle anderen an der Barriere auf.
 
+### C (pthreads) gegen C++ (`std::jthread` / `std::barrier`)
+
+Dieselbe Strategie, dieselben Phasen, dieselben Barrieren — nur andere
+Sprachmittel. `medium`, 100 Ticks, `binned`, jeweils `-O3 -march=native`:
+
+| Threads | C | C++ | C Speedup | C++ Speedup |
+|---:|---:|---:|---:|---:|
+| 1 | 5615 ms | 5659 ms | 1.00× | 1.00× |
+| 4 | 1681 ms | 1651 ms | 3.34× | 3.43× |
+| 8 | 1037 ms | 1064 ms | 5.41× | 5.32× |
+| 16 | 588 ms | 743 ms | 9.55× | 7.62× |
+| 32 | 600 ms | 674 ms | 9.35× | 8.40× |
+
+Bis acht Threads sind beide ununterscheidbar. Ab sechzehn liegt C vorn; bei so
+vielen Threads ist die Streuung zwischen Läufen allerdings groß, und ob
+`pthread_barrier_wait` gegen `std::barrier::arrive_and_wait` wirklich
+systematisch gewinnt, wäre erst mit mehr Wiederholungen belastbar.
+
+Codeumfang der Threading-Schicht (ohne Leerzeilen und Kommentare):
+**C 326 Zeilen, C++ 264**. Der Unterschied liegt fast vollständig im
+Lebenszyklus: `std::jthread` joint beim Zerstören, `std::barrier` und
+`std::condition_variable` brauchen keine `init`/`destroy`-Paare.
+
+> **Ein Messfehler, den ich mir selbst gebaut habe.** In der ersten Fassung war
+> `Sim::agentStep` in `sim.cpp` definiert, wurde aber aus `parallel.cpp`
+> aufgerufen — also über eine Übersetzungseinheitsgrenze und damit **ohne
+> Inlining**. C++ lag dadurch bei T=1 um 20 % hinter C (6831 gegen 5712 ms).
+> Das war kein Sprachunterschied, sondern ein Strukturfehler auf meiner Seite:
+> in C liegt der Schritt als `static inline` im Header. Nach dem Verschieben
+> nach `agent.hpp` sind beide gleichauf. Wer Sprachen vergleicht, muss solche
+> Asymmetrien ausschließen, bevor er das Ergebnis der Sprache zuschreibt.
+
 ---
 
 ## 8. Offene Punkte

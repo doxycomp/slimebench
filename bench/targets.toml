@@ -112,6 +112,36 @@ profiles  = ["o0", "o2", "o3", "o3-native", "o3-native-lto", "ofast-native"]
 fastmath_profiles = ["ofast", "ofast-native"]
 
 [[target]]
+id       = "cpp-par-binned"
+lang     = "C++"
+backend  = "std-thread/binned"
+class    = "P"
+dir      = "impl/cpp"
+build    = "make CXX={cc} PROFILE={profile} headless"
+binary   = "build/{cc}-{profile}/slimebench-headless"
+run      = ["{binary}"]
+compilers = ["g++", "clang++"]
+profiles  = ["o3-native"]
+updates  = ["deferred"]
+extra_args = ["--deposit-reduce", "binned"]
+skip_conformance = true
+
+[[target]]
+id       = "cpp-par-private"
+lang     = "C++"
+backend  = "std-thread/private"
+class    = "P"
+dir      = "impl/cpp"
+build    = "make CXX={cc} PROFILE={profile} headless"
+binary   = "build/{cc}-{profile}/slimebench-headless"
+run      = ["{binary}"]
+compilers = ["g++", "clang++"]
+profiles  = ["o3-native"]
+updates  = ["deferred"]
+extra_args = ["--deposit-reduce", "private"]
+skip_conformance = true
+
+[[target]]
 id       = "cpp-sdl2"
 lang     = "C++"
 backend  = "sdl2"

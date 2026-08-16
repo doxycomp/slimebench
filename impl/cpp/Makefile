@@ -42,13 +42,15 @@ WARN     := -Wall -Wextra -Wno-unused-parameter
 STD      := -std=c++20
 CXXFLAGS := $(STD) $(WARN) $(OPTFLAGS) $(FPFLAGS) $(EXTRA_CXXFLAGS)
 LDFLAGS  := $(OPTFLAGS) $(EXTRA_LDFLAGS)
+# std::jthread/std::barrier need the pthread runtime on libstdc++.
+LDLIBS   := -lpthread
 
 CXXNAME  := $(notdir $(CXX))
 BUILDDIR := build/$(CXXNAME)-$(PROFILE)
 
-CORE_SRC := sim.cpp cli.cpp
+CORE_SRC := sim.cpp cli.cpp parallel.cpp
 CORE_OBJ := $(addprefix $(BUILDDIR)/,$(CORE_SRC:.cpp=.o))
-HEADERS  := dirtable.hpp sim.hpp cli.hpp
+HEADERS  := dirtable.hpp sim.hpp cli.hpp agent.hpp parallel.hpp
 
 HEADLESS := $(BUILDDIR)/slimebench-headless
 SDL2BIN  := $(BUILDDIR)/slimebench-sdl2
@@ -73,21 +75,21 @@ $(BUILDDIR)/%.o: %.cpp $(HEADERS) | $(BUILDDIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(HEADLESS): $(CORE_OBJ) $(BUILDDIR)/main_headless.o
-	$(CXX) $(LDFLAGS) $^ -o $@
+	$(CXX) $(LDFLAGS) $^ -o $@ $(LDLIBS)
 
 $(BUILDDIR)/main_sdl2.o: main_sdl2.cpp $(HEADERS) | $(BUILDDIR)
 	@test -n "$(SDL2_LIBS)" || { echo "error: SDL2 not found (apt install libsdl2-dev)"; exit 1; }
 	$(CXX) $(CXXFLAGS) $(SDL2_CFLAGS) -c $< -o $@
 
 $(SDL2BIN): $(CORE_OBJ) $(BUILDDIR)/main_sdl2.o
-	$(CXX) $(LDFLAGS) $^ -o $@ $(SDL2_LIBS)
+	$(CXX) $(LDFLAGS) $^ -o $@ $(SDL2_LIBS) $(LDLIBS)
 
 $(BUILDDIR)/main_raylib.o: main_raylib.cpp $(HEADERS) | $(BUILDDIR)
 	@test -n "$(RAY_LIBS)" || { echo "error: raylib not found (scripts/setup-wsl.sh render)"; exit 1; }
 	$(CXX) $(CXXFLAGS) $(RAY_CFLAGS) -c $< -o $@
 
 $(RAYBIN): $(CORE_OBJ) $(BUILDDIR)/main_raylib.o
-	$(CXX) $(LDFLAGS) $^ -o $@ $(RAY_LIBS)
+	$(CXX) $(LDFLAGS) $^ -o $@ $(RAY_LIBS) $(LDLIBS)
 
 PROFILES := o0 o1 o2 o3 os o3-native o3-lto o3-native-lto ofast ofast-native
 

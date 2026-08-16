@@ -1,9 +1,11 @@
 // slimebench -- C++ headless benchmark frontend (class S).
 
 #include <cstdio>
+#include <memory>
 #include <vector>
 
 #include "cli.hpp"
+#include "parallel.hpp"
 
 int main(int argc, char** argv) {
     sb::Config cfg;
@@ -12,7 +14,14 @@ int main(int argc, char** argv) {
 
     sb::Sim sim(cfg);
 
-    for (std::uint32_t t = 0; t < cfg.warmup; ++t) sim.tick();
+    std::unique_ptr<sb::Pool> pool;
+    if (cfg.threads > 1) {
+        pool = sb::Pool::create(sim);
+        if (!pool) return 3;          // message already on stderr
+    }
+    const auto step = [&] { if (pool) pool->tick(); else sim.tick(); };
+
+    for (std::uint32_t t = 0; t < cfg.warmup; ++t) step();
     sim.ns_agents = 0;
     sim.ns_diffuse = 0;
 
@@ -22,7 +31,7 @@ int main(int argc, char** argv) {
     const std::uint64_t t_start = sb::nowNs();
     for (std::uint32_t t = 0; t < cfg.ticks; ++t) {
         const std::uint64_t a = sb::nowNs();
-        sim.tick();
+        step();
         tick_ms.push_back(double(sb::nowNs() - a) / 1e6);
 
         if (cfg.hash_every && ((t + 1) % cfg.hash_every == 0)) {
@@ -37,11 +46,16 @@ int main(int argc, char** argv) {
     }
 
     if (opt.want_json) {
-        sb::emitJson(sim, "cpp", "headless", "S", ms_total, tick_ms);
+        sb::emitJson(sim, "cpp", pool ? "std-thread" : "headless",
+                     pool ? "P" : "S", ms_total, tick_ms);
     } else {
-        std::printf("%s %ux%u agents=%u ticks=%u update=%s\n",
+        std::printf("%s %ux%u agents=%u ticks=%u update=%s threads=%u%s\n",
                     cfg.preset.c_str(), cfg.width, cfg.height, cfg.agents, cfg.ticks,
-                    cfg.update == sb::Update::Deferred ? "deferred" : "serial");
+                    cfg.update == sb::Update::Deferred ? "deferred" : "serial",
+                    cfg.threads,
+                    pool ? (cfg.reduce == sb::Reduce::Binned ? " reduce=binned"
+                                                             : " reduce=private")
+                         : "");
         std::printf("  grid_hash  0x%08X\n", sim.hashGrid());
         std::printf("  agent_hash 0x%08X\n", sim.hashAgents());
         std::printf("  total      %.2f ms  (%.4f ms/tick)\n",
