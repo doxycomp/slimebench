@@ -8,6 +8,9 @@
 typedef struct {
     int want_render;      /* --render */
     int want_json;        /* --json   */
+    /* Render benchmarks only: keep re-uploading the same grid so the
+     * measurement is the upload path, not the simulation (SPEC-1 11.1). */
+    int freeze_sim;       /* --freeze-sim */
     const char *dump_grid;
     float display_max;
 } sb_cli_opts;

@@ -13,7 +13,7 @@ void sb_print_usage(FILE *f, const char *argv0) {
         "  --threads N\n"
         "  --sensor-dist F  --sensor-steps N  --rot-steps N\n"
         "  --step F  --deposit F  --decay F\n"
-        "  --headless  --render\n"
+        "  --headless  --render  --freeze-sim\n"
         "  --json  --hash-every N  --dump-grid PATH  --display-max F\n"
         "  -h, --help\n",
         argv0);
@@ -85,9 +85,10 @@ int sb_parse_args(int argc, char **argv, sb_config *cfg, sb_cli_opts *opt) {
             else if (!strcmp(m, "deferred")) cfg->update = SB_UPDATE_DEFERRED;
             else { fprintf(stderr, "error: --update must be serial|deferred\n"); return 2; }
         }
-        else if (!strcmp(a, "--headless")) { opt->want_render = 0; }
-        else if (!strcmp(a, "--render"))   { opt->want_render = 1; }
-        else if (!strcmp(a, "--json"))     { opt->want_json = 1; }
+        else if (!strcmp(a, "--headless"))   { opt->want_render = 0; }
+        else if (!strcmp(a, "--render"))     { opt->want_render = 1; }
+        else if (!strcmp(a, "--json"))       { opt->want_json = 1; }
+        else if (!strcmp(a, "--freeze-sim")) { opt->freeze_sim = 1; }
         else {
             /* SPEC-1 section 10: never silently ignore an unknown flag. */
             fprintf(stderr, "error: unknown argument '%s'\n", a);

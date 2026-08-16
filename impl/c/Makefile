@@ -63,11 +63,15 @@ CORE_OBJ := $(addprefix $(BUILDDIR)/,$(CORE_SRC:.c=.o))
 
 HEADLESS := $(BUILDDIR)/slimebench-headless
 SDL2BIN  := $(BUILDDIR)/slimebench-sdl2
+RAYBIN   := $(BUILDDIR)/slimebench-raylib
+HEADERS  := dirtable.h sb_core.h sb_cli.h sb_render.h
 
 SDL2_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null)
 SDL2_LIBS   := $(shell pkg-config --libs   sdl2 2>/dev/null)
+RAY_CFLAGS  := $(shell pkg-config --cflags raylib 2>/dev/null)
+RAY_LIBS    := $(shell pkg-config --libs   raylib 2>/dev/null)
 
-.PHONY: all headless sdl2 clean distclean all-profiles print-config
+.PHONY: all headless sdl2 raylib clean distclean all-profiles print-config
 
 all: headless
 
@@ -75,21 +79,30 @@ headless: $(HEADLESS)
 
 sdl2: $(SDL2BIN)
 
+raylib: $(RAYBIN)
+
 $(BUILDDIR):
 	@mkdir -p $(BUILDDIR)
 
-$(BUILDDIR)/%.o: %.c dirtable.h sb_core.h sb_cli.h | $(BUILDDIR)
+$(BUILDDIR)/%.o: %.c $(HEADERS) | $(BUILDDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(HEADLESS): $(CORE_OBJ) $(BUILDDIR)/main_headless.o
 	$(CC) $(LDFLAGS) $^ -o $@ $(LDLIBS)
 
-$(BUILDDIR)/main_sdl2.o: main_sdl2.c dirtable.h sb_core.h sb_cli.h | $(BUILDDIR)
+$(BUILDDIR)/main_sdl2.o: main_sdl2.c $(HEADERS) | $(BUILDDIR)
 	@test -n "$(SDL2_LIBS)" || { echo "error: SDL2 not found (apt install libsdl2-dev)"; exit 1; }
 	$(CC) $(CFLAGS) $(SDL2_CFLAGS) -c $< -o $@
 
 $(SDL2BIN): $(CORE_OBJ) $(BUILDDIR)/main_sdl2.o
 	$(CC) $(LDFLAGS) $^ -o $@ $(SDL2_LIBS) $(LDLIBS)
+
+$(BUILDDIR)/main_raylib.o: main_raylib.c $(HEADERS) | $(BUILDDIR)
+	@test -n "$(RAY_LIBS)" || { echo "error: raylib not found (scripts/setup-wsl.sh render)"; exit 1; }
+	$(CC) $(CFLAGS) $(RAY_CFLAGS) -c $< -o $@
+
+$(RAYBIN): $(CORE_OBJ) $(BUILDDIR)/main_raylib.o
+	$(CC) $(LDFLAGS) $^ -o $@ $(RAY_LIBS) $(LDLIBS)
 
 PROFILES := o0 o1 o2 o3 os o3-native o3-lto o3-native-lto ofast ofast-native
 
