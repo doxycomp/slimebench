@@ -116,6 +116,10 @@ class Target:
     # "A" = bit-exact, "B" = tolerance-based (SPEC-1 section 7).
     tier: str = "A"
     extra_args: list[str] = field(default_factory=list)
+    # Variants of another target that differ only in a benchmark knob. They
+    # would re-verify identical behaviour, so conformance skips them; the
+    # target they vary is already covered.
+    skip_conformance: bool = False
 
     def subst(self, s: str, cc: str, profile: str) -> str:
         out = s.replace("{cc}", cc).replace("{profile}", profile)
@@ -156,6 +160,7 @@ def load_targets() -> dict[str, Target]:
             conformance_set=t.get("conformance_set", "full"),
             tier=t.get("tier", "A"),
             extra_args=t.get("extra_args", []),
+            skip_conformance=t.get("skip_conformance", False),
         )
     return out
 
@@ -491,7 +496,7 @@ def cmd_conformance(a: argparse.Namespace) -> int:
 
     failures = 0
     for t in pick_targets(targets, a.targets):
-        if not t.headless_capable:
+        if not t.headless_capable or t.skip_conformance:
             continue
         cc = t.compilers[0]
         profile = next((p for p in t.profiles if p not in t.fastmath_profiles),
