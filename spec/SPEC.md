@@ -363,10 +363,55 @@ Referenz-Prüfsummen haben. Jede Implementierung MUSS beide unterstützen.
 > **Vergleichsregel: `serial` nur gegen `serial`, `deferred` nur gegen
 > `deferred`.** Die Benchmark-Klassen P/V/G (§8) nutzen ausschließlich `deferred`.
 
-Im `deferred`-Modus MUSS die Reduktion der Thread-lokalen Deposits in einer
-**festen, thread-unabhängigen Reihenfolge** erfolgen (z.B. nach Thread-Index
-oder über räumliche Partitionierung), damit das Ergebnis reproduzierbar bleibt.
-Atomare `f32`-Additionen sind **nicht** zulässig — sie sind nicht deterministisch.
+### 5.6 Determinismus bei Parallelisierung
+
+Atomare `f32`-Additionen sind **nicht** zulässig — ihr Ergebnis hängt von der
+Ausführungsreihenfolge ab. Darüber hinaus gilt pro Pass:
+
+**Diffusionspass:** unbedingt reihenfolgeunabhängig. Jede Ausgabezelle wird
+allein aus `src` berechnet, es gibt keine Abhängigkeit zwischen Ausgabezellen.
+Eine Parallelisierung über Zeilen ist damit **garantiert bit-identisch** zum
+seriellen Lauf, für jede Thread-Zahl.
+
+**Agenten-Pass:** Sensorik, Rotation und Bewegung sind pro Agent unabhängig
+(im `deferred`-Modus ist das Grid dabei read-only) und damit ebenfalls
+garantiert bit-identisch. Kritisch ist allein die **Akkumulation der Deposits**.
+
+Für eine Zelle, die von den Agenten `i₁ < i₂ < … < i_k` getroffen wird, schreibt
+§5.3 die Summe `((0 + d) + d) + …` in Indexreihenfolge vor. Gleitkommaaddition
+ist nicht assoziativ, also ist eine andere Gruppierung im Allgemeinen ein
+anderes Ergebnis.
+
+> **Wichtige Einschränkung, die in einer früheren Fassung dieser Spec fehlte:**
+> Thread-lokale Deposit-Puffer mit anschließender Reduktion in fester
+> Thread-Reihenfolge sind **nicht automatisch** bit-identisch zum seriellen
+> Lauf. Sie ergeben `(d_Thread0) + (d_Thread1) + …`, also eine andere
+> Klammerung als die serielle Kette. Garantiert ist damit nur Determinismus
+> **für eine gegebene Thread-Zahl**, nicht Unabhängigkeit von ihr.
+
+Deshalb definiert die Spec zwei Reduktionsstrategien, die getrennt ausgewiesen
+werden:
+
+| Strategie | `--deposit-reduce` | Garantie | Speicher |
+|---|---|---|---|
+| Thread-lokale Puffer | `private` | reproduzierbar **je Thread-Zahl** | `T × W × H × 4 Byte` |
+| Räumliche Bündelung | `binned` | **bit-identisch zu T = 1**, für jede Thread-Zahl | `N × 4 Byte` |
+
+`binned` erreicht die stärkere Garantie so: Der Agenten-Pass schreibt nur die
+Zielzelle pro Agent in ein Array. Anschließend werden die Agenten per
+**stabiler Counting-Sort** nach Zeilenblock gebündelt; jeder Thread besitzt
+einen Zeilenblock und trägt dessen Deposits in aufsteigender Agenten-Index-
+Reihenfolge ein. Pro Zelle entsteht damit exakt die serielle Kette.
+
+Der Preis ist Lastungleichheit: Physarum-Agenten ballen sich per Konstruktion
+auf den Filamenten, die Zeilenblöcke sind also unterschiedlich stark belegt.
+
+> **Anmerkung zu den Default-Parametern.** Mit `deposit = 10.0` und realistischen
+> Trefferzahlen pro Zelle bleibt jede Teilsumme `k · 10` unter 2²⁴ und ist damit
+> in `f32` exakt darstellbar — die Addition ist dann *zufällig* auch bei
+> `private` reihenfolgeunabhängig. Darauf darf sich keine Implementierung
+> verlassen: mit `--deposit 0.1` gilt es nicht mehr. Das Harness prüft
+> Bit-Identität gegen `T = 1`, statt sie anzunehmen.
 
 ---
 
@@ -551,6 +596,7 @@ jeder Compiler-Bug).
 --threads N            Default 1
 --sensor-dist F  --sensor-steps N  --rot-steps N
 --step F  --deposit F  --decay F
+--deposit-reduce MODE  private|binned  (nur bei --threads > 1, §5.6)
 --headless             kein Fenster (Default für Benchmark-Binaries)
 --render               Fenster öffnen
 --freeze-sim           Simulation anhalten (nur Render-Benchmark, §11.1)
