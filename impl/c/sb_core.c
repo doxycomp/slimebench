@@ -1,6 +1,7 @@
 /* slimebench -- C reference implementation of SPEC-1. */
 
 #include "sb_core.h"
+#include "sb_agent.h"
 
 #include <float.h>
 #include <stdlib.h>
@@ -14,36 +15,6 @@
 
 #define SB_FNV_OFFSET 0x811C9DC5u
 #define SB_FNV_PRIME  0x01000193u
-
-/* ---- PRNG (SPEC-1 section 3.1) ------------------------------------------ */
-
-static inline uint32_t rotl32(uint32_t x, int k) {
-    return (uint32_t)((x << k) | (x >> (32 - k)));
-}
-
-static inline uint32_t splitmix32(uint32_t *state) {
-    uint32_t z = (*state += 0x9E3779B9u);
-    z = (z ^ (z >> 16)) * 0x21F0AAADu;
-    z = (z ^ (z >> 15)) * 0x735A2D97u;
-    return z ^ (z >> 15);
-}
-
-static inline uint32_t xoshiro128pp(uint32_t *s) {
-    const uint32_t result = rotl32(s[0] + s[3], 7) + s[0];
-    const uint32_t t = s[1] << 9;
-    s[2] ^= s[0];
-    s[3] ^= s[1];
-    s[1] ^= s[2];
-    s[0] ^= s[3];
-    s[2] ^= t;
-    s[3] = rotl32(s[3], 11);
-    return result;
-}
-
-/* SPEC-1 section 3.2. Exact in f32: (u>>8) < 2^24 and 2^24 is a power of two. */
-static inline float rnd01(uint32_t u) {
-    return (float)(u >> 8) / 16777216.0f;
-}
 
 /* ---- bit casts ---------------------------------------------------------- */
 
@@ -59,13 +30,8 @@ static inline uint32_t f32_to_bits(float f) {
     return b;
 }
 
-/* ---- wrapping (SPEC-1 section 2.2) -------------------------------------- */
-
-static inline float wrapf(float v, float m) {
-    if (v < 0.0f) v = v + m;
-    if (v >= m)   v = v - m;
-    return v;
-}
+/* wrapf, the PRNG and the per-agent step live in sb_agent.h / sb_core.h so
+ * the threaded tick in sb_parallel.c runs the identical code. */
 
 /* ---- setup -------------------------------------------------------------- */
 
@@ -129,7 +95,7 @@ int sb_sim_init(sb_sim *s, const sb_config *cfg) {
     /* Grid init: its own SplitMix32 stream (SPEC-1 section 3.3). */
     uint32_t sm = cfg->seed ^ 0x5BF03635u;
     for (size_t i = 0; i < cells; i++) {
-        s->grid[i] = rnd01(splitmix32(&sm)) * 100.0f;
+        s->grid[i] = sb_rnd01(sb_splitmix32(&sm)) * 100.0f;
     }
 
     /* Agent init: one independent stream per agent, so this is order-free. */
@@ -138,15 +104,15 @@ int sb_sim_init(sb_sim *s, const sb_config *cfg) {
     for (uint32_t i = 0; i < cfg->agents; i++) {
         uint32_t asm_ = cfg->seed + 0x9E3779B9u * (i + 1u);
         uint32_t *r = &s->arng[(size_t)i * 4];
-        r[0] = splitmix32(&asm_);
-        r[1] = splitmix32(&asm_);
-        r[2] = splitmix32(&asm_);
-        r[3] = splitmix32(&asm_);
+        r[0] = sb_splitmix32(&asm_);
+        r[1] = sb_splitmix32(&asm_);
+        r[2] = sb_splitmix32(&asm_);
+        r[3] = sb_splitmix32(&asm_);
         if ((r[0] | r[1] | r[2] | r[3]) == 0u) r[0] = 1u;
 
-        s->ax[i] = rnd01(xoshiro128pp(r)) * fw;
-        s->ay[i] = rnd01(xoshiro128pp(r)) * fh;
-        s->adir[i] = (uint16_t)(xoshiro128pp(r) % SB_NDIR);
+        s->ax[i] = sb_rnd01(sb_xoshiro128pp(r)) * fw;
+        s->ay[i] = sb_rnd01(sb_xoshiro128pp(r)) * fh;
+        s->adir[i] = (uint16_t)(sb_xoshiro128pp(r) % SB_NDIR);
     }
 
     return 0;
@@ -165,121 +131,24 @@ void sb_sim_free(sb_sim *s) {
 
 /* ---- agent pass (SPEC-1 section 5.3) ------------------------------------ */
 
-/* Grid geometry hoisted out of the hot loop; passed by value so the compiler
- * keeps it all in registers. */
-typedef struct {
-    const float *grid;
-    const float *cos_tab;
-    const float *sin_tab;
-    float fw, fh, sdist;
-    uint32_t xmask, ymask, log2w;
-} sb_sense_ctx;
-
-static inline float sb_sense(const sb_sense_ctx *k, float x, float y, int d) {
-    const float sx = wrapf(x + k->cos_tab[d] * k->sdist, k->fw);
-    const float sy = wrapf(y + k->sin_tab[d] * k->sdist, k->fh);
-    return k->grid[(((uint32_t)sy & k->ymask) << k->log2w) |
-                   ((uint32_t)sx & k->xmask)];
-}
-
 static void sb_agent_pass(sb_sim *s) {
-    const sb_config *c = &s->cfg;
-    const uint32_t xmask = c->width - 1u;
-    const uint32_t ymask = c->height - 1u;
-    const uint32_t log2w = c->log2w;
-    const float fw = (float)c->width;
-    const float fh = (float)c->height;
-    const float sdist = c->sensor_dist;
-    const float step = c->step;
-    const float deposit = c->deposit;
-    const int ss = (int)c->sensor_steps;
-    const int rs = (int)c->rot_steps;
+    const sb_agent_ctx k = sb_agent_ctx_make(s);
+    const float deposit = s->cfg.deposit;
+    float *target = (s->cfg.update == SB_UPDATE_DEFERRED) ? s->dep : s->grid;
 
-    const float *cos_tab = s->cos_tab;
-    const float *sin_tab = s->sin_tab;
-    float *target = (c->update == SB_UPDATE_DEFERRED) ? s->dep : s->grid;
-
-    const sb_sense_ctx k = {
-        .grid = s->grid, .cos_tab = cos_tab, .sin_tab = sin_tab,
-        .fw = fw, .fh = fh, .sdist = sdist,
-        .xmask = xmask, .ymask = ymask, .log2w = log2w,
-    };
-
-    for (uint32_t i = 0; i < c->agents; i++) {
-        int d = (int)s->adir[i];
-        float x = s->ax[i];
-        float y = s->ay[i];
-
-        const int dl = (d - ss + SB_NDIR) % SB_NDIR;
-        const int dr = (d + ss) % SB_NDIR;
-
-        const float fl = sb_sense(&k, x, y, dl);
-        const float fc = sb_sense(&k, x, y, d);
-        const float fr = sb_sense(&k, x, y, dr);
-
-        if (fc >= fl && fc >= fr) {
-            /* straight on */
-        } else if (fc < fl && fc < fr) {
-            if (xoshiro128pp(&s->arng[(size_t)i * 4]) & 1u)
-                d = (d + rs) % SB_NDIR;
-            else
-                d = (d - rs + SB_NDIR) % SB_NDIR;
-        } else if (fl > fr) {
-            d = (d - rs + SB_NDIR) % SB_NDIR;
-        } else {
-            d = (d + rs) % SB_NDIR;
-        }
-
-        x = wrapf(x + cos_tab[d] * step, fw);
-        y = wrapf(y + sin_tab[d] * step, fh);
-
-        const uint32_t idx = (((uint32_t)y & ymask) << log2w) | ((uint32_t)x & xmask);
+    for (uint32_t i = 0; i < s->cfg.agents; i++) {
+        const uint32_t idx = sb_agent_step(&k, s, i);
         target[idx] = target[idx] + deposit;
-
-        s->adir[i] = (uint16_t)d;
-        s->ax[i] = x;
-        s->ay[i] = y;
     }
 }
 
 /* ---- diffusion + decay (SPEC-1 section 5.4) ----------------------------- */
 
 static void sb_diffuse_pass(sb_sim *s) {
-    const sb_config *c = &s->cfg;
-    const uint32_t w = c->width, h = c->height, log2w = c->log2w;
-    const uint32_t xmask = w - 1u, ymask = h - 1u;
-    const float decay = c->decay;
-    const float *src = s->grid;
-    float *dst = s->scratch;
-
-    for (uint32_t y = 0; y < h; y++) {
-        const uint32_t ym = (y - 1u) & ymask;
-        const uint32_t yp = (y + 1u) & ymask;
-        const uint32_t rowm = ym << log2w;
-        const uint32_t row0 = y << log2w;
-        const uint32_t rowp = yp << log2w;
-
-        for (uint32_t x = 0; x < w; x++) {
-            const uint32_t xm = (x - 1u) & xmask;
-            const uint32_t xp = (x + 1u) & xmask;
-
-            /* Summation order is normative. Do not reorder, do not fuse. */
-            float acc = src[rowm | xm];
-            acc = acc + src[rowm | x];
-            acc = acc + src[rowm | xp];
-            acc = acc + src[row0 | xm];
-            acc = acc + 4.0f * src[row0 | x];
-            acc = acc + src[row0 | xp];
-            acc = acc + src[rowp | xm];
-            acc = acc + src[rowp | x];
-            acc = acc + src[rowp | xp];
-
-            dst[row0 | x] = (acc / 12.0f) * decay;
-        }
-    }
-
-    s->grid = dst;
-    s->scratch = (float *)src;
+    sb_diffuse_rows(s, s->grid, s->scratch, 0, s->cfg.height);
+    float *tmp = s->grid;
+    s->grid = s->scratch;
+    s->scratch = tmp;
 }
 
 void sb_tick(sb_sim *s) {

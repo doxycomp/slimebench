@@ -16,6 +16,10 @@
 
 typedef enum { SB_UPDATE_SERIAL = 0, SB_UPDATE_DEFERRED = 1 } sb_update_mode;
 
+/* SPEC-1 section 5.6. `private` is reproducible per thread count; `binned` is
+ * bit-identical to a single-threaded run for any thread count. */
+typedef enum { SB_REDUCE_PRIVATE = 0, SB_REDUCE_BINNED = 1 } sb_reduce_mode;
+
 typedef struct {
     uint32_t width, height;   /* powers of two */
     uint32_t log2w, log2h;
@@ -25,6 +29,7 @@ typedef struct {
     uint32_t seed;
     uint32_t threads;
     sb_update_mode update;
+    sb_reduce_mode reduce;
 
     float sensor_dist;
     float step;
@@ -57,6 +62,40 @@ typedef struct {
     uint64_t ns_agents;
     uint64_t ns_diffuse;
 } sb_sim;
+
+/* ---- PRNG (SPEC-1 section 3.1) ------------------------------------------
+ *
+ * In the header because the agent step in sb_agent.h is shared between the
+ * serial and the threaded tick and must inline it in both.
+ */
+
+static inline uint32_t sb_rotl32(uint32_t x, int k) {
+    return (uint32_t)((x << k) | (x >> (32 - k)));
+}
+
+static inline uint32_t sb_splitmix32(uint32_t *state) {
+    uint32_t z = (*state += 0x9E3779B9u);
+    z = (z ^ (z >> 16)) * 0x21F0AAADu;
+    z = (z ^ (z >> 15)) * 0x735A2D97u;
+    return z ^ (z >> 15);
+}
+
+static inline uint32_t sb_xoshiro128pp(uint32_t *s) {
+    const uint32_t result = sb_rotl32(s[0] + s[3], 7) + s[0];
+    const uint32_t t = s[1] << 9;
+    s[2] ^= s[0];
+    s[3] ^= s[1];
+    s[1] ^= s[2];
+    s[0] ^= s[3];
+    s[2] ^= t;
+    s[3] = sb_rotl32(s[3], 11);
+    return result;
+}
+
+/* SPEC-1 section 3.2. Exact in f32: (u>>8) < 2^24 and 2^24 is a power of two. */
+static inline float sb_rnd01(uint32_t u) {
+    return (float)(u >> 8) / 16777216.0f;
+}
 
 /* ---- lifecycle ---------------------------------------------------------- */
 

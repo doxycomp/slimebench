@@ -53,18 +53,19 @@ STD      := -std=c11
 DEFS     := -D_POSIX_C_SOURCE=200809L
 CFLAGS   := $(STD) $(DEFS) $(WARN) $(OPTFLAGS) $(FPFLAGS) $(EXTRA_CFLAGS)
 LDFLAGS  := $(OPTFLAGS) $(EXTRA_LDFLAGS)
-LDLIBS   := -lm
+# pthreads rather than OpenMP: builds with gcc and clang alike, no libomp-dev.
+LDLIBS   := -lm -lpthread
 
 CCNAME   := $(notdir $(CC))
 BUILDDIR := build/$(CCNAME)-$(PROFILE)
 
-CORE_SRC := sb_core.c sb_cli.c
+CORE_SRC := sb_core.c sb_cli.c sb_parallel.c
 CORE_OBJ := $(addprefix $(BUILDDIR)/,$(CORE_SRC:.c=.o))
 
 HEADLESS := $(BUILDDIR)/slimebench-headless
 SDL2BIN  := $(BUILDDIR)/slimebench-sdl2
 RAYBIN   := $(BUILDDIR)/slimebench-raylib
-HEADERS  := dirtable.h sb_core.h sb_cli.h sb_render.h
+HEADERS  := dirtable.h sb_core.h sb_cli.h sb_render.h sb_agent.h sb_parallel.h
 
 SDL2_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null)
 SDL2_LIBS   := $(shell pkg-config --libs   sdl2 2>/dev/null)

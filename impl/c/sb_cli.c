@@ -10,7 +10,8 @@ void sb_print_usage(FILE *f, const char *argv0) {
         "  --width N --height N powers of two\n"
         "  --agents N  --ticks N  --warmup N  --seed N\n"
         "  --update MODE        serial|deferred\n"
-        "  --threads N\n"
+        "  --threads N          class P, requires --update deferred\n"
+        "  --deposit-reduce M   private|binned  (SPEC-1 5.6)\n"
         "  --sensor-dist F  --sensor-steps N  --rot-steps N\n"
         "  --step F  --deposit F  --decay F\n"
         "  --headless  --render  --freeze-sim\n"
@@ -78,6 +79,13 @@ int sb_parse_args(int argc, char **argv, sb_config *cfg, sb_cli_opts *opt) {
         else if (!strcmp(a, "--decay"))          { NEED_VALUE(a); cfg->decay = strtof(argv[++i], NULL); }
         else if (!strcmp(a, "--display-max"))    { NEED_VALUE(a); opt->display_max = strtof(argv[++i], NULL); }
         else if (!strcmp(a, "--dump-grid"))      { NEED_VALUE(a); opt->dump_grid = argv[++i]; }
+        else if (!strcmp(a, "--deposit-reduce")) {
+            NEED_VALUE(a);
+            const char *m = argv[++i];
+            if (!strcmp(m, "private"))     cfg->reduce = SB_REDUCE_PRIVATE;
+            else if (!strcmp(m, "binned")) cfg->reduce = SB_REDUCE_BINNED;
+            else { fprintf(stderr, "error: --deposit-reduce must be private|binned\n"); return 2; }
+        }
         else if (!strcmp(a, "--update")) {
             NEED_VALUE(a);
             const char *m = argv[++i];
@@ -107,6 +115,9 @@ static int cmp_double(const void *a, const void *b) {
 void sb_emit_json(const sb_sim *s, const char *impl, const char *backend,
                   const char *cls, double ms_total,
                   const double *tick_ms, size_t n_ticks) {
+    /* Class P interleaves the phases across threads, so the per-phase split
+     * the serial path reports would be meaningless; emit it as zero there. */
+    const int parallel = s->cfg.threads > 1;
     double median = 0.0, p99 = 0.0, mean = 0.0;
     if (n_ticks > 0) {
         double *sorted = (double *)malloc(n_ticks * sizeof(double));
@@ -130,7 +141,7 @@ void sb_emit_json(const sb_sim *s, const char *impl, const char *backend,
     printf("{\"schema\":1,"
            "\"impl\":\"%s\",\"backend\":\"%s\",\"class\":\"%s\",\"preset\":\"%s\","
            "\"width\":%u,\"height\":%u,\"agents\":%u,\"ticks\":%zu,\"seed\":%u,"
-           "\"update\":\"%s\",\"threads\":%u,"
+           "\"update\":\"%s\",\"threads\":%u,\"variant\":\"%s\","
            "\"grid_hash\":\"0x%08X\",\"agent_hash\":\"0x%08X\",\"dirtable_hash\":\"0x%08X\","
            "\"ms_total\":%.4f,\"ms_agents\":%.4f,\"ms_diffuse\":%.4f,"
            "\"ms_per_tick_mean\":%.6f,\"ms_per_tick_median\":%.6f,\"ms_per_tick_p99\":%.6f,"
@@ -138,8 +149,13 @@ void sb_emit_json(const sb_sim *s, const char *impl, const char *backend,
            impl, backend, cls, s->cfg.preset,
            s->cfg.width, s->cfg.height, s->cfg.agents, n_ticks, s->cfg.seed,
            s->cfg.update == SB_UPDATE_DEFERRED ? "deferred" : "serial", s->cfg.threads,
+           s->cfg.threads > 1
+               ? (s->cfg.reduce == SB_REDUCE_BINNED ? "binned" : "private")
+               : "scalar",
            sb_hash_grid(s), sb_hash_agents(s), sb_dirtable_hash(),
-           ms_total, (double)s->ns_agents / 1e6, (double)s->ns_diffuse / 1e6,
+           ms_total,
+           parallel ? 0.0 : (double)s->ns_agents / 1e6,
+           parallel ? 0.0 : (double)s->ns_diffuse / 1e6,
            mean, median, p99, maups, mcups);
 }
 

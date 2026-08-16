@@ -4,6 +4,7 @@
 #include <stdlib.h>
 
 #include "sb_cli.h"
+#include "sb_parallel.h"
 
 int main(int argc, char **argv) {
     sb_config cfg;
@@ -16,7 +17,17 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    for (uint32_t t = 0; t < cfg.warmup; t++) sb_tick(&sim);
+    sb_pool *pool = NULL;
+    if (cfg.threads > 1) {
+        pool = sb_pool_create(&sim);
+        if (!pool) {          /* message already on stderr */
+            sb_sim_free(&sim);
+            return 3;
+        }
+    }
+#define SB_TICK() (pool ? sb_tick_parallel(&sim, pool) : sb_tick(&sim))
+
+    for (uint32_t t = 0; t < cfg.warmup; t++) SB_TICK();
     sim.ns_agents = 0;
     sim.ns_diffuse = 0;
 
@@ -26,7 +37,7 @@ int main(int argc, char **argv) {
     const uint64_t t_start = sb_now_ns();
     for (uint32_t t = 0; t < cfg.ticks; t++) {
         const uint64_t a = sb_now_ns();
-        sb_tick(&sim);
+        SB_TICK();
         const uint64_t b = sb_now_ns();
         tick_ms[t] = (double)(b - a) / 1e6;
 
@@ -42,20 +53,32 @@ int main(int argc, char **argv) {
     }
 
     if (opt.want_json) {
-        sb_emit_json(&sim, "c", "headless", "S", ms_total, tick_ms, cfg.ticks);
+        sb_emit_json(&sim, "c", pool ? "pthreads" : "headless",
+                     pool ? "P" : "S", ms_total, tick_ms, cfg.ticks);
     } else {
-        printf("%s %ux%u agents=%u ticks=%u update=%s\n",
+        printf("%s %ux%u agents=%u ticks=%u update=%s threads=%u%s\n",
                cfg.preset, cfg.width, cfg.height, cfg.agents, cfg.ticks,
-               cfg.update == SB_UPDATE_DEFERRED ? "deferred" : "serial");
+               cfg.update == SB_UPDATE_DEFERRED ? "deferred" : "serial",
+               cfg.threads,
+               pool ? (cfg.reduce == SB_REDUCE_BINNED ? " reduce=binned"
+                                                      : " reduce=private")
+                    : "");
         printf("  grid_hash  0x%08X\n", sb_hash_grid(&sim));
         printf("  agent_hash 0x%08X\n", sb_hash_agents(&sim));
         printf("  total      %.2f ms  (%.4f ms/tick)\n",
                ms_total, cfg.ticks ? ms_total / cfg.ticks : 0.0);
-        printf("  agents     %.2f ms\n", (double)sim.ns_agents / 1e6);
-        printf("  diffuse    %.2f ms\n", (double)sim.ns_diffuse / 1e6);
+        if (pool) {
+            printf("  scratch    %.1f MiB\n",
+                   (double)sb_pool_scratch_bytes(pool) / (1024.0 * 1024.0));
+        } else {
+            printf("  agents     %.2f ms\n", (double)sim.ns_agents / 1e6);
+            printf("  diffuse    %.2f ms\n", (double)sim.ns_diffuse / 1e6);
+        }
     }
 
+#undef SB_TICK
     free(tick_ms);
+    sb_pool_destroy(pool);
     sb_sim_free(&sim);
     return 0;
 }
