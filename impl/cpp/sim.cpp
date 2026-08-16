@@ -1,4 +1,5 @@
 #include "sim.hpp"
+#include "agent.hpp"
 
 #include <cfloat>
 #include <ctime>
@@ -17,13 +18,6 @@ constexpr std::uint32_t kFnvPrime = 0x01000193u;
 
 constexpr std::uint32_t fnvStep(std::uint32_t h, std::uint32_t word) noexcept {
     return (h ^ word) * kFnvPrime;
-}
-
-// SPEC-1 section 2.2.
-inline float wrapf(float v, float m) noexcept {
-    if (v < 0.0f) v = v + m;
-    if (v >= m) v = v - m;
-    return v;
 }
 
 std::uint32_t log2Exact(std::uint32_t v) noexcept {
@@ -86,77 +80,18 @@ Sim::Sim(const Config& cfg) : cfg_(cfg) {
 }
 
 void Sim::agentPass() noexcept {
-    const std::uint32_t xmask = xmask_;
-    const std::uint32_t ymask = ymask_;
-    const std::uint32_t log2w = log2w_;
-    const float fw = static_cast<float>(cfg_.width);
-    const float fh = static_cast<float>(cfg_.height);
-    const float sdist = cfg_.sensor_dist;
-    const float step = cfg_.step;
+    const Ctx k = makeCtx();
     const float deposit = cfg_.deposit;
-    const int ss = static_cast<int>(cfg_.sensor_steps);
-    const int rs = static_cast<int>(cfg_.rot_steps);
-    const int ndir = static_cast<int>(kNdir);
-
-    // No __restrict on grid/target: in Update::Serial they are the same buffer
-    // by design (agents see deposits made earlier in the same tick), and
-    // promising otherwise would let the compiler reorder the deposit store
-    // against the sensor loads. The tables do not alias, so they keep it.
-    const float* grid = grid_.data();
     float* target = (cfg_.update == Update::Deferred) ? dep_.data() : grid_.data();
-    const float* __restrict cos_tab = cos_.data();
-    const float* __restrict sin_tab = sin_.data();
 
-    auto sense = [&](float x, float y, int d) noexcept -> float {
-        const float sx = wrapf(x + cos_tab[d] * sdist, fw);
-        const float sy = wrapf(y + sin_tab[d] * sdist, fh);
-        return grid[((static_cast<std::uint32_t>(sy) & ymask) << log2w) |
-                    (static_cast<std::uint32_t>(sx) & xmask)];
-    };
-
-    const std::uint32_t n = cfg_.agents;
-    for (std::uint32_t i = 0; i < n; ++i) {
-        int d = adir_[i];
-        float x = ax_[i];
-        float y = ay_[i];
-
-        const int dl = (d - ss + ndir) % ndir;
-        const int dr = (d + ss) % ndir;
-
-        const float fl = sense(x, y, dl);
-        const float fc = sense(x, y, d);
-        const float fr = sense(x, y, dr);
-
-        if (fc >= fl && fc >= fr) {
-            // straight on
-        } else if (fc < fl && fc < fr) {
-            if (xoshiro128pp(&arng_[std::size_t{i} * 4]) & 1u)
-                d = (d + rs) % ndir;
-            else
-                d = (d - rs + ndir) % ndir;
-        } else if (fl > fr) {
-            d = (d - rs + ndir) % ndir;
-        } else {
-            d = (d + rs) % ndir;
-        }
-
-        x = wrapf(x + cos_tab[d] * step, fw);
-        y = wrapf(y + sin_tab[d] * step, fh);
-
-        const std::uint32_t idx =
-            ((static_cast<std::uint32_t>(y) & ymask) << log2w) |
-            (static_cast<std::uint32_t>(x) & xmask);
+    for (std::uint32_t i = 0; i < cfg_.agents; ++i) {
+        const std::uint32_t idx = agentStep(k, i);
         target[idx] = target[idx] + deposit;
-
-        adir_[i] = static_cast<std::uint16_t>(d);
-        ax_[i] = x;
-        ay_[i] = y;
     }
 }
 
-void Sim::diffusePass() noexcept {
+void Sim::diffuseRows(std::uint32_t y0, std::uint32_t y1) noexcept {
     const std::uint32_t w = cfg_.width;
-    const std::uint32_t h = cfg_.height;
     const std::uint32_t log2w = log2w_;
     const std::uint32_t xmask = xmask_;
     const std::uint32_t ymask = ymask_;
@@ -165,7 +100,7 @@ void Sim::diffusePass() noexcept {
     const float* __restrict src = grid_.data();
     float* __restrict dst = scratch_.data();
 
-    for (std::uint32_t y = 0; y < h; ++y) {
+    for (std::uint32_t y = y0; y < y1; ++y) {
         const std::uint32_t rowm = ((y - 1u) & ymask) << log2w;
         const std::uint32_t row0 = y << log2w;
         const std::uint32_t rowp = ((y + 1u) & ymask) << log2w;
@@ -188,8 +123,11 @@ void Sim::diffusePass() noexcept {
             dst[row0 | x] = (acc / 12.0f) * decay;
         }
     }
+}
 
-    grid_.swap(scratch_);
+void Sim::diffusePass() noexcept {
+    diffuseRows(0, cfg_.height);
+    swapBuffers();
 }
 
 void Sim::tick() {

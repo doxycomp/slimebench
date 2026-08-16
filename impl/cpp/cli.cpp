@@ -38,7 +38,8 @@ void printUsage(std::FILE* f, const char* argv0) {
         "  --width N --height N powers of two\n"
         "  --agents N  --ticks N  --warmup N  --seed N\n"
         "  --update MODE        serial|deferred\n"
-        "  --threads N\n"
+        "  --threads N          class P, requires --update deferred\n"
+        "  --deposit-reduce M   private|binned  (SPEC-1 5.6)\n"
         "  --sensor-dist F  --sensor-steps N  --rot-steps N\n"
         "  --step F  --deposit F  --decay F\n"
         "  --headless  --render  --freeze-sim\n"
@@ -91,6 +92,12 @@ int parseArgs(int argc, char** argv, Config& cfg, CliOpts& opt) {
         else if (a == "--decay")        { cfg.decay = std::strtof(need(i++, "--decay"), nullptr); }
         else if (a == "--display-max")  { opt.display_max = std::strtof(need(i++, "--display-max"), nullptr); }
         else if (a == "--dump-grid")    { opt.dump_grid = need(i++, "--dump-grid"); }
+        else if (a == "--deposit-reduce") {
+            const std::string_view m = need(i++, "--deposit-reduce");
+            if (m == "private") cfg.reduce = Reduce::Private;
+            else if (m == "binned") cfg.reduce = Reduce::Binned;
+            else { std::fprintf(stderr, "error: --deposit-reduce must be private|binned\n"); return 2; }
+        }
         else if (a == "--update") {
             const std::string_view m = need(i++, "--update");
             if (m == "serial") cfg.update = Update::Serial;
@@ -124,6 +131,9 @@ void emitJson(const Sim& sim, const char* impl, const char* backend,
     }
 
     const Config& c = sim.cfg();
+    // Class P interleaves the phases across threads, so the per-phase split
+    // the serial path reports would be meaningless; emit zero there.
+    const bool parallel = c.threads > 1;
     const double cells = double(c.width) * double(c.height);
     const double maups = ms_total > 0 ? double(c.agents) * double(n) / ms_total / 1000.0 : 0.0;
     const double mcups = ms_total > 0 ? cells * double(n) / ms_total / 1000.0 : 0.0;
@@ -131,7 +141,7 @@ void emitJson(const Sim& sim, const char* impl, const char* backend,
     std::printf("{\"schema\":1,"
         "\"impl\":\"%s\",\"backend\":\"%s\",\"class\":\"%s\",\"preset\":\"%s\","
         "\"width\":%u,\"height\":%u,\"agents\":%u,\"ticks\":%zu,\"seed\":%u,"
-        "\"update\":\"%s\",\"threads\":%u,"
+        "\"update\":\"%s\",\"threads\":%u,\"variant\":\"%s\","
         "\"grid_hash\":\"0x%08X\",\"agent_hash\":\"0x%08X\",\"dirtable_hash\":\"0x%08X\","
         "\"ms_total\":%.4f,\"ms_agents\":%.4f,\"ms_diffuse\":%.4f,"
         "\"ms_per_tick_mean\":%.6f,\"ms_per_tick_median\":%.6f,\"ms_per_tick_p99\":%.6f,"
@@ -139,8 +149,11 @@ void emitJson(const Sim& sim, const char* impl, const char* backend,
         impl, backend, cls, c.preset.c_str(),
         c.width, c.height, c.agents, n, c.seed,
         c.update == Update::Deferred ? "deferred" : "serial", c.threads,
+        c.threads > 1 ? (c.reduce == Reduce::Binned ? "binned" : "private") : "scalar",
         sim.hashGrid(), sim.hashAgents(), Sim::dirtableHash(),
-        ms_total, double(sim.ns_agents) / 1e6, double(sim.ns_diffuse) / 1e6,
+        ms_total,
+        parallel ? 0.0 : double(sim.ns_agents) / 1e6,
+        parallel ? 0.0 : double(sim.ns_diffuse) / 1e6,
         mean, median, p99, maups, mcups);
 }
 

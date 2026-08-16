@@ -26,6 +26,10 @@ inline constexpr const char* kSpecVersion = "SPEC-1";
 
 enum class Update { Serial, Deferred };
 
+// SPEC-1 section 5.6. Private is reproducible per thread count; Binned is
+// bit-identical to a single-threaded run for any thread count.
+enum class Reduce { Private, Binned };
+
 struct Config {
     std::uint32_t width = 1024;
     std::uint32_t height = 1024;
@@ -35,6 +39,7 @@ struct Config {
     std::uint32_t seed = 12345;
     std::uint32_t threads = 1;
     Update update = Update::Serial;
+    Reduce reduce = Reduce::Private;
 
     float sensor_dist = 9.0f;
     float step = 1.0f;
@@ -95,6 +100,26 @@ class Sim {
 
     const Config& cfg() const noexcept { return cfg_; }
     const std::vector<float>& grid() const noexcept { return grid_; }
+
+    // ---- used by the threaded tick (class P) ----------------------------
+    //
+    // Public rather than hidden behind a friend declaration: Pool needs the
+    // same building blocks the serial path uses, and duplicating them so the
+    // members could stay private is exactly the mistake that lets a parallel
+    // implementation drift away from the rule it is supposed to follow.
+
+    struct Ctx;                       // defined in agent.hpp
+    Ctx makeCtx() const noexcept;
+    // Advances agent `i`, returns the cell its deposit belongs in.
+    std::uint32_t agentStep(const Ctx& k, std::uint32_t i) noexcept;
+    // SPEC-1 section 5.4 for rows [y0, y1). Output cells are independent, so
+    // splitting the range is unconditionally bit-identical.
+    void diffuseRows(std::uint32_t y0, std::uint32_t y1) noexcept;
+    void swapBuffers() noexcept { grid_.swap(scratch_); }
+
+    std::vector<float>& gridMut() noexcept { return grid_; }
+    std::vector<float>& dep() noexcept { return dep_; }
+    std::uint32_t log2w() const noexcept { return log2w_; }
 
     std::uint64_t ns_agents = 0;
     std::uint64_t ns_diffuse = 0;
