@@ -1,0 +1,4 @@
+{"schema":1,"impl":"c","backend":"sdl2","class":"R","preset":"small","width":1024,"height":1024,"frames":300,"ms_render_mean":2.996550,"ms_render_median":2.922079,"ms_render_p99":3.521439,"fps_equiv":342.22,"mpixels_per_s":358.8}
+{"schema":1,"impl":"c","backend":"raylib","class":"R","preset":"small","width":1024,"height":1024,"frames":300,"ms_render_mean":2.172137,"ms_render_median":2.094359,"ms_render_p99":2.608004,"fps_equiv":477.47,"mpixels_per_s":500.7}
+{"schema":1,"impl":"cpp","backend":"sdl2","class":"R","preset":"small","width":1024,"height":1024,"frames":300,"ms_render_mean":2.938246,"ms_render_median":2.875910,"ms_render_p99":3.440255,"fps_equiv":347.72,"mpixels_per_s":364.6}
+{"schema":1,"impl":"cpp","backend":"raylib","class":"R","preset":"small","width":1024,"height":1024,"frames":300,"ms_render_mean":2.090393,"ms_render_median":2.030606,"ms_render_p99":2.823768,"fps_equiv":492.46,"mpixels_per_s":516.4}

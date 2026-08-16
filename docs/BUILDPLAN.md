@@ -35,87 +35,57 @@ Das ist die Voraussetzung für alles Weitere.
 
 ---
 
-## Phase 2 — Die kompilierten Sprachen 🔨
+## Phase 2 — Die kompilierten Sprachen ✅
 
-Reihenfolge nach absteigender Nähe zur C-Referenz — jeder Port wird leichter,
-weil der vorherige die Spec-Lücken schon gefunden hat.
-
-### 2.1 C++ 🔨
-Portierung ist mechanisch, interessant sind die Fragen dahinter:
-`std::vector` vs. rohes `new[]`, `std::mt19937` (bewusst **nicht** — wir
-brauchen xoshiro für Bit-Gleichheit), und ob `g++` und `gcc` bei identischem
-Code identischen Maschinencode erzeugen. Erwartung: praktisch gleichauf mit C;
-jede Abweichung ist ein Befund.
-
-### 2.2 Rust ⬜
-Der Knackpunkt ist Bounds-Checking. Zwei Varianten bauen und vergleichen:
-sicher (`grid[idx]`) und unsafe (`get_unchecked`). Die Differenz ist eine der
-meistdiskutierten und selten sauber gemessenen Zahlen überhaupt.
-Profile: `release`, `release` + `target-cpu=native`, `release` + fat LTO.
-
-### 2.3 Haskell ⬜
-Der aufwändigste Port und der lehrreichste. Mit `Data.Vector.Unboxed.Mutable`
-und `IOUVector Float` in `IO`/`ST` ist die innere Schleife strukturell wie in C
-— aber Strictness-Annotationen (`{-# UNPACK #-}`, `!`) entscheiden über
-Faktor 10. Erwartung: mit Mühe im Bereich 1.5–3× C, naiv geschrieben 50×.
-
-### 2.4 Konformitätsgate ⬜
-Alle vier kompilierten Sprachen müssen `bench/run.py conformance` grün
-bestehen, bevor Phase 3 beginnt.
+- ✅ **C++** — idiomatisch (`std::vector`, `std::bit_cast`, RAII), nicht als
+  C-Transliteration. Bit-exakt.
+- ✅ **Rust** — zwei Varianten über ein Cargo-Feature: `safe` und `unchecked`.
+  Beide bit-exakt.
+- ✅ **Haskell** — `IOUArray` in `IO`, durchgehend strikt, `unsafeRead`.
+  Bit-exakt beim ersten Lauf.
+- ✅ Konformitätsgate grün.
 
 ---
 
-## Phase 3 — Die Skriptsprachen ⬜
+## Phase 3 — Die Skriptsprachen ✅
 
-Hier wird es ehrlich unangenehm, und genau das ist der Punkt.
-
-### 3.1 Python ⬜
-**Zwei getrennte Implementierungen**, weil sie verschiedene Fragen beantworten:
-- `impl/python/pure/` — reine Schleifen. Die Baseline. Rechne mit 300–1000× C.
-  Nur `tiny` mit wenigen Ticks messbar; das Preset muss das aushalten.
-- `impl/python/numpy/` — Diffusion voll vektorisiert (der Stencil ist ein
-  perfekter numpy-Fall), Agenten-Pass mit Fancy-Indexing. Achtung: der
-  `serial`-Modus ist in numpy **nicht** korrekt abbildbar (`arr[idx] += v`
-  behandelt doppelte Indizes nicht sequenziell) — numpy kann deshalb nur
-  `deferred` bedienen. Das ist ein spezifikationsrelevanter Befund und gehört
-  in den Report.
-- Optional: `impl/python/numba/` als drittes Datum.
-
-### 3.2 Perl ⬜
-Kern über flache Skalar-Strings mit `vec`/`pack`/`unpack` oder `PDL`.
-Default Stufe B (Doubles), zusätzlich ein `--strict-f32`-Lauf, um die Kosten
-der Bit-Exaktheit zu beziffern. Rendering über `SDL2::FFI`.
-
-### 3.3 Tolerantes Konformitätsgate ⬜
-`bench/run.py` um den Stufe-B-Vergleich erweitern (Metriken statt Hashes,
-SPEC §7.2).
+- ✅ **Python pur** — Stufe B per Default, Stufe A mit `--strict-f32`
+  (nachgewiesen bit-exakt, Aufschlag 2.3×).
+- ✅ **Python numpy** — Stufe A, aber **nur `deferred`**: `serial` hat eine
+  sequenzielle Abhängigkeit durch das Grid. Die Implementierung lehnt den
+  Modus mit klarer Meldung ab. Die vektorisierte xoshiro-Fortschaltung
+  (nur Sackgassen-Agenten dürfen ihren Strom weiterdrehen) und `np.add.at`
+  reproduzieren die Spec-Semantik exakt.
+- ✅ **Perl** — Stufe B per Default, Stufe A mit `--strict-f32` (Aufschlag 3.3×).
+- ✅ **Tolerantes Konformitätsgate** — Metriken statt Hashes, getrennt nach
+  Erhaltungsgrößen (1e-6) und strukturempfindlichen Größen (2e-2).
+- ⬜ Optional: `numba` als drittes Python-Datum.
+- ⬜ Rendering für Python/Perl (Phase 4).
 
 ---
 
-## Phase 4 — Rendering-Backends ⬜
+## Phase 4 — Rendering-Backends 🔨
 
-Erst jetzt, weil vorher niemand weiß, ob der Kern stimmt.
-
-Jede kompilierte Sprache bekommt SDL2 **und** raylib. Beide erhalten exakt
-denselben Graustufen-Puffer aus `sb_render_gray` — gemessen wird also wirklich
-nur der Upload-Pfad Grid → Textur → Bildschirm.
+Beide Backends erhalten exakt denselben Graustufen-Puffer; `--freeze-sim`
+hält die Simulation an, damit wirklich nur der Upload-Pfad Grid → Textur →
+Bildschirm gemessen wird.
 
 | Sprache | SDL2 | raylib |
 |---|---|---|
-| C | ✅ | ⬜ |
-| C++ | ⬜ | ⬜ |
+| C | ✅ | ✅ |
+| C++ | ✅ | ✅ |
 | Rust | ⬜ `sdl2` crate | ⬜ `raylib` crate |
 | Haskell | ⬜ `sdl2` | ⬜ `h-raylib` |
 | Python | ⬜ `pygame` | ⬜ `raylib-python-cffi` |
 | Perl | ⬜ `SDL2::FFI` | ⬜ `Raylib::FFI` |
 
-Messgröße ist **nicht** die Simulationsrate, sondern reine Renderzeit pro
-Frame bei eingefrorener Simulation. Sonst dominiert der Kern und die Backends
-sind ununterscheidbar.
-
-Erwartung: der Unterschied ist klein und liegt fast ganz darin, ob das Backend
-`glTexSubImage2D` mit passendem Pixelformat trifft oder intern konvertiert.
-Ein Format-Mismatch kostet mehr als die Wahl der Bibliothek.
+**Ergebnis** (1024², 300 Frames, eingefrorene Simulation): raylib ist
+konsistent rund 29 % schneller, C und C++ praktisch identisch. Die Erwartung
+hat sich bestätigt: es liegt am Pixelformat, nicht an der Bibliothek. raylib
+nimmt den 8-Bit-Graustufenpuffer direkt entgegen
+(`UNCOMPRESSED_GRAYSCALE`), SDL2 braucht ARGB8888 und damit eine
+Expansionsschleife über eine Million Pixel pro Frame. Zahlen in
+[RESULTS.md](RESULTS.md).
 
 ---
 

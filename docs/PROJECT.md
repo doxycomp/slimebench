@@ -41,20 +41,25 @@ Für einen Sprach- und Compiler-Vergleich ist das ein nahezu ideales Workload:
 spec/                normative Spezifikation + generierte Richtungstabelle
   SPEC.md            <- die einzige Wahrheit
   tools/             Codegen für die Trig-Tabelle (alle Sprachen)
-  testvectors/       Referenz-Prüfsummen
+  testvectors/       Referenz-Prüfsummen und Stufe-B-Metriken
 impl/
-  c/                 Referenzimplementierung: Kern + headless + SDL2
+  c/                 Referenzimplementierung: Kern + headless + SDL2 + raylib
+  cpp/               idiomatisches C++20, dieselben drei Frontends
+  rust/              safe- und unchecked-Variante über ein Cargo-Feature
+  haskell/           IOUArray in IO, durchgehend strikt
   ts/                Kern + Node-headless + Browser-Entry
   web/               HTML5-Canvas-Frontend (generierter Bundle)
-  cpp/ rust/ haskell/ python/ perl/     (folgen, siehe BUILDPLAN.md)
+  python/            pure (Stufe B / --strict-f32) und numpy (nur deferred)
+  perl/              Stufe B / --strict-f32
 bench/
   run.py             Build- und Messharness, Konformitätsprüfung, Report
-  targets.toml       Registry: Sprache × Compiler × Optimierungsprofil
+  targets.toml       Registry: Sprache × Backend × Compiler × Profil
   gridstat.py        Grid-Dump inspizieren, PNG-Vorschau
 scripts/
-  setup-wsl.sh       Toolchains nachinstallieren
+  setup-wsl.sh       Toolchains nachinstallieren (phasenweise)
   stage-wsl.sh       Repo aufs Linux-Dateisystem spiegeln und messen
 results/             JSONL-Messreihen
+docs/RESULTS.md      ausgewertete Ergebnisse
 ```
 
 Jede Implementierung ist **strikt zweigeteilt**: ein Simulationskern ohne jede
@@ -83,8 +88,14 @@ slimebench löst das mit vier Bausteinen:
 | **Portabler 32-Bit-PRNG** (SPEC §3) | xoshiro128++ und SplitMix32, reine 32-Bit-Ganzzahlarithmetik — direkt abbildbar in JS, Perl, GLSL und WGSL, wo 64-Bit teuer oder gar nicht verfügbar ist. |
 | **Prüfsummen** (SPEC §6) | Getrennte Hashes für Grid und Agenten. Weicht nur das Grid ab, liegt der Fehler im Diffusionspass; weichen beide ab, im Agenten-Pass. `--hash-every N` grenzt den ersten divergierenden Tick binär ein. |
 
-**Ergebnis:** C (gcc), Node und Chrome liefern nach 300 Ticks auf 1024²
-mit 262 144 Agenten byteidentische Grids — 4 MiB, Bit für Bit gleich.
+**Ergebnis:** Sechs von acht Implementierungen — C, C++, Rust, Haskell,
+TypeScript und Python/numpy — sind bit-exakt gegen die C-Referenz, über
+Grid- *und* Agenten-Prüfsumme, bei drei Grid-Größen × beiden Update-Modi ×
+Tick-Ständen bis 1000. Python (pur) und Perl erreichen dasselbe mit
+`--strict-f32`; ohne das Flag laufen sie in Stufe B.
+
+Damit ist die Frage oben beantwortbar geworden: weicht ein Port ab, ist es ein
+Bug, kein Rundungsartefakt.
 
 Und wo Bit-Exaktheit prinzipiell unmöglich ist (fast-math, GPU, SIMD mit
 umsortierter Reduktion), sagt die Spec das vorher und weist die Läufe in einer
