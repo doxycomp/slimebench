@@ -1,0 +1,18 @@
+{
+  "name": "slimebench-ts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "slimebench TypeScript implementation (SPEC-1) -- Node headless + browser canvas",
+  "scripts": {
+    "bench": "node --experimental-strip-types src/main-node.ts",
+    "typecheck": "tsc --noEmit",
+    "build:web": "esbuild src/main-web.ts --bundle --format=esm --target=es2022 --minify --outfile=../web/app.js",
+    "dev:web": "esbuild src/main-web.ts --bundle --format=esm --target=es2022 --outfile=../web/app.js --watch --servedir=../web"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0"
+  }
+}

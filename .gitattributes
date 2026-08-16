@@ -1,0 +1,14 @@
+# The canonical environment is WSL2/Linux, but checkouts happen on Windows.
+# Without this, core.autocrlf rewrites the shell scripts on checkout and bash
+# fails on the `#!/usr/bin/env bash\r` shebang. Force LF everywhere.
+* text=auto eol=lf
+
+# Never touch these.
+*.bin binary
+*.f32 binary
+*.png binary
+
+# Generated -- collapse in diffs and exclude from language statistics.
+impl/*/dirtable.*        linguist-generated=true
+spec/data/dirtable_*.bin linguist-generated=true
+impl/web/app.js          linguist-generated=true

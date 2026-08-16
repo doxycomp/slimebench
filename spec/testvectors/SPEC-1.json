@@ -1,0 +1,64 @@
+{
+  "spec": "SPEC-1",
+  "generated_by": "c / gcc / o2",
+  "seed": 12345,
+  "dirtable_hash": "0x295E62DF",
+  "vectors": {
+    "tiny/serial/1": {
+      "grid_hash": "0xB74FA014",
+      "agent_hash": "0x02E10ED9"
+    },
+    "tiny/serial/10": {
+      "grid_hash": "0x269B4737",
+      "agent_hash": "0x54D888AC"
+    },
+    "tiny/serial/100": {
+      "grid_hash": "0x5CA0C726",
+      "agent_hash": "0x27A9398F"
+    },
+    "tiny/serial/1000": {
+      "grid_hash": "0xBE070C72",
+      "agent_hash": "0x4A34A138"
+    },
+    "tiny/deferred/1": {
+      "grid_hash": "0x1E1F6BE2",
+      "agent_hash": "0xDBA5DF8A"
+    },
+    "tiny/deferred/10": {
+      "grid_hash": "0x7D447E09",
+      "agent_hash": "0xA9B3D712"
+    },
+    "tiny/deferred/100": {
+      "grid_hash": "0xC5C53969",
+      "agent_hash": "0x83A1A028"
+    },
+    "tiny/deferred/1000": {
+      "grid_hash": "0xE3453085",
+      "agent_hash": "0xA6C555BA"
+    },
+    "small/serial/1": {
+      "grid_hash": "0x8DD4BB3A",
+      "agent_hash": "0x9B19E5A4"
+    },
+    "small/serial/10": {
+      "grid_hash": "0x74B649F8",
+      "agent_hash": "0x775E4C89"
+    },
+    "small/serial/100": {
+      "grid_hash": "0xF499AD79",
+      "agent_hash": "0x195DAF52"
+    },
+    "small/deferred/1": {
+      "grid_hash": "0x83F13018",
+      "agent_hash": "0xF53955DA"
+    },
+    "small/deferred/10": {
+      "grid_hash": "0xECAE62C9",
+      "agent_hash": "0x60C70B2B"
+    },
+    "small/deferred/100": {
+      "grid_hash": "0x31EF9974",
+      "agent_hash": "0x41AB894D"
+    }
+  }
+}

@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>slimebench — Physarum / HTML5 Canvas</title>
+<style>
+  :root {
+    --bg: #0b0d10;
+    --panel: #14181d;
+    --line: #232a32;
+    --fg: #d7dee6;
+    --muted: #7c8896;
+    --accent: #4ade80;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 14px/1.5 ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, monospace;
+    display: flex;
+    min-height: 100vh;
+    gap: 0;
+  }
+  #stage {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    min-width: 0;
+  }
+  canvas {
+    max-width: 100%;
+    max-height: calc(100vh - 32px);
+    aspect-ratio: 1 / 1;
+    background: #000;
+    border: 1px solid var(--line);
+    image-rendering: pixelated;
+  }
+  aside {
+    flex: 0 0 320px;
+    background: var(--panel);
+    border-left: 1px solid var(--line);
+    padding: 18px 18px 28px;
+    overflow-y: auto;
+  }
+  h1 {
+    font-size: 15px;
+    margin: 0 0 2px;
+    letter-spacing: .04em;
+  }
+  h1 span { color: var(--accent); }
+  .sub { color: var(--muted); font-size: 12px; margin: 0 0 18px; }
+  .row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 4px;
+    margin-bottom: 14px;
+  }
+  .row .name { color: var(--muted); font-size: 12px; }
+  .row .val {
+    color: var(--accent);
+    font-size: 12px;
+    text-align: right;
+    margin-top: -20px;
+  }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .buttons { display: flex; gap: 8px; margin: 18px 0 12px; flex-wrap: wrap; }
+  button {
+    flex: 1 1 auto;
+    background: #1d242c;
+    color: var(--fg);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 7px 10px;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  #stats {
+    color: var(--accent);
+    font-size: 12px;
+    padding: 8px 0;
+    border-top: 1px solid var(--line);
+    margin-top: 8px;
+  }
+  #hash {
+    color: var(--muted);
+    font-size: 11px;
+    word-break: break-all;
+    min-height: 2em;
+  }
+  .note {
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.6;
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+    margin-top: 16px;
+  }
+  .note code { color: #9fb3c8; }
+</style>
+</head>
+<body>
+  <main id="stage"><canvas id="view" width="1024" height="1024"></canvas></main>
+
+  <aside>
+    <h1>slime<span>bench</span></h1>
+    <p class="sub">Physarum · TypeScript · SPEC-1</p>
+
+    <div id="controls"></div>
+
+    <label class="row">
+      <span class="name">Ticks pro Frame</span>
+      <input type="range" id="speed" min="1" max="8" step="1" value="1">
+      <span class="val" id="speedVal">1x</span>
+    </label>
+
+    <div class="buttons">
+      <button id="pause">Pause</button>
+      <button id="reset">Reset</button>
+      <button id="reseed">Neuer Seed</button>
+    </div>
+    <div class="buttons">
+      <button id="hashBtn">Prüfsumme anzeigen</button>
+    </div>
+
+    <div id="stats">–</div>
+    <div id="hash"></div>
+
+    <p class="note">
+      Derselbe Simulationskern läuft headless unter Node und ist bit-identisch
+      mit der C-Referenz. Parameter, die du hier findest, lassen sich 1:1 an
+      jede andere Implementierung übergeben:<br><br>
+      <code>--sensor-dist 9 --sensor-steps 144 --rot-steps 144 --step 1 --deposit 10 --decay 0.94</code>
+    </p>
+  </aside>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

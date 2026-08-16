@@ -1,0 +1,21 @@
+# build output
+build/
+target/
+dist-newstyle/
+*.o
+*.hi
+
+# node (package-lock.json IS committed -- reproducible toolchain matters here)
+node_modules/
+
+# generated web bundle (rebuild with: npm run build:web)
+impl/web/app.js
+
+# benchmark output: results/*.jsonl is committed on purpose, it is the data
+*.f32
+*.png
+!docs/**/*.png
+
+# editors / OS
+.DS_Store
+*.swp

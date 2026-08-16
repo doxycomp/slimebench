@@ -1,0 +1,112 @@
+# slimebench target registry.
+#
+# One [[target]] per implementation. The (compiler x profile) cross product is
+# the compiler-comparison axis; every combination gets its own binary and its
+# own result row.
+#
+# Placeholders available in `build`, `binary` and `run`:
+#   {cc}       current compiler id
+#   {profile}  current profile id
+#   {binary}   resolved `binary` path (absolute)
+#   {dir}      target directory (absolute)
+
+# --------------------------------------------------------------------------- C
+
+[[target]]
+id       = "c"
+lang     = "C"
+backend  = "headless"
+class    = "S"
+dir      = "impl/c"
+build    = "make CC={cc} PROFILE={profile} headless"
+binary   = "build/{cc}-{profile}/slimebench-headless"
+run      = ["{binary}"]
+compilers = ["gcc", "clang"]
+profiles  = ["o0", "o2", "o3", "o3-native", "o3-native-lto", "ofast-native"]
+# Profiles that deliberately violate SPEC-1 section 1.2 -> conformance class C.
+fastmath_profiles = ["ofast", "ofast-native"]
+
+[[target]]
+id       = "c-sdl2"
+lang     = "C"
+backend  = "sdl2"
+class    = "S"
+dir      = "impl/c"
+build    = "make CC={cc} PROFILE={profile} sdl2"
+binary   = "build/{cc}-{profile}/slimebench-sdl2"
+run      = ["{binary}"]
+compilers = ["gcc"]
+profiles  = ["o3-native"]
+headless_capable = false     # excluded from timing runs, built for size only
+
+# ------------------------------------------------------------------ TypeScript
+
+[[target]]
+id       = "ts"
+lang     = "TypeScript"
+backend  = "node"
+class    = "S"
+dir      = "impl/ts"
+run      = ["node", "--experimental-strip-types", "{dir}/src/main-node.ts"]
+compilers = ["node"]
+profiles  = ["default"]
+
+# --------------------------------------------------------------- placeholders
+# Uncomment as each phase of docs/BUILDPLAN.md lands.
+
+# [[target]]
+# id = "cpp"
+# lang = "C++"
+# backend = "headless"
+# class = "S"
+# dir = "impl/cpp"
+# build = "make CXX={cc} PROFILE={profile} headless"
+# binary = "build/{cc}-{profile}/slimebench-headless"
+# run = ["{binary}"]
+# compilers = ["g++", "clang++"]
+# profiles = ["o2", "o3", "o3-native", "ofast-native"]
+# fastmath_profiles = ["ofast", "ofast-native"]
+
+# [[target]]
+# id = "rust"
+# lang = "Rust"
+# backend = "headless"
+# class = "S"
+# dir = "impl/rust"
+# build = "cargo build --profile {profile}"
+# binary = "target/{profile}/slimebench"
+# run = ["{binary}"]
+# compilers = ["rustc"]
+# profiles = ["release", "release-native", "release-lto"]
+
+# [[target]]
+# id = "python"
+# lang = "Python"
+# backend = "numpy"
+# class = "S"
+# dir = "impl/python"
+# run = ["python3", "{dir}/slimebench.py"]
+# compilers = ["cpython"]
+# profiles = ["default"]
+
+# [[target]]
+# id = "perl"
+# lang = "Perl"
+# backend = "headless"
+# class = "S"
+# dir = "impl/perl"
+# run = ["perl", "{dir}/slimebench.pl"]
+# compilers = ["perl"]
+# profiles = ["default"]
+
+# [[target]]
+# id = "haskell"
+# lang = "Haskell"
+# backend = "headless"
+# class = "S"
+# dir = "impl/haskell"
+# build = "cabal build -O2"
+# binary = "dist-newstyle/build/slimebench"
+# run = ["{binary}"]
+# compilers = ["ghc"]
+# profiles = ["o1", "o2"]
