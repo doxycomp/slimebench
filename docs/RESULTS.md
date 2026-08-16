@@ -285,10 +285,97 @@ fallen auf, Node am deutlichsten.
 
 ---
 
-## 7. Offene Punkte
+## 7. Parallelisierung (Klasse P)
 
-Noch nicht gemessen, geplant in [BUILDPLAN](BUILDPLAN.md) Phase 6–8:
-Parallelisierung (Klasse P), SIMD (V) und GPU-Compute (G). Ebenso fehlen
-PGO-Builds — bei diesem verzweigungslastigen Agenten-Pass der plausibelste
-verbleibende Gewinn — und die Rendering-Backends für Rust, Haskell, Python
-und Perl.
+C, pthreads, `--update deferred`, gcc `-O3 -march=native`. Zwei
+Reduktionsstrategien nach [SPEC §5.6](../spec/SPEC.md).
+
+### Determinismus zuerst
+
+Bevor irgendeine Zahl zählt: liefert der parallele Lauf dasselbe Ergebnis?
+
+| `deposit` | Strategie | T=1 | T=4 | T=32 |
+|---|---|---|---|---|
+| 10.0 (Default) | `binned` | `0xC5C53969` | `0xC5C53969` ✓ | `0xC5C53969` ✓ |
+| 10.0 | `private` | `0xC5C53969` | `0xC5C53969` ✓ | `0xC5C53969` ✓ |
+| **0.1** | `binned` | `0x95EEB32D` | `0x95EEB32D` ✓ | `0x95EEB32D` ✓ |
+| **0.1** | `private` | `0x95EEB32D` | `0xE82B2012` ✗ | `0x9AA0D4F3` ✗ |
+
+`binned` ist bit-identisch zu T=1 — geprüft für T ∈ {2,3,4,7,8,16,32}, also
+auch für Thread-Zahlen, die kein Teiler der Höhe sind.
+
+`private` stimmt mit den **Default-Parametern zufällig auch**: bei
+`deposit = 10.0` bleibt jede Teilsumme `k · 10` unter 2²⁴ und ist in f32 exakt,
+also spielt die Klammerung keine Rolle. Mit `--deposit 0.1` bricht das sofort —
+und zwar *pro Thread-Zahl unterschiedlich*. Damit ist belegt, dass die
+Unterscheidung in §5.6 keine Theorie ist, sondern das Verhalten beschreibt.
+
+### Skalierung
+
+`medium` (2048², 1 048 576 Agenten), 100 Ticks:
+
+| Threads | `binned` | Speedup | `private` | Speedup |
+|---:|---:|---:|---:|---:|
+| 1 (seriell) | 5567 ms | 1.00× | 5567 ms | 1.00× |
+| 2 | 2829 ms | 1.97× | 3142 ms | 1.77× |
+| 4 | 1636 ms | 3.40× | 1822 ms | 3.06× |
+| 8 | 1087 ms | 5.12× | 1576 ms | 3.53× |
+| 16 | **588 ms** | **9.47×** | 2731 ms | 2.04× |
+| 32 | 636 ms | 8.75× | 7286 ms | **0.76×** |
+
+`small` (1024², 262 144 Agenten), 300 Ticks:
+
+| Threads | `binned` | Speedup | `private` | Speedup |
+|---:|---:|---:|---:|---:|
+| 1 | 1675 ms | 1.00× | 1675 ms | 1.00× |
+| 4 | 1065 ms | 1.57× | 933 ms | 1.80× |
+| 8 | 830 ms | 2.02× | 882 ms | 1.90× |
+| 16 | **693 ms** | **2.42×** | 2079 ms | 0.81× |
+| 32 | 1148 ms | 1.46× | 5583 ms | 0.30× |
+
+### Was daran interessant ist
+
+**`private` kollabiert bei hohen Thread-Zahlen — bis unter die serielle
+Laufzeit.** Der Grund ist die Reduktionsphase: sie liest `T` vollständige
+Grids. Bei `medium` und 32 Threads sind das 32 × 16 MiB = **512 MiB**
+Speicherverkehr pro Tick, allein um die Deposits zusammenzuzählen.
+`binned` braucht dafür 8 MiB (zwei `u32`-Arrays über die Agenten), unabhängig
+von der Thread-Zahl. Die Strategie, die man naiv zuerst schreibt, ist also
+nicht nur die schwächere Garantie, sondern ab acht Threads auch die
+langsamere — und ab sechzehn deutlich.
+
+**Skalierung hängt stark an der Problemgröße.** `medium` erreicht 9.5×,
+`small` nur 2.4×. Ein Tick besteht aus fünf Barrieren; bei `small` mit 300
+Ticks sind das 1500 Synchronisationspunkte auf 1.7 Sekunden Arbeit, bei
+`medium` verteilt sich derselbe Overhead auf viel mehr Rechenzeit pro Tick.
+
+**16 Threads sind das Optimum, 32 bringen nichts.** Der Ryzen 9950X3D hat 16
+physische Kerne und 32 SMT-Threads; der Agenten-Pass ist latenzgebunden auf
+zufälligen Speicherzugriffen und profitiert kaum von SMT, während die
+zusätzlichen Barrieren-Teilnehmer kosten. Bei `medium` bleibt T=32 mit 8.75×
+knapp unter T=16.
+
+**9.5× auf 16 Kernen ist nicht linear, und das ist erwartbar.** Zwei Gründe:
+der Agenten-Pass wartet auf Cache-Misses, und `binned` hat konstruktionsbedingt
+Lastungleichheit — Physarum-Agenten ballen sich auf den Filamenten, also sind
+die Zeilenblöcke unterschiedlich stark belegt. Ein Thread, dessen Block ein
+dichtes Filament enthält, hält alle anderen an der Barriere auf.
+
+---
+
+## 8. Offene Punkte
+
+Parallelisierung existiert bisher nur in C. C++, Rust (rayon oder
+`std::thread::scope`), Haskell (`-threaded`) und TypeScript (Worker +
+`SharedArrayBuffer`) fehlen noch — dort wird die eigentliche Frage sein, wie
+viel Code die jeweilige Sprache für dieselbe Garantie braucht.
+
+Ebenfalls offen: SIMD (Klasse V), GPU-Compute (G), PGO-Builds — bei diesem
+verzweigungslastigen Agenten-Pass der plausibelste verbleibende Gewinn — und
+die Rendering-Backends für Rust, Haskell, Python und Perl.
+
+Eine Idee aus den Skalierungsdaten: `binned` leidet an Lastungleichheit, weil
+Zeilenblöcke gleich groß, aber ungleich belegt sind. Eine Aufteilung nach
+Agentenzahl statt nach Zeilenzahl (Präfixsumme über die Bucket-Belegung des
+Vortakts) sollte das weitgehend beheben, ohne die Determinismusgarantie zu
+verlieren.

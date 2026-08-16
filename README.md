@@ -67,6 +67,12 @@ Benchmarken (vom Linux-Dateisystem aus, sonst misst du die 9p-Brücke):
 scripts/stage-wsl.sh bench --preset medium --reps 3
 ```
 
+Parallel (Klasse P, nur `deferred`) — `binned` ist bit-identisch zum seriellen Lauf:
+
+```bash
+./impl/c/build/gcc-o3-native/slimebench-headless --preset medium --ticks 100 --update deferred --threads 16 --deposit-reduce binned
+```
+
 Interaktiv im Browser, mit Reglern für alle Parameter:
 
 ```bash
@@ -99,6 +105,10 @@ make -C impl/c CC=gcc PROFILE=o3-native sdl2 && ./impl/c/build/gcc-o3-native/sli
   [slimebench_numpy.py](impl/python/slimebench_numpy.py).
 - **Was Bounds-Checking in Rust kostet.** Im Diffusionspass ein Drittel, im
   Agenten-Pass nichts. Siehe [docs/RESULTS.md](docs/RESULTS.md).
+- **Warum es zwei Reduktionsstrategien für Threads gibt.** Thread-lokale
+  Deposit-Puffer sind nur *je Thread-Zahl* reproduzierbar, nicht bit-identisch
+  zum seriellen Lauf. Die räumlich gebündelte Variante ist es — und ab acht
+  Threads zusätzlich schneller. Siehe [SPEC §5.6](spec/SPEC.md).
 - **Warum `-O3` hier langsamer ist als `-O2`.** Siehe
   [docs/RESULTS.md](docs/RESULTS.md).
 

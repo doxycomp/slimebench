@@ -121,28 +121,35 @@ echte Gewinn.
 
 ---
 
-## Phase 6 — Parallelität ⬜
+## Phase 6 — Parallelität 🔨
 
-Erst wenn Klasse S vollständig ist. Ausschließlich im `deferred`-Update-Modus
-(SPEC §5.5) — `serial` ist prinzipiell nicht deterministisch parallelisierbar.
+Ausschließlich im `deferred`-Update-Modus (SPEC §5.5) — `serial` ist
+prinzipiell nicht deterministisch parallelisierbar.
 
-**Determinismus-Regel:** Thread-lokale Deposit-Puffer, Reduktion in fester
-Thread-Reihenfolge. Atomare `f32`-Additionen sind verboten, weil ihr Ergebnis
-von der Ausführungsreihenfolge abhängt.
+**Die Determinismus-Regel aus der ersten Fassung war falsch.** Sie forderte
+thread-lokale Puffer mit fester Reduktionsreihenfolge und nannte das
+deterministisch. Das liefert aber nur Reproduzierbarkeit *je Thread-Zahl*:
+`(Σ Thread 0) + (Σ Thread 1) + …` ist eine andere Klammerung als die serielle
+Kette. SPEC §5.6 unterscheidet jetzt zwei Strategien, und beide sind gemessen.
 
-| Sprache | Weg |
-|---|---|
-| C | OpenMP, pthreads |
-| C++ | OpenMP, `std::jthread`, `std::execution::par` |
-| Rust | rayon |
-| Haskell | `Control.Parallel.Strategies`, `-threaded -N` |
-| TypeScript | Web Worker + `SharedArrayBuffer` — funktioniert überraschend gut |
-| Python | `multiprocessing` (GIL), oder Free-Threaded 3.13+ als eigener Datenpunkt |
-| Perl | `threads` — vermutlich der ernüchterndste Datenpunkt der Suite |
+| Sprache | Weg | Status |
+|---|---|---|
+| C | pthreads, `binned` + `private` | ✅ |
+| C++ | `std::jthread` | ⬜ |
+| Rust | rayon oder `std::thread::scope` | ⬜ |
+| Haskell | `-threaded -N` | ⬜ |
+| TypeScript | Web Worker + `SharedArrayBuffer` | ⬜ |
+| Python | `multiprocessing`, oder Free-Threaded 3.13+ | ⬜ |
+| Perl | `threads` — vermutlich der ernüchterndste Datenpunkt der Suite | ⬜ |
 
-Interessant ist hier nicht die Skalierung an sich (auf 32 Threads skaliert der
-Diffusionspass fast linear, der Agenten-Pass wegen Scatter-Konflikten nicht),
-sondern **wie viel Code es in jeder Sprache kostet**.
+**Ergebnis C** (2048², 1 M Agenten): `binned` skaliert auf **9.5× bei 16
+Threads** und ist für jede Thread-Zahl bit-identisch zum seriellen Lauf.
+`private` erreicht nur 3.5× und **fällt bei 32 Threads unter die serielle
+Laufzeit** — die Reduktion liest dort 512 MiB pro Tick. Zahlen und Begründung
+in [RESULTS.md](RESULTS.md#7-parallelisierung-klasse-p).
+
+Die eigentliche Frage für die übrigen Sprachen ist nicht die Skalierung,
+sondern **wie viel Code dieselbe Garantie kostet**.
 
 ---
 
