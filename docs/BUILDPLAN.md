@@ -135,21 +135,23 @@ Kette. SPEC §5.6 unterscheidet jetzt zwei Strategien, und beide sind gemessen.
 | Sprache | Weg | Status |
 |---|---|---|
 | C | pthreads, `binned` + `private` | ✅ |
-| C++ | `std::jthread` | ⬜ |
+| C++ | `std::jthread` + `std::barrier`, beide Strategien | ✅ |
 | Rust | rayon oder `std::thread::scope` | ⬜ |
 | Haskell | `-threaded -N` | ⬜ |
 | TypeScript | Web Worker + `SharedArrayBuffer` | ⬜ |
 | Python | `multiprocessing`, oder Free-Threaded 3.13+ | ⬜ |
 | Perl | `threads` — vermutlich der ernüchterndste Datenpunkt der Suite | ⬜ |
 
-**Ergebnis C** (2048², 1 M Agenten): `binned` skaliert auf **9.5× bei 16
+**Ergebnis** (2048², 1 M Agenten): `binned` skaliert auf **9.5× bei 16
 Threads** und ist für jede Thread-Zahl bit-identisch zum seriellen Lauf.
 `private` erreicht nur 3.5× und **fällt bei 32 Threads unter die serielle
-Laufzeit** — die Reduktion liest dort 512 MiB pro Tick. Zahlen und Begründung
-in [RESULTS.md](RESULTS.md#7-parallelisierung-klasse-p).
+Laufzeit** — die Reduktion liest dort 512 MiB pro Tick. C und C++ sind bis
+acht Threads ununterscheidbar. Zahlen und Begründung in
+[RESULTS.md](RESULTS.md#7-parallelisierung-klasse-p).
 
-Die eigentliche Frage für die übrigen Sprachen ist nicht die Skalierung,
-sondern **wie viel Code dieselbe Garantie kostet**.
+Codeumfang für dieselbe Garantie: **C 326 Zeilen, C++ 264**. Der Unterschied
+steckt fast vollständig im Lebenszyklus — `std::jthread` joint beim Zerstören,
+`std::barrier` braucht kein `init`/`destroy`-Paar.
 
 ---
 
