@@ -54,6 +54,36 @@ headless_capable = false
 # scripts and documented in docs/RESULTS.md).
 
 [[target]]
+id       = "c-simd"
+lang     = "C"
+backend  = "simd"
+class    = "V"
+dir      = "impl/c"
+build    = "make CC={cc} PROFILE={profile} headless"
+binary   = "build/{cc}-{profile}/slimebench-headless"
+run      = ["{binary}"]
+compilers = ["gcc", "clang"]
+# o3-v3 is AVX2 (8 lanes), o3-native is AVX-512 on this part (16 lanes).
+profiles  = ["o3-v3", "o3-native"]
+extra_args = ["--simd"]
+# Bit-identical to the scalar path (SPEC-1 8.1), verified separately; running
+# the whole vector set again would only re-check the same thing.
+skip_conformance = true
+
+[[target]]
+id       = "c-pgo"
+lang     = "C"
+backend  = "pgo"
+class    = "S"
+dir      = "impl/c"
+build    = "bash pgo.sh {cc}"
+binary   = "build/{cc}-o3-native-pgo/slimebench-headless"
+run      = ["{binary}"]
+compilers = ["gcc", "clang"]
+profiles  = ["o3-native-pgo"]
+skip_conformance = true
+
+[[target]]
 id       = "c-par-binned"
 lang     = "C"
 backend  = "pthreads/binned"

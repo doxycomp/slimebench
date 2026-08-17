@@ -395,19 +395,143 @@ Lebenszyklus: `std::jthread` joint beim Zerstören, `std::barrier` und
 
 ---
 
-## 8. Offene Punkte
+## 8. SIMD (Klasse V)
+
+Explizite Intrinsics für den Diffusionspass in C, `--simd`. Der Agenten-Pass
+bleibt skalar (Begründung in [`impl/c/sb_simd.h`](../impl/c/sb_simd.h)).
+
+### Es ist Stufe A, nicht Stufe C
+
+Der Buildplan hatte angenommen, SIMD lande zwangsläufig in Stufe C. Falsch:
+der Kernel hat **keine Cross-Lane-Reduktion**. Jede Lane rechnet eine
+Ausgabezelle mit exakt derselben Operationsfolge wie die skalare Schleife.
+Nachgewiesen bit-identisch unter gcc *und* clang, in `serial` wie `deferred`,
+und auch kombiniert mit `--threads 16 --deposit-reduce binned`.
+
+Zwei Bedingungen mussten dafür eingehalten werden: kein FMA (`4.0f*c + acc`
+als eine gerundete Operation wäre eine andere Zahl) und eine echte
+`_mm*_div_ps` statt Multiplikation mit dem Kehrwert.
+
+### Lane-Breite bringt fast nichts — der Stencil ist bandbreitengebunden
+
+`small`, 300 Ticks, ein Thread:
+
+| Compiler | ISA | Lanes | Diffusion | Faktor vs. skalar |
+|---|---|---:|---:|---:|
+| gcc | AVX2 | 8 | 72 ms | 4.18× |
+| gcc | AVX-512 | 16 | 66 ms | **4.62×** |
+| clang | AVX2 | 8 | 72 ms | 4.06× |
+| clang | AVX-512 | 16 | 64 ms | **4.56×** |
+
+Verdoppelte Vektorbreite bringt **11 %**. Der 3×3-Stencil liest neun Werte,
+um einen zu schreiben — 36 Byte gelesen pro 4 Byte geschrieben. Die
+Ausführungseinheiten warten auf Speicher, nicht umgekehrt. Wer hier AVX-512
+gegen AVX2 abwägt, optimiert die falsche Ressource.
+
+Bemerkenswert im Vergleich zu [Befund 2](#befund-2--ofast-ist-immer-schlechter--aber-aus-zwei-verschiedenen-gründen):
+clang macht denselben Pass mit `-Ofast` **2.85× langsamer**, mit
+handgeschriebenen Intrinsics **4.56× schneller**. Zwischen der besten und der
+schlechtesten Vektorisierungsstrategie für dieselbe Schleife liegt Faktor 13.
+
+### SIMD und Threads sind hier Substitute, keine Ergänzung
+
+`medium`, 100 Ticks, `deferred`, gcc `-O3 -march=native`:
+
+| Threads | skalar | SIMD | Gewinn |
+|---:|---:|---:|---:|
+| 1 | 4791 ms | 4376 ms | 1.10× |
+| 8 | 854 ms | 852 ms | 1.00× |
+| 16 | 584 ms | 560 ms | 1.04× |
+
+Einzeln bringt SIMD 10 %, zusammen mit acht Threads gar nichts. Beide
+Techniken greifen dieselbe Ressource an: der Diffusionspass ist
+bandbreitengebunden, und sobald acht Kerne daran arbeiten, ist die Bandbreite
+ausgereizt. Die Vektoreinheiten warten dann nur schneller.
+
+Der Gesamtgewinn bei einem Thread liegt bei 1.21× (gcc) bis 1.31× (clang) —
+nahe am theoretischen Maximum, weil der Diffusionspass nur rund ein Viertel
+der Laufzeit ausmacht.
+
+---
+
+## 9. Zwei Optimierungen, die nicht funktioniert haben
+
+Negative Ergebnisse, weil sie dieselbe Arbeit gekostet haben wie positive.
+
+### PGO bringt nichts, bei clang schadet es
+
+`small`, 300 Ticks, seriell, bester von drei Läufen:
+
+| Build | ms | rel. |
+|---|---:|---:|
+| gcc `-O3 -march=native` | 1398 | 1.00× |
+| gcc + PGO | 1396 | 1.002× |
+| clang `-O3 -march=native` | 1176 | 1.00× |
+| clang + PGO | 1255 | **0.937×** |
+
+Der Buildplan hatte PGO als „plausibelsten verbleibenden Gewinn" bei diesem
+verzweigungslastigen Agenten-Pass geführt. Plausible Erklärung für das
+Gegenteil: die Vier-Wege-Verzweigung auf die drei Sensorwerte ist
+datenabhängig und im Ergebnis nahezu gleichverteilt. PGO kann nur
+Verzweigungen verbessern, die *vorhersagbar* sind und die der Compiler
+statisch nicht erkennt. Hier lernt es nichts, was der Hardware-Prädiktor nicht
+ohnehin schon weiß, und bezahlt die Umordnung mit Codegröße.
+
+Die Infrastruktur bleibt im Baum (`impl/c/pgo.sh`), damit sich das auf anderer
+Hardware nachprüfen lässt.
+
+### Lastausgleich für `binned` bringt 6 %, nicht mehr
+
+Die Zeilenblöcke gleich groß zu wählen ist der falsche Schnitt, weil sich die
+Agenten auf den Filamenten ballen. Die adaptive Variante verteilt die Zeilen
+nach der Agentenzahl des Vortakts. Sie ist korrekt — der Hash bleibt für jede
+Thread-Zahl identisch, weil die Partition nur bestimmt, *welcher* Thread
+deponiert, nie die Reihenfolge pro Zelle.
+
+| Threads | gleichmäßig | adaptiv | Gewinn |
+|---:|---:|---:|---:|
+| 4 | 1229 ms | 1203 ms | +2.1 % |
+| 8 | 915 ms | 864 ms | +5.9 % |
+| 16 | 694 ms | 699 ms | −0.6 % |
+| 32 | 622 ms | 624 ms | −0.4 % |
+
+Die Phasenaufschlüsselung erklärt, warum (`medium`, T=16, Thread 0
+einschließlich seiner Barrierenwartezeit):
+
+| Phase | ms/Tick | Anteil |
+|---|---:|---:|
+| agents | 2.53 | 49.8 % |
+| prefix | 0.24 | 4.8 % |
+| scatter | 0.46 | 9.1 % |
+| deposit | 0.76 | 14.9 % |
+| merge | 0.68 | 13.4 % |
+| diffuse | 0.41 | 8.1 % |
+
+Der Deposit-Pass, den der Lastausgleich adressiert, ist nur 15 % der Laufzeit —
+mehr als ein paar Prozent kann er gar nicht bringen. Die eigentliche Bremse
+ist die **`binned`-Buchhaltung insgesamt** (scatter + deposit + merge +
+prefix = 42 %), und `prefix` ist eine **serielle O(T²)-Sektion**, die sich von
+T=8 auf T=16 verdoppelt. Das ist der Amdahl-Anteil, der die Skalierung bei
+hohen Thread-Zahlen deckelt.
+
+Die Messung ist mit `SLIMEBENCH_PHASE_STATS=1` reproduzierbar, der
+Lastausgleich mit `SLIMEBENCH_NO_REBALANCE=1` abschaltbar.
+
+---
+
+## 10. Offene Punkte
 
 Parallelisierung existiert bisher nur in C. C++, Rust (rayon oder
 `std::thread::scope`), Haskell (`-threaded`) und TypeScript (Worker +
 `SharedArrayBuffer`) fehlen noch — dort wird die eigentliche Frage sein, wie
 viel Code die jeweilige Sprache für dieselbe Garantie braucht.
 
-Ebenfalls offen: SIMD (Klasse V), GPU-Compute (G), PGO-Builds — bei diesem
-verzweigungslastigen Agenten-Pass der plausibelste verbleibende Gewinn — und
-die Rendering-Backends für Rust, Haskell, Python und Perl.
+SIMD gibt es bisher nur in C; C++ und Rust fehlen. GPU-Compute (Klasse G) ist
+unangetastet. Die Rendering-Backends für Rust, Haskell, Python und Perl
+ebenfalls.
 
-Eine Idee aus den Skalierungsdaten: `binned` leidet an Lastungleichheit, weil
-Zeilenblöcke gleich groß, aber ungleich belegt sind. Eine Aufteilung nach
-Agentenzahl statt nach Zeilenzahl (Präfixsumme über die Bucket-Belegung des
-Vortakts) sollte das weitgehend beheben, ohne die Determinismusgarantie zu
-verlieren.
+Der konkreteste nächste Hebel steht in §9: **`prefix` ist eine serielle
+O(T²)-Sektion** und deckelt die Skalierung bei hohen Thread-Zahlen. Bei T=32
+sind das T² = 1024 Einträge, die ein einzelner Thread durchläuft, während 31
+andere an der Barriere warten. Eine baumförmige oder über Buckets
+parallelisierte Präfixsumme sollte das auflösen.
