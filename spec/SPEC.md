@@ -584,6 +584,38 @@ mehrere Agenten pro Vektor in dieselbe Zelle deponieren, was eine
 Konfliktauflösung und damit eine Reihenfolgeentscheidung erfordert. Das wäre
 Stufe C — und ist bisher nicht implementiert.
 
+### 8.2 Klasse G ist ebenfalls nicht automatisch Stufe C
+
+Dieselbe Annahme stand für GPU-Compute in dieser Spec und ist ebenfalls
+widerlegt: die CUDA-Implementierung ist **bit-identisch** mit der C-Referenz.
+
+Drei Dinge müssen dafür zusammenkommen:
+
+1. **Keine FMA-Kontraktion.** `nvcc -fmad=false`. Ohne das fusioniert der
+   Compiler `4.0f * c + acc` und der Diffusionspass weicht ab.
+2. **Korrekt gerundete Division.** `--prec-div=true` (bei nvcc Default). Eine
+   Reziprok-Näherung verletzt §1.2.4.
+3. **Ganzzahlige Deposit-Atomics.** `atomicAdd` auf `float` ist *nicht*
+   deterministisch — die Reihenfolge, in der Threads ankommen, bestimmt die
+   Rundung. Stattdessen zählt ein `atomicAdd` auf `uint` die Treffer pro Zelle
+   (ganzzahlige Addition ist exakt und reihenfolgeunabhängig), und die
+   Multiplikation mit `deposit` passiert einmal danach.
+
+   Das reproduziert die serielle Kette genau dann, wenn `k · deposit` exakt
+   darstellbar bleibt — dieselbe Einschränkung wie bei der CPU-Strategie
+   `private` in §5.6, und das Harness prüft sie, statt sie anzunehmen.
+
+> **Aber es hängt am Treiber, nicht nur an der Sprache.** Derselbe
+> GLSL-Compute-Kernel mit denselben `precise`-Qualifiern ist auf Mesas
+> `llvmpipe` bit-exakt und auf Mesas D3D12-Backend um bis zu 2 ULP daneben.
+> `precise` verbietet in GLSL Umordnen und Fusion, erzwingt aber **keine**
+> korrekt gerundete Division — anders als CUDAs `--prec-div=true`. Klasse G
+> ist deshalb pro Backend einzustufen, nicht pauschal.
+>
+> `precise` gehört dabei an mehr Stellen als man zuerst denkt: nur auf dem
+> Diffusions-Akkumulator reichte nicht, weil auch `x + cos*step` im
+> Agenten-Pass fusioniert wird und den Agenten um ein ULP versetzt.
+
 ---
 
 ## 9. Presets

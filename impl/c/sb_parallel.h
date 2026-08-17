@@ -21,6 +21,9 @@ enum {
     SB_PH_COUNT
 };
 
+/* "spin" or "pthread" -- reported so a measurement records which was used. */
+const char *sb_pool_barrier_name(const sb_pool *p);
+
 /* Writes a one-line summary to stderr; no-op unless stats were enabled. */
 void sb_pool_report_phases(const sb_pool *p, uint32_t ticks);
 
