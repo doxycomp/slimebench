@@ -333,3 +333,42 @@ binary   = "build/{profile}/slimebench"
 run      = ["{binary}"]
 compilers = ["ghc"]
 profiles  = ["o1", "o2", "o2-llvm"]
+
+# ------------------------------------------------------------------- class G
+
+[[target]]
+id       = "cuda"
+lang     = "CUDA"
+backend  = "cuda"
+class    = "G"
+dir      = "impl/cuda"
+build    = "make PROFILE={profile}"
+binary   = "build/{profile}/slimebench-cuda"
+run      = ["{binary}"]
+compilers = ["nvcc"]
+profiles  = ["default"]
+updates  = ["deferred"]
+# Bit-exact with the C reference, verified in docs/RESULTS.md. It is not run
+# through `conformance` because that command also exercises `serial`, which a
+# GPU cannot implement.
+skip_conformance = true
+
+[[target]]
+id       = "glcompute"
+lang     = "GLSL"
+backend  = "gl43"
+class    = "G"
+dir      = "impl/glcompute"
+build    = "make PROFILE={profile}"
+binary   = "build/{profile}/slimebench-gl"
+run      = ["{binary}"]
+compilers = ["gcc"]
+profiles  = ["default"]
+updates  = ["deferred"]
+tier     = "B"
+# Tier A on Mesa llvmpipe, ~2 ULP off on the D3D12/NVIDIA path -- see
+# docs/RESULTS.md. Needs GALLIUM_DRIVER=d3d12 and
+# MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA to reach the discrete GPU under WSL2;
+# without them it silently runs on the software rasteriser, which is why the
+# binary prints its renderer string.
+skip_conformance = true

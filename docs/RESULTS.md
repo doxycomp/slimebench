@@ -599,7 +599,118 @@ Lastausgleich mit `SLIMEBENCH_NO_REBALANCE=1` abschaltbar.
 
 ---
 
-## 10. Offene Punkte
+### Spinnende Barriere: gewinnt bei 16 Threads, katastrophal bei 32
+
+Aus der Erkenntnis oben — Barrieren sind 35–53 % der Laufzeit — folgte der
+naheliegende Versuch: `pthread_barrier_wait` durch eine spinnende Barriere
+ersetzen. `medium`/100, `binned`, bester von fünf Läufen:
+
+| Threads | `pthread` | `spin` | `hybrid` | bester |
+|---:|---:|---:|---:|---|
+| 4 | 1214 | 1206 | 1219 | ±0 |
+| 8 | 870 | 867 | **852** | hybrid +2.1 % |
+| 16 | 682 | **637** | 651 | **spin +7.0 %** |
+| 32 | **609** | 1385 | 615 | pthread |
+
+`spin` gewinnt 7 % bei 16 Threads und **verliert 55 %** bei 32. Der Grund ist
+die Maschine: 16 physische Kerne, 32 logische. Bei T=16 sitzt genau ein Thread
+pro Kern, und Spinnen kostet nichts, was sonst jemand bräuchte. Bei T=32 ist
+jeder logische Kern entweder am Arbeiten oder am Spinnen — und ein Spinner
+nimmt seinem SMT-Geschwister Ausführungsressourcen weg, das gerade noch echte
+Arbeit macht. Die Barrierenzeit steigt dabei von 2.45 auf 10.2 ms pro Tick.
+
+`hybrid` (spinnen, dann auf einem Futex parken) ist der brauchbare Kompromiss:
+**nie schlechter als `pthread`**, leicht besser bei 8 und 16. Es bleibt bei
+`pthread` als Default, weil das überall sicher ist; die Wahl ist ein
+Umgebungsschalter (`SLIMEBENCH_BARRIER`), kein Teil des CLI-Vertrags.
+
+Bemerkenswert ist, wie klein der Gewinn ausfällt, obwohl Barrieren die Hälfte
+der Laufzeit ausmachen. Die Zeit steckt nicht im Aufwecken, sondern im
+*Warten* — also in Lastungleichheit zwischen den Threads. Eine billigere
+Barriere macht das Warten nicht kürzer.
+
+---
+
+## 10. GPU (Klasse G)
+
+Zwei Implementierungen desselben Kernels: CUDA und ein GLSL-4.3-Compute-Shader.
+Beide nur `deferred` — `serial` verlangt, dass ein Agent den Deposit seines
+Vorgängers im selben Tick sieht, und dafür hat eine GPU nichts anzubieten.
+
+Vorab: **Klasse G misst nicht die Sprache.** Der Host allokiert Puffer und
+startet Kernel; Rust oder Python lieferten dieselben Zahlen. Das hier ist die
+Obergrenze für dieses Problem auf dieser Hardware.
+
+### CUDA ist bit-exakt — Stufe A
+
+Spec und Buildplan hatten angenommen, GPU-Arbeit lande zwangsläufig in Stufe C.
+Falsch. Geprüft gegen die C-Referenz bei `tiny`/100, `tiny`/1000, `small`/100
+und `small`/300, jeweils Grid- **und** Agenten-Hash: identisch.
+
+Nötig dafür waren drei Dinge:
+
+1. `-fmad=false` — sonst fusioniert nvcc `4.0f*c + acc`.
+2. `--prec-div=true` (Default) — korrekt gerundete Division statt Reziprok.
+3. **Ganzzahlige Deposit-Atomics.** `atomicAdd` auf `float` ist nicht
+   deterministisch. Stattdessen zählt ein `atomicAdd` auf `uint` die Treffer
+   pro Zelle — ganzzahlige Addition ist exakt und reihenfolgeunabhängig — und
+   die Multiplikation mit `deposit` passiert einmal danach.
+
+Punkt 3 bringt dieselbe Einschränkung mit wie die CPU-Strategie `private`:
+mit `--deposit 0.1` weicht CUDA von der Referenz ab, weil `k · 0.1` nicht mehr
+exakt darstellbar ist. Geprüft, nicht angenommen.
+
+### Derselbe GLSL-Kernel: exakt auf einem Treiber, nicht auf dem anderen
+
+| Backend | Ergebnis |
+|---|---|
+| Mesa `llvmpipe` (Software) | **bit-exakt** mit der C-Referenz |
+| Mesa D3D12 → RTX 5080 | weicht ab, **maximal 2 ULP** |
+
+Isoliert mit einem einzigen Agenten und einem Tick: 31 % der Zellen
+unterscheiden sich, um höchstens 2 ULP. Es ist also der Diffusionspass, und
+die Größenordnung passt zur Division. `precise` verbietet in GLSL Umordnen und
+Fusion, erzwingt aber **keine korrekt gerundete Division** — genau das, was
+CUDA über `--prec-div=true` bekommt.
+
+Auf dem Weg dorthin ein lehrreicher Zwischenschritt: zuerst wich auch der
+*Agenten*-Hash ab. Ursache war, dass ich `precise` nur auf den
+Diffusions-Akkumulator gesetzt hatte — `x + cos*step` im Agenten-Pass wird
+ebenfalls fusioniert, versetzt den Agenten um ein ULP und schickt ihn
+irgendwann an einem Sensorvergleich in die andere Richtung. Nach dem Setzen
+von `precise` auch dort stimmte der Agenten-Hash bei 100 Ticks wieder.
+
+Dass der Agenten-Hash zuerst abwich, war dabei der nützliche Hinweis: er
+lokalisiert den Fehler im Agenten-Pass statt im Stencil, genau wie
+[SPEC §6.3](../spec/SPEC.md) es vorsieht.
+
+### Geschwindigkeit
+
+Bester von drei Läufen:
+
+| Ziel | `small`/300 | `medium`/100 | vs. C 1 Thread |
+|---|---:|---:|---:|
+| C, 1 Thread | 1541 ms | 4978 ms | 1.0× |
+| C, 16 Threads, `binned` | 783 ms | 662 ms | 7.5× |
+| **CUDA, RTX 5080** | **49 ms** | **50 ms** | **99.1×** |
+| GL Compute, RTX 5080 | 1336 ms | 1298 ms | 3.8× |
+
+CUDA erreicht **99×** gegenüber einem CPU-Kern und **13×** gegenüber 16
+CPU-Kernen. Bemerkenswert: `small` und `medium` kosten fast dasselbe (49 vs.
+50 ms) — bei 84 SMs ist selbst `medium` mit 1 M Agenten noch nicht groß genug,
+um die GPU auszulasten. Die eigentliche Obergrenze liegt also höher.
+
+> **Die GL-Zahl misst nicht OpenGL.** 1298 ms gegen CUDAs 50 ms auf derselben
+> GPU sind Faktor 26, und das ist die Mesa-D3D12-Übersetzungsschicht: jeder
+> Tick sind drei Dispatches plus drei `GL_ALL_BARRIER_BITS` plus ein
+> `glFinish`, die alle über GL → DXIL → D3D12 laufen. Auf einem nativen
+> Linux-GL-Treiber wäre der Abstand mit ziemlicher Sicherheit deutlich kleiner.
+> Diese Zahl gehört als *„OpenGL unter WSL2 über D3D12"* gelesen, nicht als
+> „OpenGL gegen CUDA".
+
+---
+
+## 11. Offene Punkte
 
 Parallelisierung existiert bisher nur in C. C++, Rust (rayon oder
 `std::thread::scope`), Haskell (`-threaded`) und TypeScript (Worker +
