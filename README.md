@@ -32,6 +32,17 @@ Python und Perl erreichen mit `--strict-f32` ebenfalls Bit-Exaktheit.
 
 Messwerte: [docs/RESULTS.md](docs/RESULTS.md).
 
+Dieselbe Simulation, `medium` (2048², 1 M Agenten), 100 Ticks:
+
+![Klassenübersicht](docs/charts/classes.svg)
+
+| Klasse | beste Konfiguration | ms | vs. 1 CPU-Kern |
+|---|---|---:|---:|
+| S — ein Thread | C, gcc `-O3 -march=native` | 4978 | 1× |
+| V — SIMD | C, AVX-512 | 4376 | 1.1× |
+| P — 16 Threads | C, pthreads, `binned` | 588 | 8× |
+| G — GPU | CUDA, RTX 5080 | **50** | **99×** |
+
 ## Schnellstart
 
 Kanonische Umgebung ist WSL2 / Ubuntu. Benötigt werden nur `gcc`, `make` und
@@ -104,13 +115,23 @@ make -C impl/c CC=gcc PROFILE=o3-native sdl2 && ./impl/c/build/gcc-o3-native/sli
   anderes zu rechnen — siehe Docstring in
   [slimebench_numpy.py](impl/python/slimebench_numpy.py).
 - **Was Bounds-Checking in Rust kostet.** Im Diffusionspass ein Drittel, im
-  Agenten-Pass nichts. Siehe [docs/RESULTS.md](docs/RESULTS.md).
+  Agenten-Pass nichts. Siehe
+  [docs/RESULTS.md §3](docs/RESULTS.md#3-compiler).
+- **Warum SIMD und GPU hier nicht Stufe C sind.** Der vektorisierte Stencil hat
+  keine Cross-Lane-Reduktion, und CUDA zählt Deposits ganzzahlig statt sie in
+  f32 zu addieren. Beides ist bit-exakt gegen die C-Referenz — die Spec hatte
+  ursprünglich das Gegenteil angenommen.
 - **Warum es zwei Reduktionsstrategien für Threads gibt.** Thread-lokale
   Deposit-Puffer sind nur *je Thread-Zahl* reproduzierbar, nicht bit-identisch
   zum seriellen Lauf. Die räumlich gebündelte Variante ist es — und ab acht
   Threads zusätzlich schneller. Siehe [SPEC §5.6](spec/SPEC.md).
-- **Warum `-O3` hier langsamer ist als `-O2`.** Siehe
-  [docs/RESULTS.md](docs/RESULTS.md).
+- **Warum `-O3` hier langsamer ist als `-O2`** — jedenfalls bei gcc; bei clang
+  bringt `-march=native` 18 %, und ohne es liegt clang hinter gcc. Siehe
+  [docs/RESULTS.md §3](docs/RESULTS.md#3-compiler).
+- **Was alles nicht funktioniert hat.** PGO, die parallele Präfixsumme, der
+  Lastausgleich, die reine Spin-Barriere — vier plausible Optimierungen, ein
+  brauchbares Ergebnis. Mit Begründung in
+  [docs/RESULTS.md §9](docs/RESULTS.md#9-was-nicht-funktioniert-hat).
 
 ## Herkunft
 
