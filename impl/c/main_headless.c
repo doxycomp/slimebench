@@ -76,6 +76,8 @@ int main(int argc, char **argv) {
         }
     }
 
+    sb_pool_report_phases(pool, cfg.ticks);
+
 #undef SB_TICK
     free(tick_ms);
     sb_pool_destroy(pool);

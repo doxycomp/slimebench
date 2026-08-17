@@ -10,6 +10,20 @@
 
 typedef struct sb_pool sb_pool;
 
+/* Phase breakdown, enabled with SLIMEBENCH_PHASE_STATS=1. */
+enum {
+    SB_PH_AGENTS = 0,
+    SB_PH_PREFIX,
+    SB_PH_SCATTER,
+    SB_PH_DEPOSIT,
+    SB_PH_MERGE,
+    SB_PH_DIFFUSE,
+    SB_PH_COUNT
+};
+
+/* Writes a one-line summary to stderr; no-op unless stats were enabled. */
+void sb_pool_report_phases(const sb_pool *p, uint32_t ticks);
+
 /* Creates cfg.threads workers, alive until sb_pool_destroy. Returns NULL if
  * the configuration cannot be parallelised (message on stderr). */
 sb_pool *sb_pool_create(sb_sim *s);
