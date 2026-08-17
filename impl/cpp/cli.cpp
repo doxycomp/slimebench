@@ -1,5 +1,7 @@
 #include "cli.hpp"
 
+#include "simd.hpp"
+
 #include <algorithm>
 #include <charconv>
 #include <cstdio>
@@ -108,6 +110,8 @@ int parseArgs(int argc, char** argv, Config& cfg, CliOpts& opt) {
         else if (a == "--render")     { opt.want_render = true; }
         else if (a == "--json")       { opt.want_json = true; }
         else if (a == "--freeze-sim") { opt.freeze_sim = true; }
+        else if (a == "--simd")       { cfg.simd = true; }
+        else if (a == "--no-simd")    { cfg.simd = false; }
         else {
             // SPEC-1 section 10: never silently ignore an unknown flag.
             std::fprintf(stderr, "error: unknown argument '%s'\n", argv[i]);
@@ -134,6 +138,11 @@ void emitJson(const Sim& sim, const char* impl, const char* backend,
     // Class P interleaves the phases across threads, so the per-phase split
     // the serial path reports would be meaningless; emit zero there.
     const bool parallel = c.threads > 1;
+    // One field describing what actually ran: reduction strategy for class P,
+    // and the vector ISA the diffusion pass was compiled for.
+    std::string variant =
+        parallel ? (c.reduce == Reduce::Binned ? "binned" : "private") : "scalar";
+    if (c.simd) variant += std::string("+simd-") + simdName();
     const double cells = double(c.width) * double(c.height);
     const double maups = ms_total > 0 ? double(c.agents) * double(n) / ms_total / 1000.0 : 0.0;
     const double mcups = ms_total > 0 ? cells * double(n) / ms_total / 1000.0 : 0.0;
@@ -149,7 +158,7 @@ void emitJson(const Sim& sim, const char* impl, const char* backend,
         impl, backend, cls, c.preset.c_str(),
         c.width, c.height, c.agents, n, c.seed,
         c.update == Update::Deferred ? "deferred" : "serial", c.threads,
-        c.threads > 1 ? (c.reduce == Reduce::Binned ? "binned" : "private") : "scalar",
+        variant.c_str(),
         sim.hashGrid(), sim.hashAgents(), Sim::dirtableHash(),
         ms_total,
         parallel ? 0.0 : double(sim.ns_agents) / 1e6,

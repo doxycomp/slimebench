@@ -21,6 +21,7 @@ usage: slimebench [options]   (slimebench SPEC-1)
   --sensor-dist F  --sensor-steps N  --rot-steps N
   --step F  --deposit F  --decay F
   --headless  --render  --freeze-sim
+  --simd / --no-simd   vectorised diffusion pass (class V)
   --json  --hash-every N  --dump-grid PATH  --display-max F
   -h, --help";
 
@@ -106,6 +107,8 @@ pub fn parse_args() -> Opts {
                 };
                 i += 1;
             }
+            "--simd" => o.cfg.simd = true,
+            "--no-simd" => o.cfg.simd = false,
             "--headless" => o.want_render = false,
             "--render" => o.want_render = true,
             "--freeze-sim" => o.freeze_sim = true,
@@ -137,6 +140,13 @@ pub fn result_json(
     let mean = if n > 0 { tick_ms.iter().sum::<f64>() / n as f64 } else { 0.0 };
 
     let c = &sim.cfg;
+    // One field describing what actually ran: the indexing variant, and the
+    // vector ISA the diffusion pass was compiled for.
+    let variant = if c.simd {
+        format!("{}+simd-{}", Sim::variant(), crate::simd::simd_name())
+    } else {
+        Sim::variant().to_string()
+    };
     let cells = c.width as f64 * c.height as f64;
     let maups = if ms_total > 0.0 { c.agents as f64 * n as f64 / ms_total / 1000.0 } else { 0.0 };
     let mcups = if ms_total > 0.0 { cells * n as f64 / ms_total / 1000.0 } else { 0.0 };
@@ -154,7 +164,7 @@ pub fn result_json(
         backend,
         class,
         c.preset,
-        Sim::variant(),
+        &variant,
         c.width,
         c.height,
         c.agents,

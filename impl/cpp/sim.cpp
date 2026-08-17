@@ -1,5 +1,6 @@
 #include "sim.hpp"
 #include "agent.hpp"
+#include "simd.hpp"
 
 #include <cfloat>
 #include <ctime>
@@ -126,7 +127,8 @@ void Sim::diffuseRows(std::uint32_t y0, std::uint32_t y1) noexcept {
 }
 
 void Sim::diffusePass() noexcept {
-    diffuseRows(0, cfg_.height);
+    if (cfg_.simd) diffuseRowsSimd(*this, 0, cfg_.height);
+    else diffuseRows(0, cfg_.height);
     swapBuffers();
 }
 

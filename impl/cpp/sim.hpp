@@ -40,6 +40,7 @@ struct Config {
     std::uint32_t threads = 1;
     Update update = Update::Serial;
     Reduce reduce = Reduce::Private;
+    bool simd = false;            // class V: vectorised diffusion pass
 
     float sensor_dist = 9.0f;
     float step = 1.0f;
@@ -120,6 +121,7 @@ class Sim {
     std::vector<float>& gridMut() noexcept { return grid_; }
     std::vector<float>& dep() noexcept { return dep_; }
     std::uint32_t log2w() const noexcept { return log2w_; }
+    std::vector<float>& scratchMut() noexcept { return scratch_; }
 
     std::uint64_t ns_agents = 0;
     std::uint64_t ns_diffuse = 0;
