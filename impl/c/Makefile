@@ -26,6 +26,10 @@ else ifeq ($(PROFILE),o3)
   OPTFLAGS := -O3
 else ifeq ($(PROFILE),os)
   OPTFLAGS := -Os
+else ifeq ($(PROFILE),o3-v3)
+  # x86-64-v3 == AVX2, no AVX-512. Lets the SIMD kernel be measured at 8 lanes
+  # against the 16 lanes -march=native gives on this Zen 5 part.
+  OPTFLAGS := -O3 -march=x86-64-v3 -mtune=native
 else ifeq ($(PROFILE),o3-native)
   OPTFLAGS := -O3 -march=native -mtune=native
 else ifeq ($(PROFILE),o3-lto)
@@ -59,13 +63,13 @@ LDLIBS   := -lm -lpthread
 CCNAME   := $(notdir $(CC))
 BUILDDIR := build/$(CCNAME)-$(PROFILE)
 
-CORE_SRC := sb_core.c sb_cli.c sb_parallel.c
+CORE_SRC := sb_core.c sb_cli.c sb_parallel.c sb_simd.c
 CORE_OBJ := $(addprefix $(BUILDDIR)/,$(CORE_SRC:.c=.o))
 
 HEADLESS := $(BUILDDIR)/slimebench-headless
 SDL2BIN  := $(BUILDDIR)/slimebench-sdl2
 RAYBIN   := $(BUILDDIR)/slimebench-raylib
-HEADERS  := dirtable.h sb_core.h sb_cli.h sb_render.h sb_agent.h sb_parallel.h
+HEADERS  := dirtable.h sb_core.h sb_cli.h sb_render.h sb_agent.h sb_parallel.h sb_simd.h
 
 SDL2_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null)
 SDL2_LIBS   := $(shell pkg-config --libs   sdl2 2>/dev/null)

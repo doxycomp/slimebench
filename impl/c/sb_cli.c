@@ -1,7 +1,10 @@
 #include "sb_cli.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "sb_simd.h"
 
 void sb_print_usage(FILE *f, const char *argv0) {
     fprintf(f,
@@ -97,6 +100,8 @@ int sb_parse_args(int argc, char **argv, sb_config *cfg, sb_cli_opts *opt) {
         else if (!strcmp(a, "--render"))     { opt->want_render = 1; }
         else if (!strcmp(a, "--json"))       { opt->want_json = 1; }
         else if (!strcmp(a, "--freeze-sim")) { opt->freeze_sim = 1; }
+        else if (!strcmp(a, "--simd"))       { cfg->simd = 1; }
+        else if (!strcmp(a, "--no-simd"))    { cfg->simd = 0; }
         else {
             /* SPEC-1 section 10: never silently ignore an unknown flag. */
             fprintf(stderr, "error: unknown argument '%s'\n", a);
@@ -118,6 +123,15 @@ void sb_emit_json(const sb_sim *s, const char *impl, const char *backend,
     /* Class P interleaves the phases across threads, so the per-phase split
      * the serial path reports would be meaningless; emit it as zero there. */
     const int parallel = s->cfg.threads > 1;
+
+    /* One field describing what actually ran: reduction strategy for class P,
+     * and the vector ISA the diffusion pass was compiled for. */
+    char variant[48];
+    snprintf(variant, sizeof variant, "%s%s%s",
+             parallel ? (s->cfg.reduce == SB_REDUCE_BINNED ? "binned" : "private")
+                      : "scalar",
+             s->cfg.simd ? "+simd-" : "",
+             s->cfg.simd ? sb_simd_name() : "");
     double median = 0.0, p99 = 0.0, mean = 0.0;
     if (n_ticks > 0) {
         double *sorted = (double *)malloc(n_ticks * sizeof(double));
@@ -149,9 +163,7 @@ void sb_emit_json(const sb_sim *s, const char *impl, const char *backend,
            impl, backend, cls, s->cfg.preset,
            s->cfg.width, s->cfg.height, s->cfg.agents, n_ticks, s->cfg.seed,
            s->cfg.update == SB_UPDATE_DEFERRED ? "deferred" : "serial", s->cfg.threads,
-           s->cfg.threads > 1
-               ? (s->cfg.reduce == SB_REDUCE_BINNED ? "binned" : "private")
-               : "scalar",
+           variant,
            sb_hash_grid(s), sb_hash_agents(s), sb_dirtable_hash(),
            ms_total,
            parallel ? 0.0 : (double)s->ns_agents / 1e6,

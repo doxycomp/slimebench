@@ -2,6 +2,7 @@
 
 #include "sb_core.h"
 #include "sb_agent.h"
+#include "sb_simd.h"
 
 #include <float.h>
 #include <stdlib.h>
@@ -145,7 +146,10 @@ static void sb_agent_pass(sb_sim *s) {
 /* ---- diffusion + decay (SPEC-1 section 5.4) ----------------------------- */
 
 static void sb_diffuse_pass(sb_sim *s) {
-    sb_diffuse_rows(s, s->grid, s->scratch, 0, s->cfg.height);
+    if (s->cfg.simd)
+        sb_diffuse_rows_simd(s, s->grid, s->scratch, 0, s->cfg.height);
+    else
+        sb_diffuse_rows(s, s->grid, s->scratch, 0, s->cfg.height);
     float *tmp = s->grid;
     s->grid = s->scratch;
     s->scratch = tmp;
