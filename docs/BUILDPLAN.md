@@ -89,7 +89,7 @@ Expansionsschleife über eine Million Pixel pro Frame. Zahlen in
 
 ---
 
-## Phase 5 — Compiler-Matrix ⬜
+## Phase 5 — Compiler-Matrix ✅
 
 Das erklärte Hauptziel. Vollautomatisch über `bench/run.py bench`.
 
@@ -124,7 +124,7 @@ Vermutung an dieser Stelle war falsch. Details in
 
 ---
 
-## Phase 6 — Parallelität 🔨
+## Phase 6 — Parallelität 🔨 (C und C++ fertig)
 
 Ausschließlich im `deferred`-Update-Modus (SPEC §5.5) — `serial` ist
 prinzipiell nicht deterministisch parallelisierbar.
@@ -156,15 +156,23 @@ Codeumfang für dieselbe Garantie: **C 326 Zeilen, C++ 264**. Der Unterschied
 steckt fast vollständig im Lebenszyklus — `std::jthread` joint beim Zerstören,
 `std::barrier` braucht kein `init`/`destroy`-Paar.
 
+**Barrieren sind der Flaschenhals**, nicht die Arbeitsverteilung: 35 % der
+Laufzeit bei T=16, 53 % bei T=32. Eine spinnende Barriere bringt dort +7 %,
+kostet bei 32 Threads aber 55 % (die Spinner nehmen ihren SMT-Geschwistern die
+Ausführungsressourcen weg). Die hybride Variante — spinnen, dann auf einem
+Futex parken — ist nie schlechter als `pthread` und wird über
+`SLIMEBENCH_BARRIER` gewählt. Der Gewinn bleibt klein, weil die Zeit im
+*Warten* steckt und nicht im Aufwecken.
+
 ---
 
-## Phase 7 — SIMD 🔨
+## Phase 7 — SIMD ✅ (C, C++, Rust)
 
 | Sprache | Status |
 |---|---|
 | C | ✅ AVX2 + AVX-512 für den Diffusionspass, `--simd` |
-| C++ | ⬜ |
-| Rust | ⬜ (`std::simd` oder `core::arch`) |
+| C++ | ✅ dieselben Intrinsics |
+| Rust | ✅ `core::arch` (nicht `std::simd`, das ist nightly-only) |
 | Haskell, Python, Perl, TS | — kein ehrlicher Weg, wird so dokumentiert |
 
 **Die Annahme „umsortierte Reduktion ⇒ Stufe C" war falsch.** Der Kernel hat
@@ -184,35 +192,37 @@ dieselbe Zelle bräuchten Konfliktauflösung, und das wäre dann echt Stufe C.
 
 ---
 
-## Phase 8 — GPU ⬜
+## Phase 8 — GPU ✅ (CUDA + OpenGL)
 
-### Zur offenen Frage: ist GPU sprachübergreifend abbildbar?
+| Weg | Status |
+|---|---|
+| CUDA | ✅ **Konformitätsstufe A**, 99x gegen einen CPU-Kern |
+| GLSL 4.3 Compute | ✅ Stufe A auf llvmpipe, ~2 ULP daneben auf D3D12/NVIDIA |
+| WGSL via wgpu-native | ❌ nicht gangbar, siehe unten |
 
-Teilweise — und man sollte präzise sein, worin der Vergleich dann besteht.
+**Der ursprünglich empfohlene Weg funktioniert unter WSL2 nicht.** Vulkan sieht
+die NVIDIA-GPU nicht: die ICD-Dateien unter `/usr/lib/wsl/drivers/` zeigen auf
+`nvoglv64.dll`, also Windows-Treiber, die aus Linux nicht ladbar sind. Damit
+fällt wgpu-native aus, und die WGSL-Idee „eine Shaderquelle für alles" mit ihr.
 
-**Der Rechenkern wandert in einen Shader.** Die Hostsprache allokiert Puffer,
-startet den Dispatch und wartet. Damit misst Klasse G **nicht mehr die
-Sprache**, sondern Shader-Compiler und Treiber. Rust und Perl würden dieselbe
-Zahl liefern. Klasse G ist deshalb als *Obergrenze für dieses Problem*
-wertvoll, nicht als Zeile im Sprachranking — und der Report muss das so sagen.
+Gangbar sind stattdessen zwei Wege, beide implementiert:
 
-**Empfehlung: ein einziger WGSL-Kernel über wgpu-native.**
+* **CUDA** — nur NVIDIA, aber unter WSL2 offiziell unterstützt und der
+  schnellste. Das Toolkit hier (12.0) kennt Blackwell nicht; Kompilieren nach
+  PTX für `compute_90` und JIT durch den Treiber funktioniert.
+* **OpenGL 4.3 Compute** — erreicht die RTX 5080 über Mesas D3D12-Backend
+  (`GALLIUM_DRIVER=d3d12 MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA`) und läuft
+  aus jeder Sprache, die einen GL-Kontext bekommt. Damit näher am
+  ursprünglichen Ziel als wgpu es gewesen wäre.
 
-| Weg | Sprachreichweite | Browser | Bewertung |
-|---|---|---|---|
-| **WGSL + wgpu-native** | C-ABI ⇒ C, C++, Rust, Python (cffi), Haskell (FFI), Node | ✅ WebGPU nutzt denselben Shader | **Empfohlen.** Eine Shader-Quelle für alles. |
-| GLSL 4.3 Compute + OpenGL | überall wo ein GL-Kontext existiert (SDL2/raylib haben ihn schon) | ❌ WebGL2 kann kein Compute | Nativ am schnellsten aufgesetzt, aber zweite Shader-Quelle für den Browser nötig |
-| Vulkan Compute | wie GLSL, mehr Kontrolle | ❌ | Viel Boilerplate für wenig Zusatzerkenntnis |
-| CUDA | nur NVIDIA | ❌ | Als *Ceiling-Referenz* auf der RTX 5080 durchaus reizvoll |
+**Die Annahme „Klasse G ist zwangsläufig Stufe C" war falsch** — jedenfalls für
+CUDA. Nötig sind `-fmad=false`, korrekt gerundete Division und ganzzahlige
+Deposit-Atomics statt `atomicAdd(float*)`. Details in SPEC §8.2 und
+[RESULTS.md §10](RESULTS.md).
 
-WSL2 ist vorbereitet: `/dev/dxg` ist vorhanden, GPU-Passthrough funktioniert.
-
-**Konformität:** Klasse G landet praktisch immer in Stufe C. GPU-Trigonometrie
-und Standard-Fast-Math weichen ab, und Reduktionsreihenfolgen sind nicht
-garantiert. Die quantisierte Richtungstabelle (SPEC §4) hilft trotzdem — sie
-eliminiert die `sin`/`cos`-Abweichung und lässt nur noch die Additionsordnung
-als Fehlerquelle übrig. Mit `deferred` + ganzzahligen Atomics wäre sogar
-Determinismus erreichbar; das ist ein eigenes Experiment wert.
+Offen: ein Host in einer zweiten Sprache (der GL-Weg macht das billig), eine
+Determinismus-Analyse für weitere Treiber, und eine Wiederholung auf nativem
+Linux-GL statt über die D3D12-Übersetzung.
 
 ---
 
