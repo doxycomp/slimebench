@@ -54,7 +54,9 @@ WARN     := -Wall -Wextra -Wno-unused-parameter
 STD      := -std=c11
 # strict C11 hides clock_gettime; ask for POSIX 2008 explicitly rather than
 # falling back to -std=gnu11 (we want the same language across compilers).
-DEFS     := -D_POSIX_C_SOURCE=200809L
+# _DEFAULT_SOURCE additionally exposes syscall(), which the hybrid barrier in
+# sb_barrier.h needs for FUTEX_WAIT. Narrower than _GNU_SOURCE.
+DEFS     := -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE
 CFLAGS   := $(STD) $(DEFS) $(WARN) $(OPTFLAGS) $(FPFLAGS) $(EXTRA_CFLAGS)
 LDFLAGS  := $(OPTFLAGS) $(EXTRA_LDFLAGS)
 # pthreads rather than OpenMP: builds with gcc and clang alike, no libomp-dev.
@@ -69,7 +71,7 @@ CORE_OBJ := $(addprefix $(BUILDDIR)/,$(CORE_SRC:.c=.o))
 HEADLESS := $(BUILDDIR)/slimebench-headless
 SDL2BIN  := $(BUILDDIR)/slimebench-sdl2
 RAYBIN   := $(BUILDDIR)/slimebench-raylib
-HEADERS  := dirtable.h sb_core.h sb_cli.h sb_render.h sb_agent.h sb_parallel.h sb_simd.h
+HEADERS  := dirtable.h sb_core.h sb_cli.h sb_render.h sb_agent.h sb_parallel.h sb_simd.h sb_barrier.h
 
 SDL2_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null)
 SDL2_LIBS   := $(shell pkg-config --libs   sdl2 2>/dev/null)

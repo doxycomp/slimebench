@@ -17,6 +17,7 @@
 #include <string.h>
 
 #include "sb_agent.h"
+#include "sb_barrier.h"
 #include "sb_simd.h"
 
 typedef struct sb_worker {
@@ -39,7 +40,7 @@ struct sb_pool {
     uint32_t pending;
     int shutdown;
 
-    pthread_barrier_t phase;
+    sb_barrier phase;
 
     /* SB_REDUCE_PRIVATE: one full-grid deposit buffer per thread. */
     float **priv;
@@ -66,6 +67,7 @@ struct sb_pool {
     uint32_t *rowsum;   /* height, reduced */
     int adaptive;
 
+    sb_barrier_kind barrier_kind;
     int phase_stats;
     uint64_t phase_ns[SB_PH_COUNT];   /* work */
     uint64_t wait_ns[SB_PH_COUNT];    /* barrier after it */
@@ -308,7 +310,7 @@ static void phase_diffuse(sb_pool *p, uint32_t tid) {
 
 #define SB_WAIT(idx)                                                      \
     do {                                                                  \
-        pthread_barrier_wait(&p->phase);                                  \
+        sb_barrier_wait(&p->phase);                                  \
         if (stats) {                                                      \
             const uint64_t _n = sb_now_ns();                              \
             p->wait_ns[idx] += _n - _t;                                   \
@@ -446,7 +448,11 @@ sb_pool *sb_pool_create(sb_sim *s) {
     pthread_mutex_init(&p->mu, NULL);
     pthread_cond_init(&p->cv_go, NULL);
     pthread_cond_init(&p->cv_done, NULL);
-    pthread_barrier_init(&p->phase, NULL, t);
+    const char *bk = getenv("SLIMEBENCH_BARRIER");
+    p->barrier_kind = SB_BARRIER_PTHREAD;
+    if (bk && strcmp(bk, "spin") == 0)   p->barrier_kind = SB_BARRIER_SPIN;
+    if (bk && strcmp(bk, "hybrid") == 0) p->barrier_kind = SB_BARRIER_HYBRID;
+    sb_barrier_init(&p->phase, t, p->barrier_kind);
 
     p->threads = (pthread_t *)calloc(t, sizeof(pthread_t));
     p->workers = (sb_worker *)calloc(t, sizeof(sb_worker));
@@ -493,11 +499,20 @@ void sb_pool_destroy(sb_pool *p) {
     free(p->threads);
     free(p->workers);
 
-    pthread_barrier_destroy(&p->phase);
+    sb_barrier_destroy(&p->phase);
     pthread_cond_destroy(&p->cv_done);
     pthread_cond_destroy(&p->cv_go);
     pthread_mutex_destroy(&p->mu);
     free(p);
+}
+
+const char *sb_pool_barrier_name(const sb_pool *p) {
+    if (!p) return "none";
+    switch (p->barrier_kind) {
+        case SB_BARRIER_SPIN:   return "spin";
+        case SB_BARRIER_HYBRID: return "hybrid";
+        default:                return "pthread";
+    }
 }
 
 size_t sb_pool_scratch_bytes(const sb_pool *p) {
@@ -531,6 +546,7 @@ void sb_pool_report_phases(const sb_pool *p, uint32_t ticks) {
     fprintf(stderr, "  %-8s %9.3f %9.3f %9.3f  barriers are %.1f%% of the tick\n",
             "total", (double)tw / 1e6 / ticks, (double)tb / 1e6 / ticks,
             (double)total / 1e6 / ticks, 100.0 * (double)tb / (double)total);
+    fprintf(stderr, "  barrier: %s\n", sb_pool_barrier_name(p));
 }
 
 void sb_tick_parallel(sb_sim *s, sb_pool *p) {
