@@ -30,6 +30,7 @@ typedef struct {
     uint32_t threads;
     sb_update_mode update;
     sb_reduce_mode reduce;
+    int simd;                 /* class V: vectorised diffusion pass */
 
     float sensor_dist;
     float step;

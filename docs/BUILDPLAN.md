@@ -116,8 +116,11 @@ größere Code drückt auf den µop-Cache. Das ist genau die Art Ergebnis, für 
 das Projekt existiert, und es gehört mit `perf`-Zahlen unterfüttert (in WSL2
 ersatzweise über `hyperfine` und die Phasen-Timer).
 
-Zusätzlich messen: **PGO**. Bei so verzweigungslastigem Code der plausibelste
-echte Gewinn.
+**PGO wurde gemessen und bringt nichts** — bei clang kostet es sogar 6 %. Die
+Vier-Wege-Verzweigung auf die Sensorwerte ist datenabhängig und nahezu
+gleichverteilt; PGO kann nur *vorhersagbare* Verzweigungen verbessern. Die
+Vermutung an dieser Stelle war falsch. Details in
+[RESULTS.md §9](RESULTS.md).
 
 ---
 
@@ -155,21 +158,29 @@ steckt fast vollständig im Lebenszyklus — `std::jthread` joint beim Zerstöre
 
 ---
 
-## Phase 7 — SIMD ⬜
+## Phase 7 — SIMD 🔨
 
-Realistisch nur C, C++ und Rust. Für Haskell, Python, Perl und TS gibt es
-keinen ehrlichen Weg, explizites SIMD zu schreiben — das wird so dokumentiert,
-statt es zu erfinden.
+| Sprache | Status |
+|---|---|
+| C | ✅ AVX2 + AVX-512 für den Diffusionspass, `--simd` |
+| C++ | ⬜ |
+| Rust | ⬜ (`std::simd` oder `core::arch`) |
+| Haskell, Python, Perl, TS | — kein ehrlicher Weg, wird so dokumentiert |
 
-Der Diffusionspass ist der lohnende Teil: ein dichter 3×3-Stencil über f32,
-AVX2 gibt 8 Lanes, AVX-512 (auf Zen 5 vorhanden) 16. Erwartung: 4–8× auf
-diesem Pass, was bei ~35 % Laufzeitanteil rund 25–30 % gesamt bedeutet.
+**Die Annahme „umsortierte Reduktion ⇒ Stufe C" war falsch.** Der Kernel hat
+keine Cross-Lane-Reduktion; jede Lane rechnet eine Ausgabezelle mit derselben
+Operationsfolge wie die skalare Schleife. Das Ergebnis ist bit-identisch —
+nachgewiesen unter gcc und clang, in beiden Update-Modi und kombiniert mit
+16 Threads. Bedingungen: kein FMA, echte Division. Siehe SPEC §8.1.
 
-Der Agenten-Pass ist Gather/Scatter. AVX2 kann `vgatherdps`, hat aber keinen
-Scatter; AVX-512 kann beides, ist aber bei zufälligen Adressen oft langsamer
-als skalar. Das zu messen ist interessanter, als es vorherzusagen.
+**Ergebnis:** Diffusionspass **4.6× schneller** (AVX-512), gesamt 1.21–1.31×
+bei einem Thread. Aber: AVX2 mit halber Lane-Zahl erreicht 4.18× — die
+Verdopplung der Vektorbreite bringt nur 11 %, der Stencil ist
+bandbreitengebunden. Und zusammen mit acht Threads bringt SIMD **gar nichts**
+mehr, weil beide dieselbe Ressource angreifen.
 
-Achtung: umsortierte Reduktion ⇒ Konformitätsstufe C.
+Der Agenten-Pass bleibt skalar: die Deposits mehrerer Agenten pro Vektor in
+dieselbe Zelle bräuchten Konfliktauflösung, und das wäre dann echt Stufe C.
 
 ---
 

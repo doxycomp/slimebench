@@ -17,6 +17,7 @@
 #include <string.h>
 
 #include "sb_agent.h"
+#include "sb_simd.h"
 
 typedef struct sb_worker {
     sb_pool *pool;
@@ -50,6 +51,23 @@ struct sb_pool {
     uint32_t *counts;   /* nthreads*nthreads */
     uint32_t *offsets;  /* nthreads*nthreads */
     uint16_t *ybucket;  /* height -- row to owning thread */
+
+    /* Adaptive rebalancing. Splitting rows evenly across threads is the wrong
+     * split for this simulation: agents pile onto the filaments, so an even
+     * row split leaves some buckets with several times the work of others and
+     * everyone waits at the barrier for the busiest one. These arrays carry a
+     * per-row agent histogram, from which the row boundaries for the *next*
+     * tick are recomputed so each thread gets a similar number of deposits.
+     *
+     * This cannot change the result. The partition decides which thread
+     * applies a deposit, never the order deposits hit a cell -- that stays
+     * ascending agent index either way. */
+    uint32_t *rowcnt;   /* nthreads*height, thread-local histograms */
+    uint32_t *rowsum;   /* height, reduced */
+    int adaptive;
+
+    int phase_stats;
+    uint64_t phase_ns[SB_PH_COUNT];
 
     size_t scratch_bytes;
 };
@@ -110,6 +128,7 @@ static void phase_merge_private(sb_pool *p, uint32_t tid) {
 static void phase_agents_binned(sb_pool *p, uint32_t tid) {
     sb_sim *s = p->sim;
     const sb_agent_ctx k = sb_agent_ctx_make(s);
+    const uint32_t log2w = s->cfg.log2w;
 
     uint32_t lo, hi;
     split(s->cfg.agents, p->nthreads, tid, &lo, &hi);
@@ -117,10 +136,23 @@ static void phase_agents_binned(sb_pool *p, uint32_t tid) {
     uint32_t *cnt = &p->counts[(size_t)tid * p->nthreads];
     memset(cnt, 0, (size_t)p->nthreads * sizeof(uint32_t));
 
+    if (!p->adaptive) {
+        for (uint32_t i = lo; i < hi; i++) {
+            const uint32_t idx = sb_agent_step(&k, s, i);
+            p->aidx[i] = idx;
+            cnt[bucket_of(p, idx)]++;
+        }
+        return;
+    }
+
+    uint32_t *rc = &p->rowcnt[(size_t)tid * s->cfg.height];
+    memset(rc, 0, (size_t)s->cfg.height * sizeof(uint32_t));
     for (uint32_t i = lo; i < hi; i++) {
         const uint32_t idx = sb_agent_step(&k, s, i);
         p->aidx[i] = idx;
-        cnt[bucket_of(p, idx)]++;
+        const uint32_t y = idx >> log2w;
+        rc[y]++;
+        cnt[p->ybucket[y]]++;
     }
 }
 
@@ -170,14 +202,55 @@ static void phase_deposit_binned(sb_pool *p, uint32_t tid) {
     }
 }
 
+/* Partitioned by rows rather than cells so the same loop can also reduce the
+ * per-row histograms; a row range is a contiguous cell range anyway. */
 static void phase_merge_binned(sb_pool *p, uint32_t tid) {
     sb_sim *s = p->sim;
-    const size_t cells = (size_t)s->cfg.width * s->cfg.height;
-    uint32_t lo, hi;
-    split((uint32_t)cells, p->nthreads, tid, &lo, &hi);
-    for (uint32_t i = lo; i < hi; i++) {
-        s->grid[i] = s->grid[i] + s->dep[i];
-        s->dep[i] = 0.0f;
+    const uint32_t h = s->cfg.height;
+    const uint32_t log2w = s->cfg.log2w;
+    const uint32_t w = s->cfg.width;
+
+    uint32_t ylo, yhi;
+    split(h, p->nthreads, tid, &ylo, &yhi);
+
+    for (uint32_t y = ylo; y < yhi; y++) {
+        const size_t base = (size_t)y << log2w;
+        for (uint32_t x = 0; x < w; x++) {
+            const size_t i = base + x;
+            s->grid[i] = s->grid[i] + s->dep[i];
+            s->dep[i] = 0.0f;
+        }
+        if (p->adaptive) {
+            uint32_t sum = 0;
+            for (uint32_t t = 0; t < p->nthreads; t++)
+                sum += p->rowcnt[(size_t)t * h + y];
+            p->rowsum[y] = sum;
+        }
+    }
+}
+
+/* Recompute row boundaries so every thread gets a similar number of deposits.
+ * Runs single-threaded after the workers have joined; O(height), a few
+ * microseconds even at 4096 rows. */
+static void rebalance(sb_pool *p) {
+    const uint32_t h = p->sim->cfg.height;
+    const uint32_t t = p->nthreads;
+
+    uint64_t total = 0;
+    for (uint32_t y = 0; y < h; y++) total += p->rowsum[y];
+    if (total == 0) return;
+
+    uint32_t b = 0;
+    uint64_t acc = 0;
+    for (uint32_t y = 0; y < h; y++) {
+        p->ybucket[y] = (uint16_t)b;
+        acc += p->rowsum[y];
+        /* Close bucket b once it holds its share, but never so early that the
+         * remaining buckets cannot each get at least one row. */
+        while (b + 1 < t && acc * t >= total * (uint64_t)(b + 1) &&
+               (h - y - 1) >= (t - b - 1)) {
+            b++;
+        }
     }
 }
 
@@ -185,33 +258,60 @@ static void phase_diffuse(sb_pool *p, uint32_t tid) {
     sb_sim *s = p->sim;
     uint32_t lo, hi;
     split(s->cfg.height, p->nthreads, tid, &lo, &hi);
-    sb_diffuse_rows(s, s->grid, s->scratch, lo, hi);
+    if (s->cfg.simd)
+        sb_diffuse_rows_simd(s, s->grid, s->scratch, lo, hi);
+    else
+        sb_diffuse_rows(s, s->grid, s->scratch, lo, hi);
 }
 
 /* ---- worker loop -------------------------------------------------------- */
 
+/* Wall time of each phase as seen by thread 0, including the barrier it then
+ * waits on. That barrier wait IS the load imbalance: whatever thread 0 spends
+ * there is time the slowest thread in that phase was still working. Enabled
+ * with SLIMEBENCH_PHASE_STATS=1 -- off by default so it never taints a run. */
+#define SB_PHASE(idx)                                                     \
+    do {                                                                  \
+        if (stats) {                                                      \
+            const uint64_t _n = sb_now_ns();                              \
+            p->phase_ns[idx] += _n - _t;                                  \
+            _t = _n;                                                      \
+        }                                                                 \
+    } while (0)
+
 static void run_tick(sb_pool *p, uint32_t tid) {
     const int binned = (p->sim->cfg.reduce == SB_REDUCE_BINNED);
+    const int stats = p->phase_stats && tid == 0;
+    uint64_t _t = stats ? sb_now_ns() : 0;
 
     if (binned) {
         phase_agents_binned(p, tid);
         pthread_barrier_wait(&p->phase);
+        SB_PHASE(SB_PH_AGENTS);
         if (tid == 0) phase_prefix_binned(p);
         pthread_barrier_wait(&p->phase);
+        SB_PHASE(SB_PH_PREFIX);
         phase_scatter_binned(p, tid);
         pthread_barrier_wait(&p->phase);
+        SB_PHASE(SB_PH_SCATTER);
         phase_deposit_binned(p, tid);
         pthread_barrier_wait(&p->phase);
+        SB_PHASE(SB_PH_DEPOSIT);
         phase_merge_binned(p, tid);
     } else {
         phase_agents_private(p, tid);
         pthread_barrier_wait(&p->phase);
+        SB_PHASE(SB_PH_AGENTS);
         phase_merge_private(p, tid);
     }
 
     pthread_barrier_wait(&p->phase);
+    SB_PHASE(SB_PH_MERGE);
     phase_diffuse(p, tid);
+    if (stats) p->phase_ns[SB_PH_DIFFUSE] += sb_now_ns() - _t;
 }
+
+#undef SB_PHASE
 
 static void *worker_main(void *arg) {
     sb_worker *w = (sb_worker *)arg;
@@ -273,6 +373,13 @@ sb_pool *sb_pool_create(sb_sim *s) {
         p->counts = (uint32_t *)calloc((size_t)t * t, sizeof(uint32_t));
         p->offsets = (uint32_t *)calloc((size_t)t * t, sizeof(uint32_t));
         p->ybucket = (uint16_t *)malloc(s->cfg.height * sizeof(uint16_t));
+        p->adaptive = (getenv("SLIMEBENCH_NO_REBALANCE") == NULL);
+        p->phase_stats = (getenv("SLIMEBENCH_PHASE_STATS") != NULL);
+        if (p->adaptive) {
+            p->rowcnt = (uint32_t *)calloc((size_t)t * s->cfg.height, sizeof(uint32_t));
+            p->rowsum = (uint32_t *)calloc(s->cfg.height, sizeof(uint32_t));
+            if (!p->rowcnt || !p->rowsum) goto fail;
+        }
         if (!p->aidx || !p->sorted || !p->counts || !p->offsets || !p->ybucket)
             goto fail;
 
@@ -287,6 +394,8 @@ sb_pool *sb_pool_create(sb_sim *s) {
         p->scratch_bytes = 2 * n * sizeof(uint32_t) +
                            2 * (size_t)t * t * sizeof(uint32_t) +
                            (size_t)s->cfg.height * sizeof(uint16_t);
+        if (p->adaptive)
+            p->scratch_bytes += ((size_t)t + 1) * s->cfg.height * sizeof(uint32_t);
     }
 
     pthread_mutex_init(&p->mu, NULL);
@@ -334,6 +443,8 @@ void sb_pool_destroy(sb_pool *p) {
     free(p->counts);
     free(p->offsets);
     free(p->ybucket);
+    free(p->rowcnt);
+    free(p->rowsum);
     free(p->threads);
     free(p->workers);
 
@@ -348,6 +459,23 @@ size_t sb_pool_scratch_bytes(const sb_pool *p) {
     return p ? p->scratch_bytes : 0;
 }
 
+void sb_pool_report_phases(const sb_pool *p, uint32_t ticks) {
+    if (!p || !p->phase_stats || ticks == 0) return;
+    static const char *names[SB_PH_COUNT] = {
+        "agents", "prefix", "scatter", "deposit", "merge", "diffuse"
+    };
+    uint64_t total = 0;
+    for (int i = 0; i < SB_PH_COUNT; i++) total += p->phase_ns[i];
+    if (total == 0) return;
+
+    fprintf(stderr, "phase breakdown (thread 0, incl. its barrier wait):\n");
+    for (int i = 0; i < SB_PH_COUNT; i++) {
+        fprintf(stderr, "  %-8s %8.3f ms/tick  %5.1f%%\n", names[i],
+                (double)p->phase_ns[i] / 1e6 / ticks,
+                100.0 * (double)p->phase_ns[i] / (double)total);
+    }
+}
+
 void sb_tick_parallel(sb_sim *s, sb_pool *p) {
     const uint64_t t0 = sb_now_ns();
 
@@ -357,6 +485,8 @@ void sb_tick_parallel(sb_sim *s, sb_pool *p) {
     pthread_cond_broadcast(&p->cv_go);
     while (p->pending != 0) pthread_cond_wait(&p->cv_done, &p->mu);
     pthread_mutex_unlock(&p->mu);
+
+    if (s->cfg.reduce == SB_REDUCE_BINNED && p->adaptive) rebalance(p);
 
     float *tmp = s->grid;
     s->grid = s->scratch;

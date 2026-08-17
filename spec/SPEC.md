@@ -551,7 +551,7 @@ ist bedeutungslos.
 |---|---|---|---|
 | **S** | Skalar, ein Thread. **Die Sprach-Achse.** | `serial` | 1 |
 | **P** | Multi-Thread, skalar | `deferred` | N |
-| **V** | SIMD (explizit oder auto-vektorisiert) | `deferred` | 1 |
+| **V** | SIMD (explizit oder auto-vektorisiert) | beide | 1 |
 | **PV** | SIMD + Multi-Thread | `deferred` | N |
 | **G** | GPU-Compute | `deferred` | — |
 | **R** | Rendering-Backend (§11.1) | — | 1 |
@@ -559,6 +559,30 @@ ist bedeutungslos.
 Klasse **S** ist die eigentliche Antwort auf "wie schnell ist Sprache X".
 Alles andere misst, wie gut das Ökosystem der Sprache Parallelisierung
 zugänglich macht — auch interessant, aber eine andere Frage.
+
+### 8.1 Klasse V ist nicht automatisch Stufe C
+
+Eine frühere Fassung dieser Spec behauptete, SIMD lande zwangsläufig in
+Konformitätsstufe C, weil die Reduktion umsortiert werde. Das gilt für den
+Diffusionskernel **nicht**.
+
+Der Kernel hat gar keine Cross-Lane-Reduktion: jede Lane berechnet eine
+Ausgabezelle und führt dabei exakt dieselbe Operationsfolge in derselben
+Reihenfolge aus wie die skalare Schleife. Lane *i* produziert bitgenau, was
+die skalare Version für Zelle *i* produziert.
+
+Damit gilt: **eine elementweise Vektorisierung des Diffusionspasses ist
+Stufe A**, sofern zwei Bedingungen eingehalten werden:
+
+1. **Kein FMA.** `4.0f * c + acc` als eine gerundete Operation ist eine andere
+   Zahl. Multiplikation und Addition bleiben getrennte Intrinsics.
+2. **Echte Division.** `_mm*_div_ps` durch 12, nicht Multiplikation mit dem
+   Kehrwert (§1.2.4).
+
+Eine Vektorisierung des **Agenten-Passes** wäre etwas anderes: dort müssten
+mehrere Agenten pro Vektor in dieselbe Zelle deponieren, was eine
+Konfliktauflösung und damit eine Reihenfolgeentscheidung erfordert. Das wäre
+Stufe C — und ist bisher nicht implementiert.
 
 ---
 
@@ -597,6 +621,7 @@ jeder Compiler-Bug).
 --sensor-dist F  --sensor-steps N  --rot-steps N
 --step F  --deposit F  --decay F
 --deposit-reduce MODE  private|binned  (nur bei --threads > 1, §5.6)
+--simd / --no-simd     vektorisierter Diffusionspass (Klasse V, §8.1)
 --headless             kein Fenster (Default für Benchmark-Binaries)
 --render               Fenster öffnen
 --freeze-sim           Simulation anhalten (nur Render-Benchmark, §11.1)
