@@ -67,7 +67,8 @@ struct sb_pool {
     int adaptive;
 
     int phase_stats;
-    uint64_t phase_ns[SB_PH_COUNT];
+    uint64_t phase_ns[SB_PH_COUNT];   /* work */
+    uint64_t wait_ns[SB_PH_COUNT];    /* barrier after it */
 
     size_t scratch_bytes;
 };
@@ -156,10 +157,26 @@ static void phase_agents_binned(sb_pool *p, uint32_t tid) {
     }
 }
 
-/* Prefix sum over (bucket, thread) in that order. Because each thread owns a
- * contiguous, ascending agent range, walking threads in order inside a bucket
- * lays the agents down in ascending global index -- which is what makes the
- * deposit chain identical to the serial one. */
+/* Prefix sum over (bucket, thread) in that order, by thread 0 alone while the
+ * others wait. Because each thread owns a contiguous, ascending agent range,
+ * walking threads in order inside a bucket lays the agents down in ascending
+ * global index -- which is what makes the deposit chain identical to the
+ * serial one.
+ *
+ * This looks like an obvious target: a serial O(T^2) section with a barrier on
+ * each side. It was tried and it does not pay off. Every thread can derive its
+ * own row of `offsets` from `counts` alone, which removes both the serial step
+ * and one of the five barriers -- but `counts` was just written row-by-row by
+ * all T threads, so having all of them read the whole matrix turns T^2 integer
+ * adds into T^2 cache-line transfers out of other cores' caches. Measured at
+ * medium over nine runs: +9% at eight threads, **-18% at sixteen**, neutral at
+ * thirty-two. Sixteen threads is where this machine is fastest, so the version
+ * that wins there is the one that stays.
+ *
+ * The real cost is the barriers themselves, not this scan --
+ * SLIMEBENCH_PHASE_STATS=1 puts them at 35% of the tick at T=16 and 53% at
+ * T=32, while this scan's own work does not register.
+ */
 static void phase_prefix_binned(sb_pool *p) {
     const uint32_t t = p->nthreads;
     uint32_t running = 0;
@@ -266,15 +283,35 @@ static void phase_diffuse(sb_pool *p, uint32_t tid) {
 
 /* ---- worker loop -------------------------------------------------------- */
 
-/* Wall time of each phase as seen by thread 0, including the barrier it then
- * waits on. That barrier wait IS the load imbalance: whatever thread 0 spends
- * there is time the slowest thread in that phase was still working. Enabled
- * with SLIMEBENCH_PHASE_STATS=1 -- off by default so it never taints a run. */
-#define SB_PHASE(idx)                                                     \
+/* Per-phase timing as seen by thread 0, split into the work itself and the
+ * barrier wait that follows it.
+ *
+ * The split matters. An earlier version lumped them together, which made the
+ * serial prefix step look like it cost 0.24 ms -- for a few hundred integer
+ * operations. Nearly all of that was the barrier, not the scan, and
+ * parallelising the scan would have optimised the wrong thing.
+ *
+ * Thread 0's wait at a barrier is how much longer the slowest thread needed
+ * for that phase, plus the cost of the barrier itself.
+ *
+ * Enabled with SLIMEBENCH_PHASE_STATS=1; off by default so it never taints a
+ * measurement run.
+ */
+#define SB_WORK(idx)                                                      \
     do {                                                                  \
         if (stats) {                                                      \
             const uint64_t _n = sb_now_ns();                              \
             p->phase_ns[idx] += _n - _t;                                  \
+            _t = _n;                                                      \
+        }                                                                 \
+    } while (0)
+
+#define SB_WAIT(idx)                                                      \
+    do {                                                                  \
+        pthread_barrier_wait(&p->phase);                                  \
+        if (stats) {                                                      \
+            const uint64_t _n = sb_now_ns();                              \
+            p->wait_ns[idx] += _n - _t;                                   \
             _t = _n;                                                      \
         }                                                                 \
     } while (0)
@@ -286,32 +323,40 @@ static void run_tick(sb_pool *p, uint32_t tid) {
 
     if (binned) {
         phase_agents_binned(p, tid);
-        pthread_barrier_wait(&p->phase);
-        SB_PHASE(SB_PH_AGENTS);
+        SB_WORK(SB_PH_AGENTS);
+        SB_WAIT(SB_PH_AGENTS);
+
         if (tid == 0) phase_prefix_binned(p);
-        pthread_barrier_wait(&p->phase);
-        SB_PHASE(SB_PH_PREFIX);
+        SB_WORK(SB_PH_PREFIX);
+        SB_WAIT(SB_PH_PREFIX);
+
         phase_scatter_binned(p, tid);
-        pthread_barrier_wait(&p->phase);
-        SB_PHASE(SB_PH_SCATTER);
+        SB_WORK(SB_PH_SCATTER);
+        SB_WAIT(SB_PH_SCATTER);
+
         phase_deposit_binned(p, tid);
-        pthread_barrier_wait(&p->phase);
-        SB_PHASE(SB_PH_DEPOSIT);
+        SB_WORK(SB_PH_DEPOSIT);
+        SB_WAIT(SB_PH_DEPOSIT);
+
         phase_merge_binned(p, tid);
+        SB_WORK(SB_PH_MERGE);
+        SB_WAIT(SB_PH_MERGE);
     } else {
         phase_agents_private(p, tid);
-        pthread_barrier_wait(&p->phase);
-        SB_PHASE(SB_PH_AGENTS);
+        SB_WORK(SB_PH_AGENTS);
+        SB_WAIT(SB_PH_AGENTS);
+
         phase_merge_private(p, tid);
+        SB_WORK(SB_PH_MERGE);
+        SB_WAIT(SB_PH_MERGE);
     }
 
-    pthread_barrier_wait(&p->phase);
-    SB_PHASE(SB_PH_MERGE);
     phase_diffuse(p, tid);
-    if (stats) p->phase_ns[SB_PH_DIFFUSE] += sb_now_ns() - _t;
+    SB_WORK(SB_PH_DIFFUSE);
 }
 
-#undef SB_PHASE
+#undef SB_WORK
+#undef SB_WAIT
 
 static void *worker_main(void *arg) {
     sb_worker *w = (sb_worker *)arg;
@@ -465,15 +510,27 @@ void sb_pool_report_phases(const sb_pool *p, uint32_t ticks) {
         "agents", "prefix", "scatter", "deposit", "merge", "diffuse"
     };
     uint64_t total = 0;
-    for (int i = 0; i < SB_PH_COUNT; i++) total += p->phase_ns[i];
+    for (int i = 0; i < SB_PH_COUNT; i++) total += p->phase_ns[i] + p->wait_ns[i];
     if (total == 0) return;
 
-    fprintf(stderr, "phase breakdown (thread 0, incl. its barrier wait):\n");
+    fprintf(stderr, "phase breakdown (thread 0), ms/tick:\n");
+    fprintf(stderr, "  %-8s %9s %9s %9s  %s\n",
+            "phase", "work", "barrier", "sum", "share");
+
+    uint64_t tw = 0, tb = 0;
     for (int i = 0; i < SB_PH_COUNT; i++) {
-        fprintf(stderr, "  %-8s %8.3f ms/tick  %5.1f%%\n", names[i],
+        const uint64_t sum = p->phase_ns[i] + p->wait_ns[i];
+        tw += p->phase_ns[i];
+        tb += p->wait_ns[i];
+        fprintf(stderr, "  %-8s %9.3f %9.3f %9.3f  %5.1f%%\n", names[i],
                 (double)p->phase_ns[i] / 1e6 / ticks,
-                100.0 * (double)p->phase_ns[i] / (double)total);
+                (double)p->wait_ns[i] / 1e6 / ticks,
+                (double)sum / 1e6 / ticks,
+                100.0 * (double)sum / (double)total);
     }
+    fprintf(stderr, "  %-8s %9.3f %9.3f %9.3f  barriers are %.1f%% of the tick\n",
+            "total", (double)tw / 1e6 / ticks, (double)tb / 1e6 / ticks,
+            (double)total / 1e6 / ticks, 100.0 * (double)tb / (double)total);
 }
 
 void sb_tick_parallel(sb_sim *s, sb_pool *p) {
