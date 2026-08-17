@@ -46,12 +46,10 @@ compilers = ["gcc"]
 profiles  = ["o3-native"]
 headless_capable = false
 
-# ------------------------------------------------------------------------- C++
-
-# Class P. Pass --threads N --update deferred when benchmarking these.
-# They are the same binary as `c`, differing only in the reduction strategy,
-# so conformance skips them (SPEC-1 5.6 equivalence is verified separately by
-# scripts and documented in docs/RESULTS.md).
+# The class V and P entries below are the same binaries as `c`, differing only
+# in a runtime flag, so conformance skips them. Their equivalence to the scalar
+# and single-threaded paths is verified separately and documented in
+# docs/RESULTS.md.
 
 [[target]]
 id       = "c-simd"
@@ -140,6 +138,34 @@ run      = ["{binary}"]
 compilers = ["g++", "clang++"]
 profiles  = ["o0", "o2", "o3", "o3-native", "o3-native-lto", "ofast-native"]
 fastmath_profiles = ["ofast", "ofast-native"]
+
+[[target]]
+id       = "cpp-simd"
+lang     = "C++"
+backend  = "simd"
+class    = "V"
+dir      = "impl/cpp"
+build    = "make CXX={cc} PROFILE={profile} headless"
+binary   = "build/{cc}-{profile}/slimebench-headless"
+run      = ["{binary}"]
+compilers = ["g++", "clang++"]
+profiles  = ["o3-v3", "o3-native"]
+extra_args = ["--simd"]
+skip_conformance = true
+
+[[target]]
+id       = "rust-simd"
+lang     = "Rust"
+backend  = "simd"
+class    = "V"
+dir      = "impl/rust"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["cargo"]
+profiles  = ["release-native", "release-native-unchecked"]
+extra_args = ["--simd"]
+skip_conformance = true
 
 [[target]]
 id       = "cpp-par-binned"

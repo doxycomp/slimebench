@@ -74,6 +74,7 @@ pub struct Config {
     pub decay: f32,
     pub sensor_steps: u32,
     pub rot_steps: u32,
+    pub simd: bool,
     pub hash_every: u32,
     pub preset: String,
 }
@@ -95,6 +96,7 @@ impl Default for Config {
             decay: 0.94,
             sensor_steps: 144,
             rot_steps: 144,
+            simd: false,
             hash_every: 0,
             preset: "custom".to_string(),
         }
@@ -299,19 +301,25 @@ impl Sim {
         }
     }
 
-    /// SPEC-1 section 5.4. Summation order is normative -- do not reorder.
-    fn diffuse_pass(&mut self) {
+    pub fn log2w(&self) -> u32 { self.log2w }
+
+    /// Disjoint borrows of the two grid buffers, for the vectorised kernel.
+    pub fn grid_and_scratch(&mut self) -> (&[f32], &mut [f32]) {
+        (&self.grid, &mut self.scratch)
+    }
+
+    /// SPEC-1 section 5.4 over rows `[y0, y1)`, scalar. Output cells are
+    /// independent, so splitting the range is unconditionally bit-identical.
+    pub fn diffuse_rows(&mut self, y0: u32, y1: u32) {
         let w = self.cfg.width;
-        let h = self.cfg.height;
         let log2w = self.log2w;
         let xmask = self.xmask;
         let ymask = self.ymask;
         let decay = self.cfg.decay;
-
         let src = &self.grid;
         let dst = &mut self.scratch;
 
-        for y in 0..h {
+        for y in y0..y1 {
             let rowm = (y.wrapping_sub(1) & ymask) << log2w;
             let row0 = y << log2w;
             let rowp = ((y + 1) & ymask) << log2w;
@@ -333,7 +341,16 @@ impl Sim {
                 *at_mut!(dst, row0 | x) = (acc / 12.0) * decay;
             }
         }
+    }
 
+    /// SPEC-1 section 5.4. Summation order is normative -- do not reorder.
+    fn diffuse_pass(&mut self) {
+        let h = self.cfg.height;
+        if self.cfg.simd {
+            crate::simd::diffuse_rows_simd(self, 0, h);
+        } else {
+            self.diffuse_rows(0, h);
+        }
         std::mem::swap(&mut self.grid, &mut self.scratch);
     }
 

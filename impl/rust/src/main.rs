@@ -2,6 +2,7 @@
 
 mod cli;
 mod dirtable;
+mod simd;
 mod sim;
 
 use sim::{now_ns, Sim, Update};

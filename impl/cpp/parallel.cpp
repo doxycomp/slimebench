@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "agent.hpp"
+#include "simd.hpp"
 
 namespace sb {
 namespace {
@@ -150,7 +151,8 @@ struct Pool::Impl {
 
     void diffuse(std::uint32_t tid) {
         const auto r = split(sim->cfg().height, nthreads, tid);
-        sim->diffuseRows(r.lo, r.hi);
+        if (sim->cfg().simd) diffuseRowsSimd(*sim, r.lo, r.hi);
+        else sim->diffuseRows(r.lo, r.hi);
     }
 
     void runTick(std::uint32_t tid) {
