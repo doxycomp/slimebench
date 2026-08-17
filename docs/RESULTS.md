@@ -196,6 +196,17 @@ aus. **Eine einzelne Grid-Größe genügt für eine Compiler-Aussage nicht.**
 Klasse R, 1024×1024, 300 Frames, `--freeze-sim` (Simulation angehalten, damit
 wirklich nur der Upload-Pfad Grid → Textur → Bildschirm gemessen wird).
 
+> **Wichtige Einschränkung, die beim GPU-Vorbereiten aufgefallen ist:** Diese
+> Messung lief auf **`llvmpipe`**, Mesas Software-Rasterizer. WSL2 stellt unter
+> Linux standardmäßig keine GPU für OpenGL bereit; die RTX 5080 ist nur über
+> Mesas D3D12-Backend erreichbar (`GALLIUM_DRIVER=d3d12
+> MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA`), und Vulkan sieht sie gar nicht.
+>
+> Der Vergleich SDL2 gegen raylib bleibt gültig — beide nahmen denselben Pfad,
+> und der gemessene Unterschied entsteht CPU-seitig bei der
+> Pixelformat-Konvertierung. Die **absoluten Zahlen sind aber keine
+> GPU-Zahlen**. Eine Wiederholung auf der echten GPU steht aus.
+
 | Sprache | Backend | ms/Frame (Median) | p99 | fps-äquiv. | MPixel/s |
 |---|---|---:|---:|---:|---:|
 | C++ | raylib | **2.031** | 2.82 | 492 | 516 |
@@ -433,6 +444,31 @@ clang macht denselben Pass mit `-Ofast` **2.85× langsamer**, mit
 handgeschriebenen Intrinsics **4.56× schneller**. Zwischen der besten und der
 schlechtesten Vektorisierungsstrategie für dieselbe Schleife liegt Faktor 13.
 
+### Dieselben Intrinsics in drei Sprachen
+
+`small`, 300 Ticks, ein Thread, jeweils AVX-512:
+
+| Sprache | Diffusion skalar | Diffusion SIMD | Faktor |
+|---|---:|---:|---:|
+| C (gcc) | 306 ms | 69 ms | 4.42× |
+| C++ (g++) | 292 ms | 60 ms | **4.85×** |
+| Rust (`release-native-unchecked`) | 289 ms | 69 ms | 4.22× |
+
+Alle drei sind bit-identisch — gegen ihre eigene skalare Version *und*
+untereinander (`0x545463D5` seriell, `0x30DFDADE` deferred).
+
+Was den Aufwand angeht, gibt es einen realen Unterschied: **C und C++ brauchen
+nur ein `#ifdef __AVX512F__`**, das `-march=native` setzt. Rust hat zwar
+`cfg!(target_feature = "avx512f")`, verlangt aber zusätzlich, dass eine
+Funktion mit AVX-512-Intrinsics `#[target_feature(enable = "avx512f")]` trägt
+und damit `unsafe` aufzurufen ist. Die Dispatch-Logik ist also
+Compile-Time-`cfg` **und** unsafe-Block, wo C keins von beidem braucht.
+
+`std::simd` wäre die portable Alternative, ist aber weiterhin nightly-only —
+und wäre für diesen Vergleich ohnehin die falsche Wahl: die Frage ist, wie
+sich *dieselben Intrinsics* in drei Sprachen ausdrücken lassen, nicht ob eine
+Abstraktion an Intrinsics herankommt.
+
 ### SIMD und Threads sind hier Substitute, keine Ergänzung
 
 `medium`, 100 Ticks, `deferred`, gcc `-O3 -march=native`:
@@ -480,6 +516,52 @@ ohnehin schon weiß, und bezahlt die Umordnung mit Codegröße.
 Die Infrastruktur bleibt im Baum (`impl/c/pgo.sh`), damit sich das auf anderer
 Hardware nachprüfen lässt.
 
+### Die parallele Präfixsumme schadet dort, wo es zählt
+
+Aus der Phasenmessung unten sah `prefix` wie ein Lehrbuchziel aus: eine
+serielle O(T²)-Sektion mit einer Barriere auf jeder Seite. Jeder Thread kann
+seine eigene Zeile der `offsets`-Matrix allein aus `counts` ableiten — das
+entfernt die serielle Sektion **und** eine von fünf Barrieren.
+
+Gemessen bei `medium`, neun Läufe je Konfiguration:
+
+| Threads | 5 Barrieren (Median) | 4 Barrieren (Median) | |
+|---:|---:|---:|---|
+| 8 | 951 ms | 867 ms | +9 % |
+| 16 | **605 ms** | 717 ms | **−18 %** |
+| 32 | 607 ms | 600 ms | ±0 |
+
+Die Verteilungen überlappen nicht, das ist keine Streuung. Erklärung: `counts`
+wurde gerade zeilenweise von allen T Threads *geschrieben*. Lässt man
+anschließend alle T Threads die ganze Matrix lesen, werden aus T² Integer-
+Additionen T² Cache-Line-Transfers aus fremden Kernen. Bei T=16 — zwei CCDs,
+kein SMT — kostet das mehr als die eingesparte Barriere.
+
+Verworfen. Sechzehn Threads ist der Punkt, an dem diese Maschine am
+schnellsten ist; die Variante, die dort gewinnt, bleibt stehen.
+
+**Der eigentliche Befund kam aus der verbesserten Instrumentierung**, die
+Arbeit und Barrierenwartezeit jetzt trennt statt sie zu summieren:
+
+| T=16, `medium` | Arbeit | Barriere | Summe |
+|---|---:|---:|---:|
+| agents | 2.755 | 1.085 | 3.839 |
+| **prefix** | **0.000** | **0.265** | 0.265 |
+| scatter | 0.074 | 0.269 | 0.343 |
+| deposit | 0.425 | 0.335 | 0.761 |
+| merge | 0.356 | 0.354 | 0.710 |
+| diffuse | 0.424 | — | 0.424 |
+
+Die Präfixsumme leistet **0.000 ms messbare Arbeit**. Was in der vorherigen
+Fassung dieses Dokuments als „serielle O(T²)-Sektion, 4.8 % der Laufzeit"
+stand, war zu 100 % die Barriere danach. Die alte Instrumentierung hatte
+Arbeit und Wartezeit zusammengefasst und mich damit auf die falsche Fährte
+geführt.
+
+**Barrieren sind 35 % der Laufzeit bei T=16 und 53 % bei T=32.** Das ist der
+Amdahl-Term, und er lässt sich nicht durch Umschichten von Arbeit zwischen
+Phasen beseitigen — nur durch weniger oder billigere Synchronisation.
+
 ### Lastausgleich für `binned` bringt 6 %, nicht mehr
 
 Die Zeilenblöcke gleich groß zu wählen ist der falsche Schnitt, weil sich die
@@ -508,11 +590,9 @@ einschließlich seiner Barrierenwartezeit):
 | diffuse | 0.41 | 8.1 % |
 
 Der Deposit-Pass, den der Lastausgleich adressiert, ist nur 15 % der Laufzeit —
-mehr als ein paar Prozent kann er gar nicht bringen. Die eigentliche Bremse
-ist die **`binned`-Buchhaltung insgesamt** (scatter + deposit + merge +
-prefix = 42 %), und `prefix` ist eine **serielle O(T²)-Sektion**, die sich von
-T=8 auf T=16 verdoppelt. Das ist der Amdahl-Anteil, der die Skalierung bei
-hohen Thread-Zahlen deckelt.
+mehr als ein paar Prozent kann er gar nicht bringen. Was diese Aufschlüsselung
+*nicht* zeigt, weil sie Arbeit und Barrierenwartezeit zusammenfasst: der
+größte Einzelposten sind die Barrieren selbst. Siehe den Abschnitt darüber.
 
 Die Messung ist mit `SLIMEBENCH_PHASE_STATS=1` reproduzierbar, der
 Lastausgleich mit `SLIMEBENCH_NO_REBALANCE=1` abschaltbar.
@@ -526,12 +606,17 @@ Parallelisierung existiert bisher nur in C. C++, Rust (rayon oder
 `SharedArrayBuffer`) fehlen noch — dort wird die eigentliche Frage sein, wie
 viel Code die jeweilige Sprache für dieselbe Garantie braucht.
 
-SIMD gibt es bisher nur in C; C++ und Rust fehlen. GPU-Compute (Klasse G) ist
-unangetastet. Die Rendering-Backends für Rust, Haskell, Python und Perl
-ebenfalls.
+SIMD gibt es jetzt in C, C++ und Rust. GPU-Compute (Klasse G) ist unangetastet
+— der Weg ist inzwischen geklärt: Vulkan sieht unter WSL2 keine NVIDIA-GPU
+(die ICDs zeigen auf Windows-DLLs), aber OpenGL 4.6 über Mesas D3D12-Backend
+erreicht die RTX 5080. Compute-Shader ab GL 4.3 wären damit aus jeder Sprache
+mit GL-Kontext nutzbar. Die Rendering-Backends für Rust, Haskell, Python und
+Perl fehlen weiterhin, und die Klasse-R-Messung gehört auf der echten GPU
+wiederholt.
 
-Der konkreteste nächste Hebel steht in §9: **`prefix` ist eine serielle
-O(T²)-Sektion** und deckelt die Skalierung bei hohen Thread-Zahlen. Bei T=32
-sind das T² = 1024 Einträge, die ein einzelner Thread durchläuft, während 31
-andere an der Barriere warten. Eine baumförmige oder über Buckets
-parallelisierte Präfixsumme sollte das auflösen.
+Der nächste Hebel für Klasse P ist **Synchronisation, nicht Arbeit**:
+Barrieren sind 35 % der Laufzeit bei T=16 und 53 % bei T=32. Arbeit zwischen
+Phasen umzuschichten hilft nicht (§9). Was helfen könnte: weniger Barrieren
+durch Verschmelzen von Phasen, die keine echte Abhängigkeit haben, oder eine
+spinnende statt futex-basierte Barriere — bei Phasenlängen von 0.05 bis 0.4 ms
+ist der Aufweck-Sturm von 32 Threads ein plausibler Hauptposten.
