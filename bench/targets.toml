@@ -168,6 +168,38 @@ extra_args = ["--simd"]
 skip_conformance = true
 
 [[target]]
+# std::thread::scope rather than a wake-per-tick pool; see impl/rust/src/
+# parallel.rs for why, and for the six-barrier tick that came out of it.
+id       = "rust-par-binned"
+lang     = "Rust"
+backend  = "scope/binned"
+class    = "P"
+dir      = "impl/rust"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["cargo"]
+profiles  = ["release-native-unchecked"]
+updates  = ["deferred"]
+extra_args = ["--deposit-reduce", "binned"]
+skip_conformance = true
+
+[[target]]
+id       = "rust-par-private"
+lang     = "Rust"
+backend  = "scope/private"
+class    = "P"
+dir      = "impl/rust"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["cargo"]
+profiles  = ["release-native-unchecked"]
+updates  = ["deferred"]
+extra_args = ["--deposit-reduce", "private"]
+skip_conformance = true
+
+[[target]]
 id       = "cpp-par-binned"
 lang     = "C++"
 backend  = "std-thread/binned"

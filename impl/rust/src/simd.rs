@@ -22,7 +22,7 @@
 
 #![allow(unsafe_op_in_unsafe_fn)]
 
-use crate::sim::Sim;
+use crate::sim::{Sim, Stencil};
 
 /// Widest ISA compiled in.
 pub fn simd_name() -> &'static str {
@@ -106,25 +106,25 @@ mod kernel {
     pub unsafe fn div(a: Vec_, b: Vec_) -> Vec_ { _mm256_div_ps(a, b) }
 }
 
-/// SPEC-1 section 5.4 over rows `[y0, y1)`, vectorised.
-/// Bit-identical to `Sim::diffuse_rows`.
-#[cfg(any(target_feature = "avx512f", target_feature = "avx2"))]
 pub fn diffuse_rows_simd(sim: &mut Sim, y0: u32, y1: u32) {
+    run(&mut sim.stencil(), y0, y1);
+}
+
+/// SPEC-1 section 5.4 over rows `[y0, y1)`, vectorised.
+/// Bit-identical to `sim::diffuse_rows_raw`.
+#[cfg(any(target_feature = "avx512f", target_feature = "avx2"))]
+pub fn run(s: &mut Stencil<'_>, y0: u32, y1: u32) {
     use kernel::*;
 
-    let w = sim.cfg.width;
-    let log2w = sim.log2w();
-    let xmask = w - 1;
-    let ymask = sim.cfg.height - 1;
-    let decay = sim.cfg.decay;
+    let (w, log2w, xmask, ymask, decay) = (s.w, s.log2w, s.xmask, s.ymask, s.decay);
 
     // Narrow grids leave no vector body worth entering.
     if w < 2 * VW {
-        sim.diffuse_rows(y0, y1);
+        s.run(y0, y1);
         return;
     }
-
-    let (src, dst) = sim.grid_and_scratch();
+    let src: &[f32] = s.src;
+    let dst: &mut [f32] = s.dst;
 
     unsafe {
         let vfour = set1(4.0);
@@ -172,6 +172,6 @@ pub fn diffuse_rows_simd(sim: &mut Sim, y0: u32, y1: u32) {
 }
 
 #[cfg(not(any(target_feature = "avx512f", target_feature = "avx2")))]
-pub fn diffuse_rows_simd(sim: &mut Sim, y0: u32, y1: u32) {
-    sim.diffuse_rows(y0, y1);
+pub fn run(s: &mut Stencil<'_>, y0: u32, y1: u32) {
+    s.run(y0, y1);
 }

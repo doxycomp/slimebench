@@ -2,6 +2,7 @@
 
 mod cli;
 mod dirtable;
+mod parallel;
 mod simd;
 mod sim;
 
@@ -20,29 +21,44 @@ fn main() {
         }
     };
 
-    for _ in 0..cfg.warmup {
-        sim.tick();
-    }
-    sim.ns_agents = 0;
-    sim.ns_diffuse = 0;
+    let threaded = cfg.threads > 1;
+    let class = if threaded { "P" } else { "S" };
 
-    let mut tick_ms: Vec<f64> = Vec::with_capacity(cfg.ticks as usize);
-    let t_start = now_ns();
-    for t in 0..cfg.ticks {
-        let a = now_ns();
-        sim.tick();
-        tick_ms.push((now_ns() - a) as f64 / 1e6);
-
-        if cfg.hash_every != 0 && (t + 1) % cfg.hash_every == 0 {
-            eprintln!(
-                "tick {} grid=0x{:08X} agents=0x{:08X}",
-                t + 1,
-                sim.hash_grid(),
-                sim.hash_agents()
-            );
+    let (ms_total, tick_ms) = if threaded {
+        // Class P runs the whole loop inside a thread scope; see parallel.rs
+        // for why the pool is not a wake-per-tick master/worker pool.
+        match parallel::run(&mut sim, cfg.warmup, cfg.ticks, cfg.hash_every) {
+            Ok(r) => (r.ms_total, r.tick_ms),
+            Err(e) => {
+                eprintln!("error: {e}");
+                std::process::exit(2);
+            }
         }
-    }
-    let ms_total = (now_ns() - t_start) as f64 / 1e6;
+    } else {
+        for _ in 0..cfg.warmup {
+            sim.tick();
+        }
+        sim.ns_agents = 0;
+        sim.ns_diffuse = 0;
+
+        let mut tick_ms: Vec<f64> = Vec::with_capacity(cfg.ticks as usize);
+        let t_start = now_ns();
+        for t in 0..cfg.ticks {
+            let a = now_ns();
+            sim.tick();
+            tick_ms.push((now_ns() - a) as f64 / 1e6);
+
+            if cfg.hash_every != 0 && (t + 1) % cfg.hash_every == 0 {
+                eprintln!(
+                    "tick {} grid=0x{:08X} agents=0x{:08X}",
+                    t + 1,
+                    sim.hash_grid(),
+                    sim.hash_agents()
+                );
+            }
+        }
+        ((now_ns() - t_start) as f64 / 1e6, tick_ms)
+    };
 
     if let Some(path) = &o.dump_grid {
         let bytes: Vec<u8> = sim.grid.iter().flat_map(|v| v.to_le_bytes()).collect();
@@ -53,7 +69,7 @@ fn main() {
 
     if o.want_json {
         let mut out = std::io::stdout().lock();
-        let _ = writeln!(out, "{}", cli::result_json(&sim, "headless", "S", ms_total, &tick_ms));
+        let _ = writeln!(out, "{}", cli::result_json(&sim, "headless", class, ms_total, &tick_ms));
     } else {
         println!(
             "{} {}x{} agents={} ticks={} update={} variant={}",
