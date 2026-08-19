@@ -9,7 +9,8 @@ import Data.Bits ((.&.))
 import Data.IORef (newIORef, modifyIORef', readIORef)
 import Data.List (sort)
 import Data.Word (Word32)
-import System.Environment (getArgs)
+import Data.Maybe (isNothing)
+import System.Environment (getArgs, lookupEnv)
 import System.Exit (exitSuccess, exitWith, ExitCode(..))
 import System.IO (hPutStrLn, stderr)
 import Text.Printf (printf)
@@ -18,6 +19,7 @@ import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as BL
 
 import Sim
+import Parallel (ReduceMode (..), runParallel)
 
 -- ---- CLI (SPEC-1 section 10) ---------------------------------------------
 
@@ -29,6 +31,7 @@ usage = unlines
   , "  --agents N  --ticks N  --warmup N  --seed N"
   , "  --update MODE        serial|deferred"
   , "  --threads N"
+  , "  --deposit-reduce M   private|binned  (SPEC-1 5.6)"
   , "  --sensor-dist F  --sensor-steps N  --rot-steps N"
   , "  --step F  --deposit F  --decay F"
   , "  --headless  --render"
@@ -40,6 +43,7 @@ data Opts = Opts
   { optCfg      :: !Config
   , optJson     :: !Bool
   , optDumpGrid :: !(Maybe FilePath)
+  , optReduce   :: !ReduceMode
   }
 
 preset :: String -> Maybe (Int, Int, Int, Int)
@@ -57,7 +61,7 @@ usageError msg = do
   exitWith (ExitFailure 2)
 
 parseArgs :: [String] -> IO Opts
-parseArgs = go (Opts defaultConfig False Nothing)
+parseArgs = go (Opts defaultConfig False Nothing Binned)
   where
     go o [] = pure o
     go o (a : rest) = case a of
@@ -92,6 +96,10 @@ parseArgs = go (Opts defaultConfig False Nothing)
       "--decay"        -> upd rest o (\c -> c { cfgDecay = readF v })
       "--display-max"  -> go o rest
       "--dump-grid"    -> go o { optDumpGrid = Just v } rest
+      "--deposit-reduce" -> case v of
+        "private" -> go o { optReduce = Private } rest
+        "binned"  -> go o { optReduce = Binned } rest
+        _ -> usageError "--deposit-reduce must be private|binned"
       "--update" -> case v of
         "serial"   -> upd rest o (\c -> c { cfgUpdate = Serial })
         "deferred" -> upd rest o (\c -> c { cfgUpdate = Deferred })
@@ -113,24 +121,34 @@ main = do
   when (not (isPowerOfTwo cfgHeight)) $ usageError "height must be a power of two"
 
   sim <- newSim cfg
-  forM_ [1 .. cfgWarmup] $ \_ -> tick sim
-  resetTimers sim
 
-  ticksRef <- newIORef []
-  !t0 <- nowNs
-  forM_ [1 .. cfgTicks] $ \t -> do
-    !a <- nowNs
-    tick sim
-    !b <- nowNs
-    modifyIORef' ticksRef ((fromIntegral (b - a) / 1e6 :: Double) :)
-    when (cfgHashEvery /= 0 && t `mod` cfgHashEvery == 0) $ do
-      g <- hashGrid sim
-      ag <- hashAgents sim
-      hPutStrLn stderr (printf "tick %d grid=0x%08X agents=0x%08X" t g ag)
-  !t1 <- nowNs
-  let !msTotal = fromIntegral (t1 - t0) / 1e6 :: Double
-
-  tickMs <- reverse <$> readIORef ticksRef
+  (msTotal, tickMs) <- if cfgThreads > 1
+    then do
+      -- Class P: the whole tick loop lives in the pool; see Parallel.hs.
+      adaptive <- isNothing <$> lookupEnv "SLIMEBENCH_NO_REBALANCE"
+      !a <- nowNs
+      r <- runParallel sim optReduce adaptive cfgWarmup cfgTicks
+      !b <- nowNs
+      case r of
+        Left err -> hPutStrLn stderr ("error: " ++ err) >> exitWith (ExitFailure 2)
+        Right ts -> pure (fromIntegral (b - a) / 1e6 :: Double, ts)
+    else do
+      forM_ [1 .. cfgWarmup] $ \_ -> tick sim
+      resetTimers sim
+      ticksRef <- newIORef []
+      !t0 <- nowNs
+      forM_ [1 .. cfgTicks] $ \t -> do
+        !a <- nowNs
+        tick sim
+        !b <- nowNs
+        modifyIORef' ticksRef ((fromIntegral (b - a) / 1e6 :: Double) :)
+        when (cfgHashEvery /= 0 && t `mod` cfgHashEvery == 0) $ do
+          g <- hashGrid sim
+          ag <- hashAgents sim
+          hPutStrLn stderr (printf "tick %d grid=0x%08X agents=0x%08X" t g ag)
+      !t1 <- nowNs
+      ts <- reverse <$> readIORef ticksRef
+      pure (fromIntegral (t1 - t0) / 1e6 :: Double, ts)
 
   case optDumpGrid of
     Nothing -> pure ()
@@ -144,7 +162,7 @@ main = do
       msD = fromIntegral nsD / 1e6 :: Double
 
   if optJson
-    then putStrLn (resultJson cfg gh ah msTotal msA msD tickMs)
+    then putStrLn (resultJson cfg optReduce gh ah msTotal msA msD tickMs)
     else do
       printf "%s %dx%d agents=%d ticks=%d update=%s\n"
         cfgPreset cfgWidth cfgHeight cfgAgents cfgTicks (updateName cfgUpdate)
@@ -164,9 +182,9 @@ updateName :: Update -> String
 updateName Deferred = "deferred"
 updateName Serial = "serial"
 
-resultJson :: Config -> Word32 -> Word32 -> Double -> Double -> Double
+resultJson :: Config -> ReduceMode -> Word32 -> Word32 -> Double -> Double -> Double
            -> [Double] -> String
-resultJson Config{..} gh ah msTotal msA msD tickMs =
+resultJson Config{..} reduce gh ah msTotal msA msD tickMs =
   let n = length tickMs
       srt = sort tickMs
       median = if n > 0 then srt !! (n `div` 2) else 0
@@ -176,14 +194,20 @@ resultJson Config{..} gh ah msTotal msA msD tickMs =
       maups = if msTotal > 0 then fromIntegral cfgAgents * fromIntegral n / msTotal / 1000 else 0
       mcups = if msTotal > 0 then cells * fromIntegral n / msTotal / 1000 else 0
       upd = updateName cfgUpdate
+      cls = if cfgThreads > 1 then "P" else "S" :: String
+      variant | cfgThreads <= 1 = "scalar" :: String
+              | reduce == Binned = "binned"
+              | otherwise = "private"
   in printf
-      ("{\"schema\":1,\"impl\":\"haskell\",\"backend\":\"headless\",\"class\":\"S\","
+      ("{\"schema\":1,\"impl\":\"haskell\",\"backend\":\"headless\",\"class\":\"%s\","
+       ++ "\"variant\":\"%s\","
        ++ "\"preset\":\"%s\",\"width\":%d,\"height\":%d,\"agents\":%d,\"ticks\":%d,"
        ++ "\"seed\":%d,\"update\":\"%s\",\"threads\":%d,"
        ++ "\"grid_hash\":\"0x%08X\",\"agent_hash\":\"0x%08X\",\"dirtable_hash\":\"0x%08X\","
        ++ "\"ms_total\":%.4f,\"ms_agents\":%.4f,\"ms_diffuse\":%.4f,"
        ++ "\"ms_per_tick_mean\":%.6f,\"ms_per_tick_median\":%.6f,\"ms_per_tick_p99\":%.6f,"
        ++ "\"maups\":%.4f,\"mcups\":%.4f}")
+      cls variant
       cfgPreset cfgWidth cfgHeight cfgAgents n (fromIntegral cfgSeed :: Int) upd cfgThreads
       gh ah dirtableHashRuntime
       msTotal msA msD mean median p99 maups mcups

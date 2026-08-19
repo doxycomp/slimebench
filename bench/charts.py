@@ -372,6 +372,44 @@ def chart_haskell_style() -> None:
                bars, "ms total")
 
 
+def chart_scaling_langs() -> None:
+    """Speedup curves for every language that has a class-P port."""
+    sources = [
+        ("C", PALETTE["c"], "E-parallel-scaling.jsonl", "medium", "binned"),
+        ("Rust", PALETTE["rust"], "K-parallel-rust.jsonl", "medium", "binned"),
+        ("TypeScript", PALETTE["ts"], "L-parallel-ts.jsonl", "medium", "binned"),
+        ("Haskell", PALETTE["haskell"], "N-parallel-haskell.jsonl", "medium", "binned"),
+        ("Python", PALETTE["python"], "O-parallel-python.jsonl", "medium", "binned"),
+        ("Perl", PALETTE["perl"], "P-parallel-perl.jsonl", "tiny", None),
+    ]
+    series = []
+    for name, colour, fname, preset, want in sources:
+        rows = load(fname)
+        if not rows:
+            continue
+        rows = [r for r in rows if r.get("preset") == preset]
+        base = next((r["ms_total"] for r in rows if r.get("threads", 1) == 1), None)
+        if not base:
+            continue
+        pts = [(1.0, 1.0)]
+        for r in sorted(rows, key=lambda r: r.get("threads", 1)):
+            t = r.get("threads", 1)
+            if t <= 1:
+                continue
+            v = r.get("variant") or ""
+            if want and want not in v:
+                continue
+            pts.append((float(t), base / r["ms_total"]))
+        if len(pts) > 1:
+            series.append((name, colour, pts))
+    if series:
+        line_chart(OUT / "scaling-langs.svg",
+                   "Class P: the same design in seven languages",
+                   "2048x2048, 100 ticks, deferred, binned. Perl at 512x512 -- "
+                   "medium would be hours. 16 physical cores, 32 logical.",
+                   series, "threads / processes", "speedup vs 1", ideal=True)
+
+
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     print("charts:")
@@ -380,6 +418,7 @@ def main() -> int:
     chart_scaling()
     chart_classes()
     chart_haskell_style()
+    chart_scaling_langs()
     return 0
 
 

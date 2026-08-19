@@ -9,6 +9,7 @@
 
 use strict;
 use warnings;
+use IO::Handle;
 use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC);
 
 use FindBin;
@@ -203,11 +204,13 @@ my ($ns_agents, $ns_diffuse) = (0, 0);
 sub now_ns { return int(clock_gettime(CLOCK_MONOTONIC) * 1e9) }
 
 sub agent_pass {
+    my ($lo, $hi, $aidx) = @_;
+    ($lo, $hi) = (0, $N) unless defined $hi;
     my $target = $cfg{update} eq 'deferred' ? $dep : $grid;
     my ($sdist, $step, $deposit) = @cfg{qw(sensor_dist step deposit)};
     my ($ss, $rs) = @cfg{qw(sensor_steps rot_steps)};
 
-    for my $i (0 .. $N - 1) {
+    for my $i ($lo .. $hi - 1) {
         my $d = $adir[$i];
         my $x = $ax[$i];
         my $y = $ay[$i];
@@ -244,7 +247,9 @@ sub agent_pass {
         $y += $SIN[$d] * $step; $y += $FH if $y < 0; $y -= $FH if $y >= $FH;
 
         my $idx = ((int($y) & $YMASK) << $LOG2W) | (int($x) & $XMASK);
-        $target->[$idx] += $deposit;
+        # Class P records the target cell instead of depositing; the pool
+        # applies every agent's deposit afterwards, in ascending agent index.
+        if ($aidx) { $aidx->[$i] = $idx } else { $target->[$idx] += $deposit }
 
         $adir[$i] = $d;
         $ax[$i]   = $x;
@@ -253,11 +258,13 @@ sub agent_pass {
 }
 
 sub agent_pass_strict {
+    my ($lo, $hi, $aidx) = @_;
+    ($lo, $hi) = (0, $N) unless defined $hi;
     my $target = $cfg{update} eq 'deferred' ? $dep : $grid;
     my ($sdist, $step, $deposit) = @cfg{qw(sensor_dist step deposit)};
     my ($ss, $rs) = @cfg{qw(sensor_steps rot_steps)};
 
-    for my $i (0 .. $N - 1) {
+    for my $i ($lo .. $hi - 1) {
         my $d = $adir[$i];
         my $x = $ax[$i];
         my $y = $ay[$i];
@@ -302,7 +309,8 @@ sub agent_pass_strict {
         $y = f32($y + $FH) if $y < 0; $y = f32($y - $FH) if $y >= $FH;
 
         my $idx = ((int($y) & $YMASK) << $LOG2W) | (int($x) & $XMASK);
-        $target->[$idx] = f32($target->[$idx] + $deposit);
+        if ($aidx) { $aidx->[$i] = $idx }
+        else       { $target->[$idx] = f32($target->[$idx] + $deposit) }
 
         $adir[$i] = $d;
         $ax[$i]   = $x;
@@ -311,8 +319,10 @@ sub agent_pass_strict {
 }
 
 sub diffuse_pass {
+    my ($y0, $y1) = @_;
+    ($y0, $y1) = (0, $H) unless defined $y1;
     my $decay = $cfg{decay};
-    for my $y (0 .. $H - 1) {
+    for my $y ($y0 .. $y1 - 1) {
         my $rowm = ((($y - 1) & $YMASK) << $LOG2W);
         my $row0 = ($y << $LOG2W);
         my $rowp = ((($y + 1) & $YMASK) << $LOG2W);
@@ -331,12 +341,13 @@ sub diffuse_pass {
             $scratch->[ $row0 | $x ] = ($acc / 12.0) * $decay;
         }
     }
-    ($grid, $scratch) = ($scratch, $grid);
 }
 
 sub diffuse_pass_strict {
+    my ($y0, $y1) = @_;
+    ($y0, $y1) = (0, $H) unless defined $y1;
     my $decay = $cfg{decay};
-    for my $y (0 .. $H - 1) {
+    for my $y ($y0 .. $y1 - 1) {
         my $rowm = ((($y - 1) & $YMASK) << $LOG2W);
         my $row0 = ($y << $LOG2W);
         my $rowp = ((($y + 1) & $YMASK) << $LOG2W);
@@ -355,7 +366,6 @@ sub diffuse_pass_strict {
             $scratch->[ $row0 | $x ] = f32(f32($acc / 12.0) * $decay);
         }
     }
-    ($grid, $scratch) = ($scratch, $grid);
 }
 
 sub tick {
@@ -372,10 +382,191 @@ sub tick {
     }
 
     $strict ? diffuse_pass_strict() : diffuse_pass();
+    ($grid, $scratch) = ($scratch, $grid);
     my $t2 = now_ns();
 
     $ns_agents  += $t1 - $t0;
     $ns_diffuse += $t2 - $t1;
+}
+
+
+# ---- class P: fork + pipe (SPEC-1 section 5.6) ---------------------------
+#
+# Perl has ithreads, and they are the wrong tool here. Measured on this
+# machine, a `threads::shared` array costs 7.6x a plain one for the random
+# read-modify-write the deposit pass does, and 17x for a sequential one --
+# while pack/unpack of the same 262144 floats costs 12 ms, about what one
+# plain random pass costs. The diffusion stencil reads nine cells per output
+# cell, so a shared grid can never win: it would have to make up 7.6x before
+# the first thread helps.
+#
+# So the workers are forked processes with private grids, and the only thing
+# that crosses between them is packed binary. Two round trips per tick:
+#
+#   1. every worker steps its own slice of the agents against its own grid
+#      (read-only during the pass in `deferred` mode, so the copies agree),
+#      and sends back the target cell of each of its agents;
+#   2. the parent concatenates those slices -- which, because the ranges are
+#      contiguous and ascending, *is* the full array in agent order -- and
+#      broadcasts it. Everyone applies the whole deposit list.
+#
+# Then the same shape for the diffusion pass over row blocks.
+#
+# That replicated reduction is stronger than either strategy in SPEC-1 5.6:
+# every worker applies every deposit in ascending agent index, which is
+# exactly the serial chain, so the result is bit-identical for any worker
+# count without needing the binned sort. It costs the deposit and merge passes
+# being done N times instead of once -- which is the trade Perl's memory model
+# forces, and the reason the speedup ceiling here is the agent pass alone.
+
+sub _blob_send {
+    my ($fh, $blob) = @_;
+    print {$fh} pack('N', length $blob), $blob or die "write: $!";
+    $fh->flush;
+}
+
+sub _blob_recv {
+    my ($fh) = @_;
+    my $hdr = '';
+    while (length($hdr) < 4) {
+        my $n = read($fh, my $chunk, 4 - length $hdr);
+        die "eof reading header" unless $n;
+        $hdr .= $chunk;
+    }
+    my $len = unpack('N', $hdr);
+    my $buf = '';
+    while (length($buf) < $len) {
+        my $n = read($fh, my $chunk, $len - length $buf);
+        die "eof reading body" unless $n;
+        $buf .= $chunk;
+    }
+    return $buf;
+}
+
+# Contiguous split of [0, n) into `parts`; part `i` is [lo, hi). Same rule as
+# the C reference, so the concatenation lands in agent order.
+sub _split {
+    my ($n, $parts, $i) = @_;
+    my $base = int($n / $parts);
+    my $rem  = $n % $parts;
+    my $lo = $i * $base + ($i < $rem ? $i : $rem);
+    return ($lo, $lo + $base + ($i < $rem ? 1 : 0));
+}
+
+sub _apply_deposits {
+    my ($blob) = @_;
+    my @all = unpack('L<*', $blob);
+    my $deposit = $cfg{deposit};
+    if ($strict) {
+        $dep->[$_] = f32($dep->[$_] + $deposit) for @all;
+    } else {
+        $dep->[$_] += $deposit for @all;
+    }
+    if ($strict) {
+        for my $i (0 .. $CELLS - 1) { $grid->[$i] = f32($grid->[$i] + $dep->[$i]); $dep->[$i] = 0.0 }
+    } else {
+        for my $i (0 .. $CELLS - 1) { $grid->[$i] += $dep->[$i]; $dep->[$i] = 0.0 }
+    }
+}
+
+# Returns the per-tick wall times. Runs in the parent as rank 0.
+sub run_parallel {
+    my ($nproc, $warmup, $ticks) = @_;
+    if ($cfg{update} ne 'deferred') {
+        print STDERR "error: --threads > 1 requires --update deferred.\n";
+        print STDERR "       SPEC-1 'serial' makes an agent's deposit visible to the\n";
+        print STDERR "       next agent in the same tick, which is a sequential\n";
+        print STDERR "       dependency; see SPEC-1 section 5.5.\n";
+        exit 2;
+    }
+
+    my (@to_child, @from_child, @pids);
+    for my $r (1 .. $nproc - 1) {
+        pipe(my $c_rd, my $p_wr) or die "pipe: $!";
+        pipe(my $p_rd, my $c_wr) or die "pipe: $!";
+        $p_wr->autoflush(1); $c_wr->autoflush(1);
+        my $pid = fork();
+        die "fork: $!" unless defined $pid;
+        if ($pid == 0) {
+            close $p_wr; close $p_rd;
+            _worker_loop($r, $nproc, $c_rd, $c_wr, $warmup + $ticks);
+            exit 0;
+        }
+        close $c_rd; close $c_wr;
+        push @to_child, $p_wr;
+        push @from_child, $p_rd;
+        push @pids, $pid;
+    }
+
+    my ($lo, $hi) = _split($N, $nproc, 0);
+    my ($ylo, $yhi) = _split($H, $nproc, 0);
+    my @aidx;
+    my @tick_ms;
+
+    for my $t (1 .. $warmup + $ticks) {
+        my $t0 = now_ns();
+
+        # -- agents ---------------------------------------------------------
+        $strict ? agent_pass_strict($lo, $hi, \@aidx) : agent_pass($lo, $hi, \@aidx);
+        my $blob = pack('L<*', @aidx[$lo .. $hi - 1]);
+        $blob .= _blob_recv($_) for @from_child;
+        _blob_send($_, $blob) for @to_child;
+        _apply_deposits($blob);
+
+        # -- diffusion ------------------------------------------------------
+        $strict ? diffuse_pass_strict($ylo, $yhi) : diffuse_pass($ylo, $yhi);
+        # 'd<' and not 'f<': in tier B a Perl scalar holds a double, and shipping
+        # the grid as f32 would silently round the whole thing once per tick.
+        # It costs twice the bytes and it is the difference between matching
+        # the single-process run and not.
+        my $gblob = pack('d<*', @{$scratch}[($ylo << $LOG2W) .. ($yhi << $LOG2W) - 1]);
+        $gblob .= _blob_recv($_) for @from_child;
+        _blob_send($_, $gblob) for @to_child;
+        @$grid = unpack('d<*', $gblob);
+
+        push @tick_ms, (now_ns() - $t0) / 1e6 if $t > $warmup;
+    }
+
+    # The parent only ever stepped its own agents; collect the rest for the
+    # agent checksum.
+    for my $k (0 .. $#from_child) {
+        my $b = _blob_recv($from_child[$k]);
+        my ($rlo, $rhi) = _split($N, $nproc, $k + 1);
+        my $cnt = $rhi - $rlo;
+        my @xs   = unpack('d<*', substr($b, 0, 8 * $cnt));
+        my @ys   = unpack('d<*', substr($b, 8 * $cnt, 8 * $cnt));
+        my @ds   = unpack('L<*', substr($b, 16 * $cnt));
+        @ax[$rlo .. $rhi - 1]   = @xs;
+        @ay[$rlo .. $rhi - 1]   = @ys;
+        @adir[$rlo .. $rhi - 1] = @ds;
+    }
+    waitpid($_, 0) for @pids;
+    return @tick_ms;
+}
+
+sub _worker_loop {
+    my ($rank, $nproc, $rd, $wr, $total) = @_;
+    my ($lo, $hi) = _split($N, $nproc, $rank);
+    my ($ylo, $yhi) = _split($H, $nproc, $rank);
+    my @aidx;
+
+    for (1 .. $total) {
+        $strict ? agent_pass_strict($lo, $hi, \@aidx) : agent_pass($lo, $hi, \@aidx);
+        _blob_send($wr, pack('L<*', @aidx[$lo .. $hi - 1]));
+        _apply_deposits(_blob_recv($rd));
+
+        $strict ? diffuse_pass_strict($ylo, $yhi) : diffuse_pass($ylo, $yhi);
+        _blob_send($wr, pack('d<*', @{$scratch}[($ylo << $LOG2W) .. ($yhi << $LOG2W) - 1]));
+        @$grid = unpack('d<*', _blob_recv($rd));
+    }
+
+    # Final agent state for the parent's checksum. Doubles, because that is
+    # what a Perl scalar holds; packing them as f32 here would round values
+    # that the non-strict mode deliberately keeps in double.
+    my $cnt = $hi - $lo;
+    _blob_send($wr, pack('d<*', @ax[$lo .. $hi - 1])
+                  . pack('d<*', @ay[$lo .. $hi - 1])
+                  . pack('L<*', @adir[$lo .. $hi - 1]));
 }
 
 # ---- checksums (SPEC-1 section 6) ---------------------------------------
@@ -412,20 +603,32 @@ sub dirtable_hash {
 
 # ---- main ----------------------------------------------------------------
 
-tick() for 1 .. $cfg{warmup};
-($ns_agents, $ns_diffuse) = (0, 0);
-
 my @tick_ms;
-my $t_start = now_ns();
-for my $t (1 .. $cfg{ticks}) {
-    my $a = now_ns();
-    tick();
-    push @tick_ms, (now_ns() - $a) / 1e6;
-    if ($cfg{hash_every} && $t % $cfg{hash_every} == 0) {
-        printf STDERR "tick %d grid=0x%08X agents=0x%08X\n", $t, hash_grid(), hash_agents();
+my $ms_total;
+
+if ($cfg{threads} > 1) {
+    # Class P. Processes, not ithreads -- see the comment above run_parallel.
+    my $t_start = now_ns();
+    @tick_ms = run_parallel($cfg{threads}, $cfg{warmup}, $cfg{ticks});
+    $ms_total = (now_ns() - $t_start) / 1e6;
+    # The phases interleave across processes, so an agent/diffuse split would
+    # be meaningless. Class P reports wall time.
+    ($ns_agents, $ns_diffuse) = (int($ms_total * 1e6), 0);
+} else {
+    tick() for 1 .. $cfg{warmup};
+    ($ns_agents, $ns_diffuse) = (0, 0);
+
+    my $t_start = now_ns();
+    for my $t (1 .. $cfg{ticks}) {
+        my $a = now_ns();
+        tick();
+        push @tick_ms, (now_ns() - $a) / 1e6;
+        if ($cfg{hash_every} && $t % $cfg{hash_every} == 0) {
+            printf STDERR "tick %d grid=0x%08X agents=0x%08X\n", $t, hash_grid(), hash_agents();
+        }
     }
+    $ms_total = (now_ns() - $t_start) / 1e6;
 }
-my $ms_total = (now_ns() - $t_start) / 1e6;
 
 if (defined $dump_grid) {
     open my $fh, '>:raw', $dump_grid or die "cannot write $dump_grid: $!";
@@ -434,6 +637,8 @@ if (defined $dump_grid) {
 }
 
 my $variant = $strict ? 'strict-f32' : 'plain';
+$variant .= '+fork' if $cfg{threads} > 1;
+my $class = $cfg{threads} > 1 ? 'P' : 'S';
 
 if ($want_json) {
     my $n      = scalar @tick_ms;
@@ -443,14 +648,15 @@ if ($want_json) {
     my $mean   = 0; $mean += $_ for @tick_ms; $mean = $n ? $mean / $n : 0;
     my $cells  = $W * $H;
 
-    printf '{"schema":1,"impl":"perl","backend":"%s","class":"S","preset":"%s",'
+    printf '{"schema":1,"impl":"perl","backend":"%s","class":"%s","preset":"%s",'
          . '"variant":"%s","width":%d,"height":%d,"agents":%d,"ticks":%d,"seed":%d,'
          . '"update":"%s","threads":%d,'
          . '"grid_hash":"0x%08X","agent_hash":"0x%08X","dirtable_hash":"0x%08X",'
          . '"ms_total":%.4f,"ms_agents":%.4f,"ms_diffuse":%.4f,'
          . '"ms_per_tick_mean":%.6f,"ms_per_tick_median":%.6f,"ms_per_tick_p99":%.6f,'
          . '"maups":%.4f,"mcups":%.4f}' . "\n",
-        ($strict ? 'strict-f32' : 'headless'), $cfg{preset}, $variant,
+        ($cfg{threads} > 1 ? 'fork' : $strict ? 'strict-f32' : 'headless'),
+        $class, $cfg{preset}, $variant,
         $W, $H, $N, $n, $cfg{seed}, $cfg{update}, $cfg{threads},
         hash_grid(), hash_agents(), dirtable_hash(),
         $ms_total, $ns_agents / 1e6, $ns_diffuse / 1e6,

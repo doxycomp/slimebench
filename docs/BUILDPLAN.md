@@ -136,7 +136,7 @@ Vermutung an dieser Stelle war falsch. Details in
 
 ---
 
-## Phase 6 — Parallelität 🔨 (C, C++, Rust, TypeScript fertig)
+## Phase 6 — Parallelität ✅
 
 Ausschließlich im `deferred`-Update-Modus (SPEC §5.5) — `serial` ist
 prinzipiell nicht deterministisch parallelisierbar.
@@ -153,25 +153,38 @@ Kette. SPEC §5.6 unterscheidet jetzt zwei Strategien, und beide sind gemessen.
 | C++ | `std::jthread` + `std::barrier`, beide Strategien | ✅ |
 | Rust | `std::thread::scope`, beide Strategien | ✅ |
 | TypeScript | `worker_threads` + `SharedArrayBuffer`, beide Strategien | ✅ |
-| Haskell | `-threaded -N` | ⬜ |
-| Python | `multiprocessing`, oder Free-Threaded 3.13+ | ⬜ |
-| Perl | `threads` — vermutlich der ernüchterndste Datenpunkt der Suite | ⬜ |
+| Haskell | `forkOn` + `-threaded`, MVar-Barriere, beide Strategien | ✅ |
+| Python | `multiprocessing` + `shared_memory`, beide Strategien | ✅ |
+| Perl | `fork` + Pipes, replizierte Reduktion | ✅ |
 
-**Alle vier fertigen Ports sind bit-identisch zum seriellen Lauf** und liefern
-mit `private --deposit 0.1` sogar dieselben *falschen* Hashes wie C
-(`0xE82B2012` bei T=4). Skalierung bei `medium`/100:
+**Alle sieben Ports sind bit-identisch zum jeweils seriellen Lauf**, und die
+fünf mit `private`-Strategie liefern bei `--deposit 0.1` und T=4 sogar
+denselben *falschen* Hash (`0xE82B2012`). Skalierung bei `medium`/100:
 
-| | T=1 | T=16 | Speedup |
+| Sprache | 1 Thread | bester | Speedup |
 |---|---:|---:|---:|
-| C | 5233 | 729 | 7.2× |
+| C++ | 5659 | 674 | 8.4× |
+| C | 5233 | 635 | 8.2× |
+| Haskell | 5339 | 741 | 7.2× |
 | Rust | 6808 | 1007 | 6.8× |
 | TypeScript | 13345 | 1190 | **11.2×** |
+| Python | 7857 | 1888 | 4.2× |
+| Perl (bei `tiny`) | 4141 | 1568 | 2.6× |
 
-TypeScript skaliert am besten und ist in Klasse P nur noch 1.6× hinter C, bei
-3× Abstand in Klasse S. Und `binned` ist dort bei *zwei* Threads schon 2.9×
-schneller als ein Thread — das ist nicht die Parallelität, sondern die
-Deposit-Lokalität: bei gleicher Thread-Zahl schlägt `binned` die `private`-
-Strategie um 1.56× (in C nur um 1.15×).
+Zwei Dinge, die sich aus Klasse S nicht vorhersagen ließen: **TypeScript
+skaliert am besten** und schrumpft den Abstand zu C von 3.0× auf 1.6×; und
+**Haskell holt C ein** (741 gegen 729 ms), nachdem die `unsafeAt`-Korrektur
+aus Phase 2 den Agenten-Pass entlastet hat.
+
+**Perl brauchte einen eigenen Entwurf.** `threads::shared` kostet auf dieser
+Maschine 7.6× pro zufälligem Read-Modify-Write; der Diffusionsstencil liest
+neun Zellen pro Ausgabezelle, ein geteiltes Grid könnte also nie gewinnen. Ein
+ganzer Block durch `pack`/`unpack` kostet dagegen so viel wie *ein* Durchlauf
+über ein normales Array. Also `fork` mit privaten Grids und gepacktem Binär
+über Pipes — und eine dritte Reduktionsstrategie, **repliziert**, die SPEC §5.6
+nicht kennt: jeder Prozess wendet jeden Deposit in aufsteigendem Agentenindex
+an, also exakt die serielle Kette. Bit-identisch für jede Prozesszahl ohne den
+`binned`-Sort, zum Preis eines N-fach ausgeführten Deposit- und Merge-Passes.
 
 **Ergebnis** (2048², 1 M Agenten): `binned` skaliert auf **9.5× bei 16
 Threads** und ist für jede Thread-Zahl bit-identisch zum seriellen Lauf.

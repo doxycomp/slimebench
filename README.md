@@ -13,17 +13,17 @@ Simulation läuft, und einem Harness für Performance- und Footprint-Vergleiche
 
 ## Stand
 
-| Sprache | headless | SDL2 | raylib | Konformität |
-|---|:-:|:-:|:-:|:-:|
-| C | ✅ | ✅ | ✅ | Stufe A (Referenz) |
-| C++ | ✅ | ✅ | ✅ | Stufe A |
-| Rust (safe + unchecked) | ✅ | ⬜ | ⬜ | Stufe A |
-| Haskell | ✅ | ⬜ | ⬜ | Stufe A |
-| TypeScript / Node | ✅ | — | — | Stufe A |
-| TypeScript / Canvas | — | ✅ Browser | — | Stufe A |
-| Python / numpy | ✅ | ⬜ | ⬜ | Stufe A, nur `deferred` |
-| Python / pur | ✅ | ⬜ | ⬜ | Stufe B, A mit `--strict-f32` |
-| Perl | ✅ | ⬜ | ⬜ | Stufe B, A mit `--strict-f32` |
+| Sprache | headless | Klasse P | SDL2 | raylib | Konformität |
+|---|:-:|:-:|:-:|:-:|:-:|
+| C | ✅ | ✅ | ✅ | ✅ | Stufe A (Referenz) |
+| C++ | ✅ | ✅ | ✅ | ✅ | Stufe A |
+| Rust (safe + unchecked) | ✅ | ✅ | ⬜ | ⬜ | Stufe A |
+| Haskell (2 Stile) | ✅ | ✅ | ⬜ | ⬜ | Stufe A |
+| TypeScript / Node | ✅ | ✅ | — | — | Stufe A |
+| TypeScript / Canvas | — | — | ✅ Browser | — | Stufe A |
+| Python / numpy | ✅ | ✅ | ⬜ | ⬜ | Stufe A, nur `deferred` |
+| Python / pur | ✅ | — | ⬜ | ⬜ | Stufe B, A mit `--strict-f32` |
+| Perl | ✅ | ✅ | ⬜ | ⬜ | Stufe B, A mit `--strict-f32` |
 
 **Alle acht Sprachen bestehen `bench/run.py conformance`.** Sechs davon
 bit-exakt gegen die C-Referenz über Grid- *und* Agenten-Prüfsumme, bei
@@ -42,6 +42,11 @@ Dieselbe Simulation, `medium` (2048², 1 M Agenten), 100 Ticks:
 | V — SIMD | C, AVX-512 | 4376 | 1.1× |
 | P — 16 Threads | C, pthreads, `binned` | 588 | 8× |
 | G — GPU | CUDA, RTX 5080 | **50** | **99×** |
+
+Klasse P gibt es in allen sieben Sprachen, alle bit-identisch zum seriellen
+Lauf:
+
+![Skalierung über Sprachen](docs/charts/scaling-langs.svg)
 
 ## Schnellstart
 

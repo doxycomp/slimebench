@@ -33,6 +33,10 @@ module Sim
   , defaultConfig
   , newSim
   , tick
+  , agentRange
+  , diffuseRows
+  , mergeRows
+  , swapBuffers
   , hashGrid
   , hashAgents
   , dirtableHashRuntime
@@ -256,7 +260,17 @@ tick sim@Sim{..} = do
 
 -- | SPEC-1 section 5.3.
 agentPass :: Sim -> IO ()
-agentPass Sim{..} = do
+agentPass sim = agentRange sim 0 (cfgAgents (simCfg sim)) Nothing
+
+-- | SPEC-1 section 5.3 over agents @[lo, hi)@.
+--
+-- With @Just aidx@ the deposit is /not/ applied; the target cell is recorded
+-- in @aidx[i]@ for a later phase to apply in a chosen order. That is what
+-- class P's @binned@ reduction needs, and it is the only thing the threaded
+-- caller does differently -- everything above it has to stay identical, or the
+-- threaded run stops being the same simulation.
+agentRange :: Sim -> Int -> Int -> Maybe (IOUArray Int Int) -> IO ()
+agentRange Sim{..} !lo !hi !mAidx = do
   grid <- readIORef simGrid
   target <- case simDep of
     Just dep -> pure dep
@@ -281,7 +295,7 @@ agentPass Sim{..} = do
 
       go :: Int -> IO ()
       go !i
-        | i >= cfgAgents = pure ()
+        | i >= hi = pure ()
         | otherwise = do
             !d0 <- unsafeRead simAdir i
             !x0 <- unsafeRead simAx i
@@ -311,22 +325,57 @@ agentPass Sim{..} = do
                 !iy = truncate y .&. ymask
                 !idx = (iy `shiftL` log2w) .|. ix
 
-            !cur <- unsafeRead target idx
-            unsafeWrite target idx (cur + cfgDeposit)
+            case mAidx of
+              Nothing -> do
+                !cur <- unsafeRead target idx
+                unsafeWrite target idx (cur + cfgDeposit)
+              Just aidx -> unsafeWrite aidx i idx
             unsafeWrite simAdir i d
             unsafeWrite simAx i x
             unsafeWrite simAy i y
             go (i + 1)
-  go 0
+  go lo
 
 -- | SPEC-1 section 5.4. Summation order is normative -- do not reorder.
 diffusePass :: Sim -> IO ()
-diffusePass Sim{..} = do
+diffusePass sim = diffuseRows sim 0 (cfgHeight (simCfg sim)) >> swapBuffers sim
+
+-- | Exchange the two grid buffers. Separate from 'diffuseRows' because the
+-- threaded path swaps once for the whole pool, not once per row block.
+swapBuffers :: Sim -> IO ()
+swapBuffers Sim{..} = do
+  src <- readIORef simGrid
+  dst <- readIORef simScratch
+  writeIORef simGrid dst
+  writeIORef simScratch src
+
+-- | Fold @dep@ into @grid@ over rows @[y0, y1)@ and clear it.
+mergeRows :: Sim -> Int -> Int -> IO ()
+mergeRows Sim{..} !y0 !y1 = case simDep of
+  Nothing -> pure ()
+  Just dep -> do
+    grid <- readIORef simGrid
+    let !lo = y0 `shiftL` simLog2w
+        !hi = y1 `shiftL` simLog2w
+        go !i
+          | i >= hi = pure ()
+          | otherwise = do
+              !g <- unsafeRead grid i
+              !d <- unsafeRead dep i
+              unsafeWrite grid i (g + d)
+              unsafeWrite dep i 0.0
+              go (i + 1)
+    go lo
+
+-- | SPEC-1 section 5.4 over rows @[y0, y1)@, writing into @scratch@ without
+-- swapping. Output cells are independent, so splitting the row range across
+-- threads is unconditionally bit-identical.
+diffuseRows :: Sim -> Int -> Int -> IO ()
+diffuseRows Sim{..} !y0 !y1 = do
   src <- readIORef simGrid
   dst <- readIORef simScratch
   let Config{..} = simCfg
       !w = cfgWidth
-      !h = cfgHeight
       !log2w = simLog2w
       !xmask = simXmask
       !ymask = simYmask
@@ -337,7 +386,7 @@ diffusePass Sim{..} = do
       {-# INLINE row #-}
 
       goY !y
-        | y >= h = pure ()
+        | y >= y1 = pure ()
         | otherwise = do
             let !rowm = row (y - 1)
                 !row0 = y `shiftL` log2w
@@ -368,9 +417,7 @@ diffusePass Sim{..} = do
                       goX (x + 1)
             goX 0
             goY (y + 1)
-  goY 0
-  writeIORef simGrid dst
-  writeIORef simScratch src
+  goY y0
 
 -- ---- checksums (SPEC-1 section 6) ----------------------------------------
 

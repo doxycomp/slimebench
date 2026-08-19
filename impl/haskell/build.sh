@@ -80,7 +80,11 @@ if ! ls /usr/lib/*/libgmp.so >/dev/null 2>&1 && ! ls /usr/lib/libgmp.so >/dev/nu
   fi
 fi
 
+# -threaded for class P. -rtsopts lets the binary accept +RTS -N, and the
+# default stays -N1 so class S is never accidentally measured on a
+# multi-capability runtime.
 ghc "${OPT[@]}" \
+    -threaded -rtsopts "-with-rtsopts=-N1" \
     -Wall -Wno-unused-imports \
     -isrc -outputdir "$OUT/obj" -o "$OUT/slimebench" \
     "${LINKDIRS[@]}" \

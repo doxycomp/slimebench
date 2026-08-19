@@ -371,6 +371,87 @@ amortisieren.
 Präfixsumme, die vorher als „serielle O(T²)-Sektion" im Verdacht stand,
 leistet 0,000 ms messbare Arbeit.
 
+### Alle sieben Sprachen
+
+`medium` (2048², 1 048 576 Agenten), 100 Ticks, `binned` bzw. das jeweils beste
+Äquivalent. Perl steht bei `tiny`, weil `medium` dort Stunden dauern würde —
+seine Zahl ist die Form der Kurve, kein Quervergleich.
+
+![Skalierung über Sprachen](charts/scaling-langs.svg)
+
+| Sprache | Mechanismus | 1 Thread | bester | bei T | Speedup |
+|---|---|---:|---:|:-:|---:|
+| C | pthreads | 5233 | **635** | 32 | 8.2× |
+| Haskell | `forkOn`, `-threaded` | 5339 | **741** | 16 | 7.2× |
+| Rust | `std::thread::scope` | 6808 | 1007 | 16 | 6.8× |
+| TypeScript | `worker_threads` + SAB | 13345 | 1190 | 16 | **11.2×** |
+| C++ | `std::jthread` | 5659 | 674 | 32 | 8.4× |
+| Python | `multiprocessing` + `shared_memory` | 7857 | 1888 | 16 | 4.2× |
+| Perl ¹ | `fork` + Pipes | 4141 | 1568 | 8 | 2.6× |
+
+¹ `tiny` (512², 65 536 Agenten), 20 Ticks.
+
+**Alle sieben sind bit-identisch zum jeweils seriellen Lauf**, und die fünf mit
+`private`-Strategie liefern bei `--deposit 0.1` und T=4 sogar denselben
+*falschen* Hash `0xE82B2012`. Dieselbe Klammerung, derselbe Fehler, fünf
+Sprachen — das ist ein besserer Beleg dafür, dass die Ports dieselbe Rechnung
+machen, als es die richtigen Ergebnisse allein wären.
+
+Vier Beobachtungen, die sich nicht aus der Klasse-S-Tabelle vorhersagen ließen:
+
+**TypeScript skaliert am besten, obwohl es in Klasse S dreimal so langsam ist.**
+Der Abstand zu C schrumpft von 3.0× auf 1.6×. Und `binned` ist dort bei *zwei*
+Threads schon 2.9× schneller als ein Thread — das ist nicht die Parallelität,
+sondern die Lokalität: bei gleicher Thread-Zahl schlägt `binned` die
+`private`-Strategie um 1.56×, in C nur um 1.15×. Die Zielzellen sequenziell in
+`aidx` zu schreiben und sie danach zeilenblockweise anzuwenden ersetzt ein
+gestreutes Read-Modify-Write über 16 MiB durch einen sequenziellen Write plus
+einen sortierten. In V8 ist das viel mehr wert als in C.
+
+**Haskell holt C ein.** 741 ms gegen 729 ms bei 16 Threads, nach der
+`unsafeAt`-Korrektur aus §4. Die Barriere ist `MVar`-basiert, nicht STM: die
+STM-Variante liest sich schöner (`retry` blockiert, bis der Generationszähler
+sich ändert), aber jeder Wartende validiert seine Transaktion bei jedem
+Aufwachen neu, und bei sechs Barrieren pro Tick ist das ein Retry-Sturm.
+
+**Python zahlt für den GIL mit Prozessen.** `threading` würde genau die
+Schleifen serialisieren, um die es geht — numpy gibt den GIL in großen
+ufunc-Aufrufen frei, aber der Agenten-Pass ist eine Kette von Dutzenden
+kleiner, mit Python-Code dazwischen, und der hält das Lock. Also
+`multiprocessing` über einen `shared_memory`-Block, jedes Array von Hand
+platziert. Der Nebeneffekt: die Barriere ist ein OS-Objekt und kostet
+Zehner-Mikrosekunden statt Hunderter-Nanosekunden — in C wäre das der
+Flaschenhals, hier verschwindet es in einem Tick von 19 ms. Die langsamste
+Implementierung kann sich die teuerste Barriere leisten.
+
+**Perl hat Threads, und sie sind hier das falsche Werkzeug.** Gemessen auf
+dieser Maschine, für 262 144 Elemente:
+
+| Operation | einfaches Array | `threads::shared` | Faktor |
+|---|---:|---:|---:|
+| sequenzielles Read-Modify-Write | 4.5 ms | 78.2 ms | 17× |
+| zufälliges Read-Modify-Write | 13.9 ms | 105.7 ms | **7.6×** |
+| `pack`+`unpack` derselben Werte | 12.0 ms | – | – |
+
+Der Diffusionsstencil liest neun Zellen pro Ausgabezelle. Ein geteiltes Grid
+müsste also erst Faktor 7.6 aufholen, bevor der erste Thread etwas beiträgt —
+das kann nicht gewinnen. Ein ganzer Block durch `pack`/`unpack` kostet dagegen
+etwa so viel wie *ein* Durchlauf über ein normales Array. Also `fork` mit
+privaten Grids, und über die Pipes läuft nur gepacktes Binär.
+
+Das erzwingt eine dritte Reduktionsstrategie, die
+[SPEC §5.6](../spec/SPEC.md) nicht kennt: **repliziert**. Jeder Prozess wendet
+*jeden* Deposit an, in aufsteigendem Agentenindex — also exakt die serielle
+Kette, bit-identisch für jede Prozesszahl, ohne den `binned`-Sort. Der Preis
+ist, dass Deposit- und Merge-Pass N-mal statt einmal laufen, und genau das
+deckelt den Speedup bei 2.6×: parallel ist nur der Agenten-Pass.
+
+Ein Fehler auf dem Weg dorthin, den die Prüfsummen gefangen haben: ich habe das
+Grid als `pack('f<*')` durch die Pipe geschickt. In Stufe A ist das verlustfrei,
+weil dort ohnehin alle Werte f32 sind — in Stufe B hält ein Perl-Skalar aber
+einen Double, und das rundete einmal pro Tick das ganze Grid. Stufe A war
+grün, Stufe B nicht. `d<` behebt es, für die doppelte Bytezahl.
+
 ### C (pthreads) gegen C++ (`std::jthread`)
 
 Dieselbe Strategie, andere Sprachmittel:

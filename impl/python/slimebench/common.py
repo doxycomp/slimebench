@@ -28,6 +28,7 @@ class Config:
     warmup: int = 0
     seed: int = 12345
     threads: int = 1
+    deposit_reduce: str = "binned"
     update: str = "serial"
     sensor_dist: float = 9.0
     step: float = 1.0
@@ -67,6 +68,8 @@ def parse_args(argv: list[str] | None = None) -> Opts:
     p.add_argument("--warmup", type=int)
     p.add_argument("--seed", type=int)
     p.add_argument("--threads", type=int)
+    p.add_argument("--deposit-reduce", dest="deposit_reduce",
+                   choices=("private", "binned"))
     p.add_argument("--update", choices=["serial", "deferred"])
     p.add_argument("--sensor-dist", type=float)
     p.add_argument("--sensor-steps", type=int)
@@ -93,7 +96,8 @@ def parse_args(argv: list[str] | None = None) -> Opts:
         if getattr(a, name) is not None:
             setattr(c, name, getattr(a, name))
             c.preset = "custom"
-    for name in ("ticks", "warmup", "seed", "threads", "update", "sensor_dist",
+    for name in ("ticks", "warmup", "seed", "threads", "deposit_reduce",
+                 "update", "sensor_dist",
                  "sensor_steps", "rot_steps", "step", "deposit", "decay", "hash_every"):
         v = getattr(a, name)
         if v is not None:

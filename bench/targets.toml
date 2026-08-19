@@ -384,6 +384,105 @@ compilers = ["ghc"]
 profiles  = ["o2-vector", "o2-llvm-vector"]
 updates  = ["deferred"]
 
+[[target]]
+# GHC -threaded with forkOn, one capability per worker. The binary calls
+# setNumCapabilities itself from --threads, so no +RTS -N is needed here.
+id       = "haskell-par-binned"
+lang     = "Haskell"
+backend  = "forkOn/binned"
+class    = "P"
+dir      = "impl/haskell"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["ghc"]
+profiles  = ["o2-llvm"]
+updates  = ["deferred"]
+extra_args = ["--deposit-reduce", "binned"]
+skip_conformance = true
+
+[[target]]
+id       = "haskell-par-private"
+lang     = "Haskell"
+backend  = "forkOn/private"
+class    = "P"
+dir      = "impl/haskell"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["ghc"]
+profiles  = ["o2-llvm"]
+updates  = ["deferred"]
+extra_args = ["--deposit-reduce", "private"]
+skip_conformance = true
+
+[[target]]
+# CPython 3.12 has a GIL, so this is multiprocessing over one shared_memory
+# block rather than threads. See impl/python/slimebench_mp.py.
+id       = "python-par-binned"
+lang     = "Python"
+backend  = "mp/binned"
+class    = "P"
+dir      = "impl/python"
+build    = ""
+binary   = "slimebench_numpy.py"
+run      = ["python3", "{binary}"]
+compilers = ["python3"]
+profiles  = ["default"]
+updates  = ["deferred"]
+extra_args = ["--deposit-reduce", "binned"]
+skip_conformance = true
+
+[[target]]
+id       = "python-par-private"
+lang     = "Python"
+backend  = "mp/private"
+class    = "P"
+dir      = "impl/python"
+build    = ""
+binary   = "slimebench_numpy.py"
+run      = ["python3", "{binary}"]
+compilers = ["python3"]
+profiles  = ["default"]
+updates  = ["deferred"]
+extra_args = ["--deposit-reduce", "private"]
+skip_conformance = true
+
+[[target]]
+# fork + pipes, not ithreads: threads::shared costs 7.6x per random access on
+# this machine, which the deposit and diffusion passes could never earn back.
+# The reduction is replicated rather than partitioned, which makes it exactly
+# the serial chain for any process count. See impl/perl/slimebench.pl.
+id       = "perl-par"
+lang     = "Perl"
+backend  = "fork/replicated"
+class    = "P"
+dir      = "impl/perl"
+build    = ""
+binary   = "slimebench.pl"
+run      = ["perl", "{binary}"]
+compilers = ["perl"]
+profiles  = ["default"]
+updates  = ["deferred"]
+tier     = "B"
+conformance_set = "micro"
+skip_conformance = true
+
+[[target]]
+id       = "perl-par-strict"
+lang     = "Perl"
+backend  = "fork/replicated-strict"
+class    = "P"
+dir      = "impl/perl"
+build    = ""
+binary   = "slimebench.pl"
+run      = ["perl", "{binary}"]
+compilers = ["perl"]
+profiles  = ["default"]
+updates  = ["deferred"]
+extra_args = ["--strict-f32"]
+skip_conformance = true
+
 # ------------------------------------------------------------------- class G
 
 [[target]]
