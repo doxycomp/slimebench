@@ -34,3 +34,6 @@ impl/haskell/.ghc.environment.*
 
 # Built by impl/shim/build.sh for the Perl raylib frontend.
 impl/shim/*.so
+
+# Go build output.
+impl/go/build/

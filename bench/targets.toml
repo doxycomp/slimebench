@@ -592,6 +592,53 @@ compilers = ["perl"]
 profiles  = ["default"]
 headless_capable = false
 
+# ---------------------------------------------------------------------- Go
+
+[[target]]
+id       = "go"
+lang     = "Go"
+backend  = "headless"
+class    = "S"
+dir      = "impl/go"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["go"]
+# `nobounds` is -gcflags=all=-B, the closest Go has to Rust's unchecked
+# feature -- a compiler flag rather than a language construct, and documented
+# as unsupported. It is here to price the checks, not to ship.
+profiles  = ["default", "nobounds"]
+
+[[target]]
+id       = "go-par-binned"
+lang     = "Go"
+backend  = "goroutines/binned"
+class    = "P"
+dir      = "impl/go"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["go"]
+profiles  = ["default"]
+updates  = ["deferred"]
+extra_args = ["--deposit-reduce", "binned"]
+skip_conformance = true
+
+[[target]]
+id       = "go-par-private"
+lang     = "Go"
+backend  = "goroutines/private"
+class    = "P"
+dir      = "impl/go"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["go"]
+profiles  = ["default"]
+updates  = ["deferred"]
+extra_args = ["--deposit-reduce", "private"]
+skip_conformance = true
+
 # ------------------------------------------------------------------- class G
 
 [[target]]
