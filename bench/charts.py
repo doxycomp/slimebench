@@ -410,6 +410,29 @@ def chart_scaling_langs() -> None:
                    series, "threads / processes", "speedup vs 1", ideal=True)
 
 
+def chart_render() -> None:
+    """Class R: six languages, two backends, two renderers."""
+    rows = load("Q-render-all.jsonl")
+    if not rows:
+        return
+    order = ["c", "cpp", "haskell", "rust", "python", "perl"]
+    gpu = [r for r in rows if "D3D12" in r.get("renderer", "")]
+    bars = []
+    for impl in order:
+        for be in ("sdl2", "pygame", "raylib"):
+            r = next((x for x in gpu if x["impl"] == impl and x["backend"] == be), None)
+            if not r:
+                continue
+            # Perl is off the scale of everything else; the log axis carries it.
+            label = f"{impl} {be}"
+            bars.append(Bar(label, r["ms_render_median"], PALETTE.get(impl, ACCENT)))
+    if bars:
+        hbar_chart(OUT / "render.svg",
+                   "Class R: the pixel format decides, not the language",
+                   "1024x1024, --freeze-sim, RTX 5080 via Mesa D3D12. Log scale.",
+                   bars, "ms per frame (log)", log=True)
+
+
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     print("charts:")
@@ -419,6 +442,7 @@ def main() -> int:
     chart_classes()
     chart_haskell_style()
     chart_scaling_langs()
+    chart_render()
     return 0
 
 

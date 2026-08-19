@@ -17,13 +17,13 @@ Simulation läuft, und einem Harness für Performance- und Footprint-Vergleiche
 |---|:-:|:-:|:-:|:-:|:-:|
 | C | ✅ | ✅ | ✅ | ✅ | Stufe A (Referenz) |
 | C++ | ✅ | ✅ | ✅ | ✅ | Stufe A |
-| Rust (safe + unchecked) | ✅ | ✅ | ⬜ | ⬜ | Stufe A |
-| Haskell (2 Stile) | ✅ | ✅ | ⬜ | ⬜ | Stufe A |
+| Rust (safe + unchecked) | ✅ | ✅ | ✅ | ✅ | Stufe A |
+| Haskell (2 Stile) | ✅ | ✅ | ✅ | ✅ | Stufe A |
 | TypeScript / Node | ✅ | ✅ | — | — | Stufe A |
 | TypeScript / Canvas | — | — | ✅ Browser | — | Stufe A |
-| Python / numpy | ✅ | ✅ | ⬜ | ⬜ | Stufe A, nur `deferred` |
-| Python / pur | ✅ | — | ⬜ | ⬜ | Stufe B, A mit `--strict-f32` |
-| Perl | ✅ | ✅ | ⬜ | ⬜ | Stufe B, A mit `--strict-f32` |
+| Python / numpy | ✅ | ✅ | ✅ pygame | ✅ | Stufe A, nur `deferred` |
+| Python / pur | ✅ | — | — | — | Stufe B, A mit `--strict-f32` |
+| Perl | ✅ | ✅ | ✅ | ✅ | Stufe B, A mit `--strict-f32` |
 
 **Alle acht Sprachen bestehen `bench/run.py conformance`.** Sechs davon
 bit-exakt gegen die C-Referenz über Grid- *und* Agenten-Prüfsumme, bei

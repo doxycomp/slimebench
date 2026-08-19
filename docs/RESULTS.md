@@ -52,12 +52,19 @@ und `H-gpu`) an verschiedenen Tagen. Die Spannweite ist die Lauf-zu-Lauf-Streuun
 auf einer Maschine, auf der auch Windows läuft — Vergleiche werden deshalb
 immer innerhalb einer Reihe gezogen, nie über Reihen hinweg.
 
-Die drei Ergebnisse, die ich vorher nicht erwartet hätte:
+Die vier Ergebnisse, die ich vorher nicht erwartet hätte:
 
-- **Bit-Exaktheit reicht bis auf die GPU.** CUDA liefert exakt dieselben
-  Prüfsummen wie die C-Referenz — Grid *und* Agenten. Ebenso SIMD, ebenso alle
-  16 Thread-Zahlen der `binned`-Reduktion. Die Spec hatte für SIMD und GPU
-  jeweils das Gegenteil angenommen.
+- **Bit-Exaktheit reicht bis auf die GPU — und durch jede Parallelisierung.**
+  CUDA liefert exakt dieselben Prüfsummen wie die C-Referenz, Grid *und*
+  Agenten. Ebenso SIMD, ebenso Klasse P in **allen sieben Sprachen**, für jede
+  Thread-Zahl. Und die fünf Ports mit `private`-Strategie liefern bei
+  `--deposit 0.1` sogar denselben *falschen* Hash — dieselbe Klammerung,
+  derselbe Fehler, fünf Sprachen.
+- **Was schnell ist, hängt von der Klasse ab.** TypeScript ist in Klasse S
+  dreimal langsamer als C und skaliert in Klasse P am besten von allen (11.2×).
+  Haskell liegt in Klasse S bei 2.2× und trifft in Klasse P und in Klasse R
+  jeweils C. Eine Sprachrangliste aus einer Klasse überträgt sich nicht auf die
+  nächste.
 - **Perl und reines Python liegen 0,9 % auseinander.** Zwei unabhängig
   entwickelte Interpreter, dieselbe Schleife, praktisch dieselbe Zeit.
 - **Fast jede „offensichtliche" Optimierung hat verloren.** PGO, die parallele
@@ -620,35 +627,86 @@ Sackgassen-Agenten ihren PRNG-Strom weiterdrehen dürfen.
 
 ## 8. Rendering (Klasse R)
 
-1024², 300 Frames, `--freeze-sim` (Simulation angehalten, damit nur der
-Upload-Pfad Grid → Textur → Bildschirm gemessen wird).
+1024², 300 Frames (Perl 20), `--freeze-sim` — die Simulation ist angehalten,
+sodass nur der Upload-Pfad Grid → Textur → Bildschirm gemessen wird.
 
-| Sprache | Backend | llvmpipe | RTX 5080 (D3D12) |
-|---|---|---:|---:|
-| C | SDL2 | 3.166 ms | **5.134 ms** |
-| C++ | SDL2 | 3.126 ms | 4.638 ms |
-| C | raylib | 2.217 ms | 2.329 ms |
-| C++ | raylib | 2.299 ms | 2.220 ms |
+![Rendering](charts/render.svg)
 
-**raylib ist auf der echten GPU 2,1× schneller als SDL2**, auf Software 1,4×.
-C und C++ sind ununterscheidbar.
+Millisekunden pro Frame, Median:
 
-Die Ursache ist das Pixelformat, nicht die Bibliothek: raylib nimmt den
+| Sprache | Bindung | SDL2 (llvmpipe) | SDL2 (RTX 5080) | raylib (llvmpipe) | raylib (RTX 5080) |
+|---|---|---:|---:|---:|---:|
+| C | direkt | 2.919 | 4.266 | 2.007 | 2.059 |
+| C++ | direkt | 2.903 | 4.389 | 2.031 | **1.912** |
+| Haskell | `sdl2` / `foreign import` | **2.755** | 4.299 | 2.008 | 1.948 |
+| Rust | `sdl2` / `raylib` crate | 3.055 | 4.600 | 2.088 | 1.991 |
+| Python | pygame / cffi | 5.022 | 4.978 | 4.570 | 4.579 |
+| Perl | FFI::Platypus | 118.5 | 119.3 | 78.5 | 78.5 |
+
+**raylib gewinnt überall, und auf der echten GPU deutlicher:** 1.4× auf
+Software, **2.2×** auf der RTX 5080, in jeder kompilierten Sprache. Die Ursache
+ist das Pixelformat, nicht die Bibliothek — raylib nimmt den
 8-Bit-Graustufenpuffer direkt entgegen (`UNCOMPRESSED_GRAYSCALE`), SDL2 braucht
-`ARGB8888` und damit eine Expansionsschleife über eine Million Pixel pro Frame.
+ARGB8888 und damit eine Expansionsschleife über eine Million Pixel pro Frame.
 
-Das überraschende Detail: **SDL2 ist auf der GPU langsamer als auf dem
-Software-Rasterizer**, raylib auf beiden gleich schnell. Beide Pfade sind bei
-1024² also CPU-gebunden — die GPU ist gar nicht der Flaschenhals. SDL2 zahlt
-auf D3D12 zusätzlich für den `SDL_LockTexture`-Pfad durch die
+**Die vier kompilierten Sprachen liegen auf raylib innerhalb von 9 %
+beieinander** (1.91–2.09 ms). Haskell trifft C, Rust liegt 4 % dahinter. Wenn
+das Backend und das Pixelformat feststehen, ist die Sprache in dieser Klasse
+fast egal — was der interessanteste Befund der Tabelle ist, weil er dem
+Klasse-S-Bild widerspricht.
+
+**SDL2 ist auf der echten GPU langsamer als auf dem Software-Rasterizer**, und
+zwar in allen vier kompilierten Sprachen (2.9 → 4.3 ms), während raylib auf
+beiden gleich schnell bleibt. Beide Pfade sind bei 1024² CPU-gebunden; SDL2
+zahlt auf D3D12 zusätzlich für den `SDL_LockTexture`-Pfad durch die
 Übersetzungsschicht. Für eine GPU-limitierte Messung bräuchte es ein deutlich
 größeres Grid.
 
-> **Korrektur:** Eine frühere Fassung dieses Dokuments meldete nur die
-> llvmpipe-Zahlen, ohne zu wissen, dass WSL2 unter Linux standardmäßig keine
-> GPU für OpenGL bereitstellt. Der Vergleich SDL2 vs. raylib war gültig, die
-> absoluten Zahlen waren keine GPU-Zahlen. Beide Messreihen stehen jetzt
-> nebeneinander, und die Binaries drucken ihren Renderer-String.
+### Was die Bindung kostet
+
+**Haskell ist auf SDL2 die schnellste Sprache** (2.755 gegen C's 2.919). Das
+ist kein Haskell-Wunder, sondern eine API-Wahl: das `sdl2`-Paket exponiert
+`SDL_UpdateTexture`, die C- und Rust-Frontends benutzen
+`SDL_LockTexture`/`Unlock`. Innerhalb von SDL2 macht diese Entscheidung so viel
+aus wie die Sprache.
+
+**Python liegt 2.3× zurück, und der Backend-Unterschied verschwindet fast**
+(5.02 gegen 4.57). Der Frame wird von der numpy-Konvertierung dominiert, nicht
+vom Upload. Auffällig ist das p99 von **1090 ms** bei pyray — ein Ausreißer
+pro Lauf, konsistent reproduzierbar, vermutlich die erste Texturübertragung
+plus eine GC-Pause; der Median ist davon unberührt.
+
+**Perl liegt 40–60× zurück, zeigt den Backend-Unterschied aber am
+deutlichsten** (118 gegen 78 ms). Hier hatte ich das Gegenteil erwartet: wenn
+die Konvertierung den Frame dominiert, sollten beide Backends gleich
+herauskommen, wie bei Python. Sie tun es nicht, weil die Konvertierung *selbst*
+der Unterschied ist — raylib will ein Byte pro Pixel (`pack 'C*'`), SDL2 ein
+geschobenes und verodertes 32-Bit-Wort (`pack 'L*'`), und in Perl kostet diese
+Arithmetik mehr als alles andere im Frame zusammen. Dieselbe Ursache wie in C,
+vierhundertmal langsamer.
+
+### Zwei Bindungen, die nicht das Naheliegende sind
+
+Für **Haskell/raylib** und **Perl/raylib** steht nicht das jeweilige
+Ökosystem-Paket im Baum (`h-raylib`, `Raylib::FFI`), sondern
+`foreign import ccall` bzw. `FFI::Platypus` gegen dasselbe
+`/usr/local/lib/libraylib.so`, das C, C++, Rust und Python linken. Grund: beide
+Pakete vendorn raylib und bauen eine eigene Kopie. Damit verglichen man eine
+Sprache gegen einen *anderen Build* der Bibliothek, und Klasse R soll die
+Sprache vergleichen.
+
+Beide stoßen dabei auf dieselbe Grenze: raylib übergibt `Image`, `Texture2D`
+und `Color` **by value**, was weder Haskells FFI noch Platypus kann. Die fünf
+betroffenen Aufrufe gehen deshalb durch
+[`impl/shim/raylib_shim.c`](../impl/shim/raylib_shim.c) — 30 Zeilen C, von
+beiden geteilt. Dass zwei so verschiedene Sprachen an derselben Stelle denselben
+Workaround brauchen, ist selbst ein Datenpunkt über C-ABIs.
+
+Ein Fehler dabei, den ein Segfault in Frame eins gefunden hat: Perls
+`pack 'P'` nimmt die Adresse des Puffers eines Skalars **zum Zeitpunkt des
+Packens**. Der Pixelpuffer wird jeden Frame neu geschrieben, die erste
+Reallokation ließ raylib in freigegebenen Speicher lesen. `scalar_to_buffer`
+mit einer pro Frame frisch geholten Adresse behebt es.
 
 ---
 
@@ -759,7 +817,12 @@ gehört dokumentiert, sonst liest sich das Projekt fehlerfreier als es war.
 | PGO ist der plausibelste verbleibende Gewinn | Bringt nichts, schadet clang. |
 | `prefix` ist eine serielle O(T²)-Bremse | 0,000 ms Arbeit. War ein Artefakt meiner Instrumentierung, die Arbeit und Barrierenwartezeit summierte. |
 | wgpu/WGSL als portabler GPU-Weg | Unter WSL2 nicht gangbar: die NVIDIA-Vulkan-ICDs zeigen auf Windows-DLLs. |
-| Die Klasse-R-Zahlen sind GPU-Zahlen | Waren Software-Rendering (§7). |
+| Die Klasse-R-Zahlen sind GPU-Zahlen | Waren Software-Rendering (§8). |
+| Idiomatisches Haskell kostet wenig | 3.3× auf dieser Last (§4). |
+| Der Haskell-Port ist so schnell, wie er sein kann | Vier Zeichen (`(!)` → `unsafeAt`) waren Faktor 1.45 (§4). |
+| Perls Threads sind der Weg zu Klasse P | `threads::shared` kostet 7.6× pro Zugriff; `fork` mit gepackten Pipes gewinnt (§5). |
+| In Perl kostet die Konvertierung so viel, dass beide Render-Backends gleich herauskommen | Die Konvertierung *ist* der Unterschied: raylib 1.5× schneller (§8). |
+| Klasse R vergleicht Sprachen | Auf raylib liegen vier kompilierte Sprachen innerhalb von 9 %. Verglichen wird das Pixelformat (§8). |
 
 Ein Muster: **jede Vermutung über Performance, die ich nicht gemessen habe,
 war falsch.** Die Vermutungen über *Korrektheit* — Operationsreihenfolge,
@@ -769,14 +832,23 @@ Trig-Tabelle, PRNG-Wahl — haben dagegen alle gehalten.
 
 ## 12. Offene Punkte
 
-- **Klasse P** fehlt in Rust, Haskell, TypeScript, Python und Perl.
-  TypeScript mit Worker + `SharedArrayBuffer` ist der einzige Datenpunkt,
-  dessen Ausgang ich nicht vorhersagen kann.
-- **Klasse R** fehlt für Rust, Haskell, Python und Perl.
 - **Klasse G aus einer zweiten Sprache** würde die Behauptung „Klasse G misst
   nicht die Sprache" direkt belegen, statt sie nur zu argumentieren.
 - **Ein größeres GPU-Preset.** `medium` lastet die RTX 5080 nicht aus; die
-  echte Obergrenze ist noch unbekannt.
+  echte Obergrenze ist noch unbekannt. Dasselbe gilt für Klasse R: bei 1024²
+  sind beide Render-Pfade CPU-gebunden, eine GPU-limitierte Messung bräuchte
+  ein deutlich größeres Grid.
+- **Klasse P für reines Python.** Mit `multiprocessing` würde es fast linear
+  skalieren — aber bei `medium` wären das Stunden pro Datenpunkt. Ein
+  freithreadiges CPython (3.13t) wäre der interessantere Vergleich und ist auf
+  dieser Maschine nicht installiert.
+- **Die Klasse-S-Tabelle in §2 ist vor der `unsafeAt`-Korrektur gemessen.**
+  Haskell steht dort 1.45× zu schlecht. Wird beim nächsten vollen Matrixlauf
+  ersetzt.
 - **`perf`** ist unter dem WSL2-Kernel nicht verfügbar (kein passendes
   `linux-tools`-Paket). Die Phasen-Timer und `hyperfine` ersetzen es
   teilweise, aber Cache-Miss-Zahlen fehlen.
+- **Alles hier ist WSL2**, nicht natives Linux. Die GL-Zahlen messen dadurch
+  Mesas D3D12-Übersetzung mit; die CPU-Zahlen laufen auf einer Maschine, auf
+  der nebenher Windows arbeitet. Beides ist bei jedem Vergleich innerhalb einer
+  Messreihe unkritisch und bei Absolutwerten zu bedenken.

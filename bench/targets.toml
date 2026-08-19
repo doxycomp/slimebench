@@ -483,6 +483,115 @@ updates  = ["deferred"]
 extra_args = ["--strict-f32"]
 skip_conformance = true
 
+[[target]]
+id       = "rust-sdl2"
+lang     = "Rust"
+backend  = "sdl2"
+class    = "R"
+dir      = "impl/rust"
+build    = "bash build.sh {profile}"
+binary   = "target/release/slimebench-sdl2"
+run      = ["{binary}"]
+compilers = ["cargo"]
+profiles  = ["render-sdl2"]
+headless_capable = false
+
+[[target]]
+id       = "rust-raylib"
+lang     = "Rust"
+backend  = "raylib"
+class    = "R"
+dir      = "impl/rust"
+build    = "bash build.sh {profile}"
+binary   = "target/release/slimebench-raylib"
+run      = ["{binary}"]
+compilers = ["cargo"]
+profiles  = ["render-raylib"]
+headless_capable = false
+
+[[target]]
+id       = "haskell-sdl2"
+lang     = "Haskell"
+backend  = "sdl2"
+class    = "R"
+dir      = "impl/haskell"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench-sdl2"
+run      = ["{binary}"]
+compilers = ["ghc"]
+profiles  = ["o2-sdl2"]
+headless_capable = false
+
+[[target]]
+# foreign import ccall against the system libraylib, plus impl/shim for the
+# five calls that pass a struct by value. h-raylib would vendor its own raylib
+# build and stop this being a language comparison.
+id       = "haskell-raylib"
+lang     = "Haskell"
+backend  = "raylib"
+class    = "R"
+dir      = "impl/haskell"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench-raylib"
+run      = ["{binary}"]
+compilers = ["ghc"]
+profiles  = ["o2-raylib"]
+headless_capable = false
+
+[[target]]
+# pygame is SDL2 with a Python layer on top, so this is the SDL2 column.
+id       = "python-pygame"
+lang     = "Python"
+backend  = "pygame"
+class    = "R"
+dir      = "impl/python"
+build    = ""
+binary   = "slimebench_pygame.py"
+run      = ["python3", "{binary}"]
+compilers = ["python3"]
+profiles  = ["default"]
+headless_capable = false
+
+[[target]]
+id       = "python-raylib"
+lang     = "Python"
+backend  = "raylib"
+class    = "R"
+dir      = "impl/python"
+build    = ""
+binary   = "slimebench_pyray.py"
+run      = ["python3", "{binary}"]
+compilers = ["python3"]
+profiles  = ["default"]
+headless_capable = false
+
+[[target]]
+# FFI::Platypus against the same libSDL2 and libraylib as everyone else.
+id       = "perl-sdl2"
+lang     = "Perl"
+backend  = "sdl2"
+class    = "R"
+dir      = "impl/perl"
+build    = ""
+binary   = "slimebench-render.pl"
+run      = ["perl", "{binary}", "--backend", "sdl2"]
+compilers = ["perl"]
+profiles  = ["default"]
+headless_capable = false
+
+[[target]]
+id       = "perl-raylib"
+lang     = "Perl"
+backend  = "raylib"
+class    = "R"
+dir      = "impl/perl"
+build    = "bash ../shim/build.sh"
+binary   = "slimebench-render.pl"
+run      = ["perl", "{binary}", "--backend", "raylib"]
+compilers = ["perl"]
+profiles  = ["default"]
+headless_capable = false
+
 # ------------------------------------------------------------------- class G
 
 [[target]]

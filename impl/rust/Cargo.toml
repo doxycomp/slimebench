@@ -9,12 +9,32 @@ description = "slimebench Rust implementation (SPEC-1)"
 name = "slimebench"
 path = "src/main.rs"
 
+# The windowed frontends are separate binaries behind features, so the
+# headless target still builds on a machine with no SDL2 and no raylib -- the
+# same split the C Makefile makes with its `headless` / `sdl2` / `raylib`
+# goals.
+[[bin]]
+name = "slimebench-sdl2"
+path = "src/bin/slimebench-sdl2.rs"
+required-features = ["sdl2-frontend"]
+
+[[bin]]
+name = "slimebench-raylib"
+path = "src/bin/slimebench-raylib.rs"
+required-features = ["raylib-frontend"]
+
+[dependencies]
+sdl2 = { version = "0.37", optional = true }
+raylib = { version = "5.5", optional = true }
+
 [features]
 default = []
 # Replace every masked index with get_unchecked. The masks already make the
 # safe checks unreachable; this variant exists to measure what the compiler
 # cannot prove away.
 unchecked = []
+sdl2-frontend = ["dep:sdl2"]
+raylib-frontend = ["dep:raylib"]
 
 [profile.release]
 opt-level = 3

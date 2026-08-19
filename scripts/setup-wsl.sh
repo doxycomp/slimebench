@@ -10,7 +10,8 @@
 #   scripts/setup-wsl.sh render     SDL2 + raylib
 #   scripts/setup-wsl.sh rust
 #   scripts/setup-wsl.sh haskell
-#   scripts/setup-wsl.sh scripting  perl SDL/raylib bindings, python numpy
+#   scripts/setup-wsl.sh scripting  perl, python numpy
+#   scripts/setup-wsl.sh render-bindings  pygame, pyray, FFI::Platypus, shim
 #   scripts/setup-wsl.sh gpu        Vulkan/OpenGL compute prerequisites
 #   scripts/setup-wsl.sh all
 
@@ -132,9 +133,10 @@ setup_haskell() {
     if ls "$ROOT"/impl/haskell/.ghc.environment.* >/dev/null 2>&1; then
       echo "  vector: package environment already present"
     else
-      echo "  installing vector into impl/haskell/.ghc.environment.*"
+      echo "  installing vector + sdl2 into impl/haskell/.ghc.environment.*"
       ( cd "$ROOT/impl/haskell" && cabal update >/dev/null 2>&1
-        cabal install --lib vector array bytestring containers --package-env . )
+        cabal install --lib vector array bytestring containers \
+                       sdl2 text --package-env . )
     fi
   else
     warn "cabal not found; the o2-vector profiles will not build"
@@ -149,6 +151,34 @@ setup_scripting() {
   echo "  perl SDL2 bindings (FFI, needs libsdl2-dev):"
   sudo cpanm --notest FFI::Platypus SDL2::FFI || \
     warn "SDL2::FFI failed -- the Perl headless target does not need it"
+}
+
+setup_render_bindings() {
+  log "render bindings (class R for Python and Perl)"
+
+  # pygame is packaged, raylib-python-cffi is not. Both go into the user site
+  # rather than the system one: Ubuntu marks the system Python
+  # externally-managed (PEP 668) and neither is a system dependency.
+  python3 -m pip install --break-system-packages --user pygame raylib \
+    || warn "pip install failed; the Python class R targets will not run"
+  if python3 -c "import pygame, pyray" 2>/dev/null; then
+    echo "  pygame + pyray: OK"
+  else
+    warn "pygame/pyray not importable"
+  fi
+
+  # Perl binds SDL2 and raylib through FFI::Platypus directly rather than
+  # SDL2::FFI -- see the header of impl/perl/slimebench-render.pl.
+  if have cpanm; then
+    cpanm --local-lib="$HOME/perl5" --notest FFI::Platypus FFI::CheckLib \
+      || warn "cpanm failed; the Perl class R targets will not run"
+    echo '  add to your shell rc:  export PERL5LIB="$HOME/perl5/lib/perl5:$PERL5LIB"'
+  else
+    warn "cpanm not found; install cpanminus for the Perl class R targets"
+  fi
+
+  # The by-value shim the Haskell and Perl raylib frontends share.
+  ( cd "$ROOT/impl/shim" && bash build.sh ) || warn "raylib shim build failed"
 }
 
 setup_gpu() {
@@ -171,11 +201,12 @@ main() {
     render)    setup_render ;;
     rust)      setup_rust ;;
     haskell)   setup_haskell ;;
-    scripting) setup_scripting ;;
+    scripting) setup_scripting; setup_render_bindings ;;
+    render-bindings) setup_render_bindings ;;
     gpu)       setup_gpu ;;
     all)       setup_base; setup_render; setup_rust; setup_haskell
-               setup_scripting; setup_gpu ;;
-    *)         echo "usage: $0 {base|render|rust|haskell|scripting|gpu|all}" >&2
+               setup_scripting; setup_render_bindings; setup_gpu ;;
+    *)         echo "usage: $0 {base|render|rust|haskell|scripting|render-bindings|gpu|all}" >&2
                exit 2 ;;
   esac
   log "done"

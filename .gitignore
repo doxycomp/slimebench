@@ -31,3 +31,6 @@ impl/web/app.js
 # cabal package environment for the idiomatic Haskell target; machine- and
 # GHC-version-specific, created by scripts/setup-wsl.sh haskell.
 impl/haskell/.ghc.environment.*
+
+# Built by impl/shim/build.sh for the Perl raylib frontend.
+impl/shim/*.so

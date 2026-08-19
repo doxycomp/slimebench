@@ -70,7 +70,7 @@ Das ist die Voraussetzung für alles Weitere.
 
 ---
 
-## Phase 4 — Rendering-Backends 🔨
+## Phase 4 — Rendering-Backends ✅
 
 Beide Backends erhalten exakt denselben Graustufen-Puffer; `--freeze-sim`
 hält die Simulation an, damit wirklich nur der Upload-Pfad Grid → Textur →
@@ -80,24 +80,42 @@ Bildschirm gemessen wird.
 |---|---|---|
 | C | ✅ | ✅ |
 | C++ | ✅ | ✅ |
-| Rust | ⬜ `sdl2` crate | ⬜ `raylib` crate |
-| Haskell | ⬜ `sdl2` | ⬜ `h-raylib` |
-| Python | ⬜ `pygame` | ⬜ `raylib-python-cffi` |
-| Perl | ⬜ `SDL2::FFI` | ⬜ `Raylib::FFI` |
+| Rust | ✅ `sdl2` crate | ✅ `raylib` crate |
+| Haskell | ✅ `sdl2` | ✅ `foreign import` + Shim |
+| Python | ✅ `pygame` | ✅ `raylib-python-cffi` |
+| Perl | ✅ `FFI::Platypus` | ✅ `FFI::Platypus` + Shim |
 
-**Ergebnis** (1024², 300 Frames, eingefrorene Simulation): raylib ist auf der
-RTX 5080 **2.1× schneller** als SDL2, auf dem Software-Rasterizer 1.4×. C und
-C++ sind ununterscheidbar. Die Erwartung hat sich bestätigt: es liegt am
-Pixelformat, nicht an der Bibliothek. raylib nimmt den 8-Bit-Graustufenpuffer
-direkt entgegen (`UNCOMPRESSED_GRAYSCALE`), SDL2 braucht ARGB8888 und damit
-eine Expansionsschleife über eine Million Pixel pro Frame.
+Für Haskell/raylib und Perl/raylib steht bewusst nicht das Ökosystem-Paket im
+Baum: `h-raylib` und die Perl-raylib-Distributionen vendorn raylib und bauen
+eine eigene Kopie, womit man eine Sprache gegen einen *anderen Build* der
+Bibliothek vergliche. Beide binden stattdessen dasselbe
+`/usr/local/lib/libraylib.so` wie alle anderen — und stoßen dabei auf dieselbe
+Grenze, weil raylib `Image`, `Texture2D` und `Color` by value übergibt. Die
+fünf betroffenen Aufrufe teilen sich
+[`impl/shim/raylib_shim.c`](../impl/shim/raylib_shim.c).
 
-Die erste Messung lief unbemerkt auf llvmpipe — WSL2 stellt unter Linux
-standardmäßig keine GPU für OpenGL bereit. Beide Reihen stehen jetzt
-nebeneinander in [RESULTS.md §7](RESULTS.md#8-rendering-klasse-r), und die
-Binaries drucken ihren Renderer-String. Überraschend dabei: SDL2 ist auf der
-echten GPU *langsamer* als auf Software — beide Pfade sind bei 1024²
-CPU-gebunden.
+**Ergebnis** (1024², eingefrorene Simulation, RTX 5080, ms/Frame):
+
+| | SDL2 | raylib |
+|---|---:|---:|
+| C | 4.27 | 2.06 |
+| C++ | 4.39 | **1.91** |
+| Haskell | 4.30 | 1.95 |
+| Rust | 4.60 | 1.99 |
+| Python | 4.98 | 4.58 |
+| Perl | 118.5 | 78.5 |
+
+raylib gewinnt überall, auf der GPU um **2.2×**. Es liegt am Pixelformat, nicht
+an der Bibliothek: raylib nimmt den 8-Bit-Graustufenpuffer direkt entgegen,
+SDL2 braucht ARGB8888 und damit eine Expansionsschleife über eine Million
+Pixel pro Frame.
+
+Der eigentliche Befund ist aber, dass **die vier kompilierten Sprachen auf
+raylib innerhalb von 9 % liegen**. Steht das Backend fest, ist die Sprache in
+dieser Klasse fast egal — anders als in Klasse S. Und SDL2 ist auf der echten
+GPU *langsamer* als auf dem Software-Rasterizer, in allen vieren: beide Pfade
+sind bei 1024² CPU-gebunden. Details in
+[RESULTS.md §8](RESULTS.md#8-rendering-klasse-r).
 
 ---
 

@@ -27,6 +27,8 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 PROFILE="${1:-o2}"
 
 MAIN=src/Main.hs
+OUTNAME=slimebench
+EXTRA=()
 case "$PROFILE" in
   o0)             OPT=(-O0) ;;
   o1)             OPT=(-O1) ;;
@@ -34,12 +36,20 @@ case "$PROFILE" in
   o2-llvm)        OPT=(-O2 -fllvm) ;;
   o2-vector)      OPT=(-O2);         MAIN=src/MainVector.hs ;;
   o2-llvm-vector) OPT=(-O2 -fllvm);  MAIN=src/MainVector.hs ;;
+  # Windowed frontends (class R). Separate profiles rather than separate
+  # scripts, so bench/targets.toml drives all of them the same way.
+  o2-sdl2)
+    OPT=(-O2); MAIN=src/MainSDL2.hs; OUTNAME=slimebench-sdl2 ;;
+  o2-raylib)
+    OPT=(-O2); MAIN=src/MainRaylib.hs; OUTNAME=slimebench-raylib
+    EXTRA=(../shim/raylib_shim.c -optl-L/usr/local/lib -lraylib -lm) ;;
   *) echo "unknown profile '$PROFILE'" >&2; exit 2 ;;
 esac
 
-if [ "$MAIN" = src/MainVector.hs ] && ! ls .ghc.environment.* >/dev/null 2>&1; then
-  echo "error: the idiomatic target needs the 'vector' package." >&2
-  echo "       run: cabal install --lib vector --package-env ." >&2
+if { [ "$MAIN" = src/MainVector.hs ] || [ "$MAIN" = src/MainSDL2.hs ]; } \
+   && ! ls .ghc.environment.* >/dev/null 2>&1; then
+  echo "error: this profile needs a package outside GHC's global db." >&2
+  echo "       run: cabal install --lib vector sdl2 --package-env ." >&2
   echo "       (from $PWD; or scripts/setup-wsl.sh haskell)" >&2
   exit 3
 fi
@@ -86,8 +96,9 @@ fi
 ghc "${OPT[@]}" \
     -threaded -rtsopts "-with-rtsopts=-N1" \
     -Wall -Wno-unused-imports \
-    -isrc -outputdir "$OUT/obj" -o "$OUT/slimebench" \
+    -isrc -outputdir "$OUT/obj" -o "$OUT/$OUTNAME" \
     "${LINKDIRS[@]}" \
+    ${EXTRA[@]+"${EXTRA[@]}"} \
     "$MAIN"
 
-echo "built $OUT/slimebench"
+echo "built $OUT/$OUTNAME"

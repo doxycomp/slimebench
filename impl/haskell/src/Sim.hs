@@ -41,6 +41,8 @@ module Sim
   , hashAgents
   , dirtableHashRuntime
   , renderGray
+  , renderGrayPtr
+  , renderArgbPtr
   , gridValues
   , resetTimers
   , readNsAgent
@@ -56,6 +58,8 @@ import Data.Bits (shiftL, shiftR, xor, (.&.), (.|.))
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Word (Word32, Word64, Word8)
 import GHC.Clock (getMonotonicTimeNSec)
+import Foreign.Ptr (Ptr)
+import Foreign.Storable (pokeByteOff)
 import GHC.Float (castFloatToWord32)
 
 import DirTable (cosBits, cosTable, ndir, sinBits, sinTable)
@@ -450,6 +454,51 @@ hashAgents Sim{..} = do
 dirtableHashRuntime :: Word32
 dirtableHashRuntime = foldl step fnvOffset (cosBits ++ sinBits)
   where step !h !b = (h `xor` b) * fnvPrime
+
+-- | SPEC-1 section 11, straight into a caller-supplied buffer.
+--
+-- 'renderGray' returns a list, which is fine for a one-shot dump and useless
+-- at 60 frames a second: a four-million-element @[Word8]@ is four million
+-- cons cells per frame. The windowed frontends poke the bytes instead.
+renderGrayPtr :: Sim -> Float -> Ptr Word8 -> IO ()
+renderGrayPtr Sim{..} !displayMax !dst = do
+  grid <- readIORef simGrid
+  let !cells = cfgWidth simCfg * cfgHeight simCfg
+      !scale = 255.0 / displayMax
+      go !i
+        | i >= cells = pure ()
+        | otherwise = do
+            !v <- unsafeRead grid i
+            let !b = truncate (v * scale) :: Int
+                !c = if b < 0 then 0 else if b > 255 then 255 else b
+            pokeByteOff dst i (fromIntegral c :: Word8)
+            go (i + 1)
+  go 0
+
+-- | The same, expanded to ARGB8888.
+--
+-- SDL2 has no 8-bit greyscale texture, so this loop exists in the SDL2
+-- frontend and not in the raylib one. That asymmetry is the thing class R
+-- measures, so it is written out rather than hidden behind a helper both
+-- backends share.
+renderArgbPtr :: Sim -> Float -> Ptr Word8 -> IO ()
+renderArgbPtr Sim{..} !displayMax !dst = do
+  grid <- readIORef simGrid
+  let !cells = cfgWidth simCfg * cfgHeight simCfg
+      !scale = 255.0 / displayMax
+      go !i
+        | i >= cells = pure ()
+        | otherwise = do
+            !v <- unsafeRead grid i
+            let !b = truncate (v * scale) :: Int
+                !c = fromIntegral (if b < 0 then 0 else if b > 255 then 255 else b) :: Word8
+                !o = i * 4
+            pokeByteOff dst o       c
+            pokeByteOff dst (o + 1) c
+            pokeByteOff dst (o + 2) c
+            pokeByteOff dst (o + 3) (255 :: Word8)
+            go (i + 1)
+  go 0
 
 -- | SPEC-1 section 11.
 renderGray :: Sim -> Float -> IO [Word8]
