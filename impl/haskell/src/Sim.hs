@@ -16,10 +16,16 @@
 --     cell and the whole grid becomes a graph of suspended additions. That is
 --     the difference between "a few times slower than C" and "unusable".
 --
---   * @unsafeRead@/@unsafeWrite@. Every index has already been masked with
---     @width-1@, so the bounds check in 'readArray' can never fire, but GHC
---     cannot prove it. This is the same trade the Rust target measures with
---     its @unchecked@ feature.
+--   * @unsafeRead@/@unsafeWrite@, and @unsafeAt@ on the trig tables. Every
+--     index has already been masked with @width-1@ or reduced mod NDIR, so the
+--     bounds check can never fire, but GHC cannot prove it. This is the same
+--     trade the Rust target measures with its @unchecked@ feature -- and it is
+--     far more expensive here than there. Using @Data.Array.Unboxed.(!)@ for
+--     the four trig lookups per agent, which is the obvious way to write it,
+--     costs **1.52x overall**: 2253 -> 1479 ms at small/300, almost all of it
+--     in the agent pass (1962 -> 1197). @(!)@ goes through the @Ix@ class to
+--     compute the offset and range-checks it, and GHC does not eliminate
+--     either even though the bounds are a compile-time constant.
 module Sim
   ( Config(..)
   , Update(..)
@@ -40,9 +46,8 @@ module Sim
   ) where
 
 import Control.Monad (forM_)
-import Data.Array.Base (unsafeRead, unsafeWrite)
+import Data.Array.Base (unsafeAt, unsafeRead, unsafeWrite)
 import Data.Array.IO (IOUArray, getElems, newArray)
-import Data.Array.Unboxed ((!))
 import Data.Bits (shiftL, shiftR, xor, (.&.), (.|.))
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Word (Word32, Word64, Word8)
@@ -267,8 +272,8 @@ agentPass Sim{..} = do
 
       sense :: Float -> Float -> Int -> IO Float
       sense !x !y !d = do
-        let !sx = wrapf (x + (cosTable ! d) * cfgSensorDist) fw
-            !sy = wrapf (y + (sinTable ! d) * cfgSensorDist) fh
+        let !sx = wrapf (x + (cosTable `unsafeAt` d) * cfgSensorDist) fw
+            !sy = wrapf (y + (sinTable `unsafeAt` d) * cfgSensorDist) fh
             !ix = truncate sx .&. xmask
             !iy = truncate sy .&. ymask
         unsafeRead grid ((iy `shiftL` log2w) .|. ix)
@@ -300,8 +305,8 @@ agentPass Sim{..} = do
                         then pure ((d0 - cfgRotSteps + ndirI) `mod` ndirI)
                         else pure ((d0 + cfgRotSteps) `mod` ndirI)
 
-            let !x = wrapf (x0 + (cosTable ! d) * cfgStep) fw
-                !y = wrapf (y0 + (sinTable ! d) * cfgStep) fh
+            let !x = wrapf (x0 + (cosTable `unsafeAt` d) * cfgStep) fw
+                !y = wrapf (y0 + (sinTable `unsafeAt` d) * cfgStep) fh
                 !ix = truncate x .&. xmask
                 !iy = truncate y .&. ymask
                 !idx = (iy `shiftL` log2w) .|. ix

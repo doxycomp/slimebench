@@ -131,7 +131,7 @@ make -C impl/c CC=gcc PROFILE=o3-native sdl2 && ./impl/c/build/gcc-o3-native/sli
 - **Was alles nicht funktioniert hat.** PGO, die parallele Präfixsumme, der
   Lastausgleich, die reine Spin-Barriere — vier plausible Optimierungen, ein
   brauchbares Ergebnis. Mit Begründung in
-  [docs/RESULTS.md §9](docs/RESULTS.md#9-was-nicht-funktioniert-hat).
+  [docs/RESULTS.md §9](docs/RESULTS.md#10-was-nicht-funktioniert-hat).
 
 ## Herkunft
 

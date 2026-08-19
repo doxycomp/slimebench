@@ -20,14 +20,15 @@ scripts/stage-wsl.sh bench --preset small --ticks 300 --reps 3
 1. [Die kurze Fassung](#1-die-kurze-fassung)
 2. [Sprachvergleich (Klasse S)](#2-sprachvergleich-klasse-s)
 3. [Compiler](#3-compiler)
-4. [Parallelität (Klasse P)](#4-parallelität-klasse-p)
-5. [SIMD (Klasse V)](#5-simd-klasse-v)
-6. [GPU (Klasse G)](#6-gpu-klasse-g)
-7. [Rendering (Klasse R)](#7-rendering-klasse-r)
-8. [Footprint](#8-footprint)
-9. [Was nicht funktioniert hat](#9-was-nicht-funktioniert-hat)
-10. [Wo ich mich geirrt habe](#10-wo-ich-mich-geirrt-habe)
-11. [Offene Punkte](#11-offene-punkte)
+4. [Wie sehr der Programmierstil zählt (Haskell)](#4-wie-sehr-der-programmierstil-zählt-haskell)
+5. [Parallelität (Klasse P)](#5-parallelität-klasse-p)
+6. [SIMD (Klasse V)](#6-simd-klasse-v)
+7. [GPU (Klasse G)](#7-gpu-klasse-g)
+8. [Rendering (Klasse R)](#8-rendering-klasse-r)
+9. [Footprint](#9-footprint)
+10. [Was nicht funktioniert hat](#10-was-nicht-funktioniert-hat)
+11. [Wo ich mich geirrt habe](#11-wo-ich-mich-geirrt-habe)
+12. [Offene Punkte](#12-offene-punkte)
 
 ---
 
@@ -61,7 +62,7 @@ Die drei Ergebnisse, die ich vorher nicht erwartet hätte:
   entwickelte Interpreter, dieselbe Schleife, praktisch dieselbe Zeit.
 - **Fast jede „offensichtliche" Optimierung hat verloren.** PGO, die parallele
   Präfixsumme, der Lastausgleich, die reine Spin-Barriere — vier Versuche, ein
-  brauchbares Ergebnis. Details in §9.
+  brauchbares Ergebnis. Details in §10.
 
 ---
 
@@ -81,14 +82,14 @@ in Sekunden schaffen**, denn nur so passen alle Sprachen in eine Tabelle.
 | 4 | C | gcc -O2 | A | 0.240 | 1.09× | 18 |
 | 5 | Rust | unchecked | A | 0.253 | 1.15× | 18 |
 | 6 | Rust | safe | A | 0.295 | 1.34× | 18 |
-| 7 | Haskell | ghc -O2 | A | 0.478 | 2.16× | 18 |
+| 7 | Haskell | ghc -O2 ¹ | A | 0.478 | 2.16× | 18 |
 | 8 | TypeScript | Node | A | 0.664 | 3.00× | 79 |
 | 9 | Perl | | B | 37.19 | **168×** | 22 |
 | 10 | Python | pur | B | 37.52 | **170×** | 18 |
 | 11 | Python | `--strict-f32` | A | 85.72 | 388× | 18 |
 | 12 | Perl | `--strict-f32` | A | 123.36 | 558× | 22 |
 
-numpy fehlt hier, weil es `--update serial` prinzipiell nicht kann (§6). Im
+numpy fehlt hier, weil es `--update serial` prinzipiell nicht kann (§7). Im
 `deferred`-Modus, wo alle Sprachen antreten können:
 
 | Sprache | Konf. | ms/Tick | rel. |
@@ -99,6 +100,10 @@ numpy fehlt hier, weil es `--update serial` prinzipiell nicht kann (§6). Im
 | Haskell -O2 | A | 0.508 | 2.23× |
 | TypeScript | A | 0.710 | 3.11× |
 | **Python / numpy** | A | 0.717 | **3.14×** |
+
+¹ vor der `unsafeAt`-Korrektur aus §4 gemessen; die macht Haskell dort um
+Faktor 1.45 schneller. Diese Tabelle wird beim nächsten vollen Matrixlauf
+ersetzt.
 
 **Alle Stufe-A-Läufe liefern `0x9E8B1688 / 0x0E6A2341`.** Dieselbe Simulation,
 sechs Sprachen, Bit für Bit.
@@ -213,7 +218,8 @@ Programm.
 | `-O2 -fllvm` | **2131** | **0.76×** | 3168 |
 
 Das LLVM-Backend bringt **24 %** gegenüber dem nativen Codegenerator, für 2 %
-mehr Binärgröße. Alle drei bit-exakt (`0x4F236CC6 / 0x4236A1D1`). GHC 9.10
+mehr Binärgröße. (Gemessen vor der `unsafeAt`-Korrektur aus §4; die wirkt auf
+alle drei Profile gleichermaßen und verschiebt das Verhältnis nicht.) Alle drei bit-exakt (`0x4F236CC6 / 0x4236A1D1`). GHC 9.10
 warnt, dass LLVM 18 außerhalb des unterstützten Bereichs liegt, und macht
 trotzdem korrekt weiter — geprüft gegen die Konformitätsvektoren, nicht
 geglaubt.
@@ -232,7 +238,73 @@ zählt Bandbreite und Vektorisierung zahlt sich aus.
 
 ---
 
-## 4. Parallelität (Klasse P)
+## 4. Wie sehr der Programmierstil zählt (Haskell)
+
+Ein Haskell-Programmierer, der den Port gelesen hat, hat ihn so beschrieben:
+*„it looks just like if you took the C and tried to just line by line re-create
+it in Haskell — this is not how you write Haskell code."* Das trifft zu.
+`impl/haskell/src/Sim.hs` ist `IOUArray` in `IO` mit handgeschriebener
+Endrekursion und expliziter Indexarithmetik, und so schreibt das niemand, der
+nicht gerade eine C-Referenz Anweisung für Anweisung nachbaut.
+
+Derselbe Programmierer nannte zwei Dinge, die sich hier gegenseitig
+widersprechen: dass man in Haskell üblicherweise *hochlevel* schreibt und GHC
+machen lässt — und dass man mit sorgfältigem Low-Level-Code *nahe an C*
+herankommt. Beides ist messbar. Also drei Varianten, alle vier bit-identisch
+(`0x7A67A29B` bei `small`/300, `deferred`):
+
+![Haskell-Stile](charts/haskell-style.svg)
+
+| Variante | ms | vs. C | vs. bester Haskell |
+|---|---:|---:|---:|
+| C-Referenz, gcc `-O3 -march=native` | 1659 | 1.00× | – |
+| **Haskell low-level, `unsafeAt`** | **1764** | **1.06×** | 1.00× |
+| Haskell low-level, `Data.Array.Unboxed.(!)` | 2561 | 1.54× | 1.45× |
+| Haskell idiomatisch, `Data.Vector.Unboxed` | 5778 | 3.48× | 3.28× |
+
+Drei Befunde:
+
+**„Nahe an C" stimmt — und hing an vier Zeichen.** Die Trigonometrie-Tabelle
+wurde mit `Data.Array.Unboxed.(!)` gelesen, viermal pro Agent. Das ist die
+naheliegende Schreibweise, geht aber über die `Ix`-Klasse, rechnet den Offset
+aus und prüft die Grenzen — und GHC eliminiert beides nicht, obwohl die Grenzen
+Compile-Time-Konstanten sind. Ersetzt durch `unsafeAt` fällt der Agenten-Pass
+von 1962 auf 1197 ms und die Gesamtzeit um **1.45×**. Erst danach liegt Haskell
+6 % hinter C statt 54 %.
+
+**Hochlevel kostet hier 3.3×.** Die idiomatische Fassung ist ehrlich
+idiomatisch: reine Funktionen über unveränderliche `U.Vector`, kein `IO` im
+Kern, der Diffusionspass ist ein `U.generate`, der Deposit-Scatter ein
+`U.accumulate`. Der Stencil ist als reine Abbildung genau der Fall, in dem
+Fusion funktioniert. Der Agenten-Pass ist es nicht: jeder Tick baut fünf neue
+Vektoren auf, wo die mutable Fassung in bestehende Puffer schreibt. Bei 1024²
+sind das 20 MiB Allokation pro Tick, die der Kopiervorgang nicht wieder
+einspart.
+
+**Der idiomatische Stil scheitert an derselben Stelle wie numpy.**
+`--update serial` verlangt, dass ein Agent die Deposits seiner Vorgänger
+*innerhalb desselben Ticks* sieht. Über unveränderliche Vektoren hieße das, das
+Grid einmal pro Agent neu zu bauen. Die Implementierung lehnt den Modus mit
+Exit-Code 3 ab — dieselbe Wand wie in
+[`slimebench_numpy.py`](../impl/python/slimebench_numpy.py), aus demselben
+Grund. Die funktionale und die vektorisierte Formulierung brechen an genau
+derselben Konstruktion.
+
+Und ein Fehler, den die getrennten Prüfsummen gefangen haben: die erste Fassung
+akkumulierte die Deposits per `U.accumulate` direkt ins Grid. Zwei Deposits auf
+dieselbe Zelle ergeben dann `(g + d₁) + d₂` statt der vorgeschriebenen
+`g + (d₁ + d₂)` — 1 ULP Unterschied, sobald `g` groß genug ist. Der
+*Grid*-Hash wich ab, der *Agenten*-Hash nicht, und damit war der Fehler ohne
+Suche lokalisiert. Genau dafür trennt [SPEC §6.3](../spec/SPEC.md) die beiden.
+
+> Was das *nicht* zeigt: dass idiomatisches Haskell langsam ist. Es zeigt, dass
+> es auf **dieser** Last langsam ist — ein mutables Gitter, das eine Million
+> Mal pro Tick punktuell verändert wird. Das ist der ungünstigste denkbare Fall
+> für persistente Datenstrukturen, und die Spec schreibt ihn vor.
+
+---
+
+## 5. Parallelität (Klasse P)
 
 Nur im `deferred`-Modus — `serial` lässt Agenten die Deposits ihrer Vorgänger
 im selben Tick sehen und ist damit prinzipiell nicht deterministisch
@@ -317,7 +389,7 @@ Lebenszyklus (`std::jthread` joint beim Zerstören, `std::barrier` braucht kein
 
 ---
 
-## 5. SIMD (Klasse V)
+## 6. SIMD (Klasse V)
 
 Explizite Intrinsics für den Diffusionspass, `--simd`. Der Agenten-Pass bleibt
 skalar: mehrere Agenten pro Vektor deponieren routinemäßig in dieselbe Zelle,
@@ -388,7 +460,7 @@ aufzurufen ist. `std::simd` wäre portabler, ist aber weiterhin nightly-only.
 
 ---
 
-## 6. GPU (Klasse G)
+## 7. GPU (Klasse G)
 
 Zwei Implementierungen desselben Kernels: CUDA und ein GLSL-4.3-Compute-Shader.
 Beide nur `deferred`.
@@ -465,7 +537,7 @@ Sackgassen-Agenten ihren PRNG-Strom weiterdrehen dürfen.
 
 ---
 
-## 7. Rendering (Klasse R)
+## 8. Rendering (Klasse R)
 
 1024², 300 Frames, `--freeze-sim` (Simulation angehalten, damit nur der
 Upload-Pfad Grid → Textur → Bildschirm gemessen wird).
@@ -499,7 +571,7 @@ größeres Grid.
 
 ---
 
-## 8. Footprint
+## 9. Footprint
 
 | Sprache | Binär (gestrippt) | RSS bei 1024² |
 |---|---:|---:|
@@ -525,7 +597,7 @@ Thread-Zahl.
 
 ---
 
-## 9. Was nicht funktioniert hat
+## 10. Was nicht funktioniert hat
 
 Vier Optimierungsversuche, ein brauchbares Ergebnis. Sie stehen hier, weil sie
 dieselbe Arbeit gekostet haben wie die erfolgreichen.
@@ -591,7 +663,7 @@ Barriere macht eine unausgeglichene Phase nicht kürzer.
 
 ---
 
-## 10. Wo ich mich geirrt habe
+## 11. Wo ich mich geirrt habe
 
 Die Spec und der Buildplan sind mehrfach von Messungen widerlegt worden. Das
 gehört dokumentiert, sonst liest sich das Projekt fehlerfreier als es war.
@@ -614,7 +686,7 @@ Trig-Tabelle, PRNG-Wahl — haben dagegen alle gehalten.
 
 ---
 
-## 11. Offene Punkte
+## 12. Offene Punkte
 
 - **Klasse P** fehlt in Rust, Haskell, TypeScript, Python und Perl.
   TypeScript mit Worker + `SharedArrayBuffer` ist der einzige Datenpunkt,

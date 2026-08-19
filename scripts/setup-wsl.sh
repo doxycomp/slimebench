@@ -17,6 +17,7 @@
 set -euo pipefail
 
 RAYLIB_VERSION=5.5
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
 log()  { printf '\n\033[1;32m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mwarn:\033[0m %s\n' "$*" >&2; }
@@ -115,6 +116,28 @@ setup_haskell() {
     curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | \
       BOOTSTRAP_HASKELL_NONINTERACTIVE=1 BOOTSTRAP_HASKELL_INSTALL_HLS=0 sh
     echo "  add to your shell rc:  . \"\$HOME/.ghcup/env\""
+  fi
+
+  # LLVM backend. GHC 9.10 warns that LLVM 18 is outside its supported range
+  # and then works correctly anyway -- verified against the conformance
+  # vectors, and worth 24% (docs/RESULTS.md section 3).
+  apt_install llvm
+
+  # The idiomatic Haskell target needs `vector`, which does not ship with GHC.
+  # It goes into a package environment file next to the source rather than a
+  # cabal project, so build.sh stays a plain ghc invocation for both styles.
+  # shellcheck disable=SC1091
+  [ -f "$HOME/.ghcup/env" ] && . "$HOME/.ghcup/env"
+  if have cabal; then
+    if ls "$ROOT"/impl/haskell/.ghc.environment.* >/dev/null 2>&1; then
+      echo "  vector: package environment already present"
+    else
+      echo "  installing vector into impl/haskell/.ghc.environment.*"
+      ( cd "$ROOT/impl/haskell" && cabal update >/dev/null 2>&1
+        cabal install --lib vector array bytestring containers --package-env . )
+    fi
+  else
+    warn "cabal not found; the o2-vector profiles will not build"
   fi
 }
 

@@ -27,3 +27,7 @@ impl/web/app.js
 # editors / OS
 .DS_Store
 *.swp
+
+# cabal package environment for the idiomatic Haskell target; machine- and
+# GHC-version-specific, created by scripts/setup-wsl.sh haskell.
+impl/haskell/.ghc.environment.*

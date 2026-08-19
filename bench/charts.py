@@ -348,6 +348,30 @@ def chart_classes() -> None:
                    entries, "ms total (log)", log=True)
 
 
+def chart_haskell_style() -> None:
+    """One language, three ways of writing it -- the style axis."""
+    rows = load("M-haskell-style.jsonl")
+    if not rows:
+        return
+    label = {
+        "C reference (gcc -O3 -native)": "C reference",
+        "haskell lowlevel, (!) lookups": "Haskell low-level, (!)",
+        "haskell lowlevel, unsafeAt": "Haskell low-level, unsafeAt",
+        "haskell idiomatic (vector)": "Haskell idiomatic, vector",
+    }
+    bars = []
+    for r in rows:
+        v = r.get("variant", "")
+        col = PALETTE["c"] if v.startswith("C ") else PALETTE["haskell"]
+        base = next((x["ms_total"] for x in rows if x.get("variant", "").startswith("C ")), None)
+        bars.append(Bar(label.get(v, v), r["ms_total"], col,
+                        note=f"{r['ms_total'] / base:.2f}x" if base else ""))
+    hbar_chart(OUT / "haskell-style.svg",
+               "One language, three ways of writing it",
+               "1024x1024, 262 144 agents, 300 ticks, deferred. All four bit-identical.",
+               bars, "ms total")
+
+
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     print("charts:")
@@ -355,6 +379,7 @@ def main() -> int:
     chart_compilers()
     chart_scaling()
     chart_classes()
+    chart_haskell_style()
     return 0
 
 

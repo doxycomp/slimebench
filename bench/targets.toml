@@ -366,6 +366,24 @@ run      = ["{binary}"]
 compilers = ["ghc"]
 profiles  = ["o1", "o2", "o2-llvm"]
 
+[[target]]
+# The same simulation written the way Haskell is usually written: pure
+# functions over immutable Data.Vector.Unboxed, no IO in the kernel, fusion
+# instead of hand-written recursion. Bit-identical to the low-level target and
+# to C, so this measures style and nothing else. Deferred only -- see
+# impl/haskell/src/SimVector.hs for why serial is not expressible this way.
+id       = "haskell-vector"
+lang     = "Haskell"
+backend  = "idiomatic"
+class    = "S"
+dir      = "impl/haskell"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["ghc"]
+profiles  = ["o2-vector", "o2-llvm-vector"]
+updates  = ["deferred"]
+
 # ------------------------------------------------------------------- class G
 
 [[target]]

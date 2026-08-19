@@ -41,8 +41,14 @@ Das ist die Voraussetzung für alles Weitere.
   C-Transliteration. Bit-exakt.
 - ✅ **Rust** — zwei Varianten über ein Cargo-Feature: `safe` und `unchecked`.
   Beide bit-exakt.
-- ✅ **Haskell** — `IOUArray` in `IO`, durchgehend strikt, `unsafeRead`.
-  Bit-exakt beim ersten Lauf.
+- ✅ **Haskell** — zwei Stile, beide bit-exakt und gegeneinander geprüft:
+  `IOUArray` in `IO` mit `unsafeRead`/`unsafeAt` (**1.06× von C**), und eine
+  idiomatische Fassung über unveränderliche `Data.Vector.Unboxed` (3.48× von
+  C). Der Anstoß kam von außen: ein Haskell-Programmierer las den ersten Port
+  und nannte ihn eine zeilenweise C-Transliteration, was zutraf. Was dabei
+  herauskam, steht in [RESULTS.md §4](RESULTS.md#4-wie-sehr-der-programmierstil-zählt-haskell)
+  — unter anderem, dass vier Zeichen (`(!)` → `unsafeAt`) Faktor 1.45
+  ausmachten.
 - ✅ Konformitätsgate grün.
 
 ---
@@ -88,7 +94,7 @@ eine Expansionsschleife über eine Million Pixel pro Frame.
 
 Die erste Messung lief unbemerkt auf llvmpipe — WSL2 stellt unter Linux
 standardmäßig keine GPU für OpenGL bereit. Beide Reihen stehen jetzt
-nebeneinander in [RESULTS.md §7](RESULTS.md#7-rendering-klasse-r), und die
+nebeneinander in [RESULTS.md §7](RESULTS.md#8-rendering-klasse-r), und die
 Binaries drucken ihren Renderer-String. Überraschend dabei: SDL2 ist auf der
 echten GPU *langsamer* als auf Software — beide Pfade sind bei 1024²
 CPU-gebunden.
@@ -126,11 +132,11 @@ ersatzweise über `hyperfine` und die Phasen-Timer).
 Vier-Wege-Verzweigung auf die Sensorwerte ist datenabhängig und nahezu
 gleichverteilt; PGO kann nur *vorhersagbare* Verzweigungen verbessern. Die
 Vermutung an dieser Stelle war falsch. Details in
-[RESULTS.md §9](RESULTS.md#9-was-nicht-funktioniert-hat).
+[RESULTS.md §9](RESULTS.md#10-was-nicht-funktioniert-hat).
 
 ---
 
-## Phase 6 — Parallelität 🔨 (C und C++ fertig)
+## Phase 6 — Parallelität 🔨 (C, C++, Rust, TypeScript fertig)
 
 Ausschließlich im `deferred`-Update-Modus (SPEC §5.5) — `serial` ist
 prinzipiell nicht deterministisch parallelisierbar.
@@ -145,18 +151,34 @@ Kette. SPEC §5.6 unterscheidet jetzt zwei Strategien, und beide sind gemessen.
 |---|---|---|
 | C | pthreads, `binned` + `private` | ✅ |
 | C++ | `std::jthread` + `std::barrier`, beide Strategien | ✅ |
-| Rust | rayon oder `std::thread::scope` | ⬜ |
+| Rust | `std::thread::scope`, beide Strategien | ✅ |
+| TypeScript | `worker_threads` + `SharedArrayBuffer`, beide Strategien | ✅ |
 | Haskell | `-threaded -N` | ⬜ |
-| TypeScript | Web Worker + `SharedArrayBuffer` | ⬜ |
 | Python | `multiprocessing`, oder Free-Threaded 3.13+ | ⬜ |
 | Perl | `threads` — vermutlich der ernüchterndste Datenpunkt der Suite | ⬜ |
+
+**Alle vier fertigen Ports sind bit-identisch zum seriellen Lauf** und liefern
+mit `private --deposit 0.1` sogar dieselben *falschen* Hashes wie C
+(`0xE82B2012` bei T=4). Skalierung bei `medium`/100:
+
+| | T=1 | T=16 | Speedup |
+|---|---:|---:|---:|
+| C | 5233 | 729 | 7.2× |
+| Rust | 6808 | 1007 | 6.8× |
+| TypeScript | 13345 | 1190 | **11.2×** |
+
+TypeScript skaliert am besten und ist in Klasse P nur noch 1.6× hinter C, bei
+3× Abstand in Klasse S. Und `binned` ist dort bei *zwei* Threads schon 2.9×
+schneller als ein Thread — das ist nicht die Parallelität, sondern die
+Deposit-Lokalität: bei gleicher Thread-Zahl schlägt `binned` die `private`-
+Strategie um 1.56× (in C nur um 1.15×).
 
 **Ergebnis** (2048², 1 M Agenten): `binned` skaliert auf **9.5× bei 16
 Threads** und ist für jede Thread-Zahl bit-identisch zum seriellen Lauf.
 `private` erreicht nur 3.5× und **fällt bei 32 Threads unter die serielle
 Laufzeit** — die Reduktion liest dort 512 MiB pro Tick. C und C++ sind bis
 acht Threads ununterscheidbar. Zahlen und Begründung in
-[RESULTS.md §4](RESULTS.md#4-parallelität-klasse-p).
+[RESULTS.md §4](RESULTS.md#5-parallelität-klasse-p).
 
 Codeumfang für dieselbe Garantie: **C 326 Zeilen, C++ 264**. Der Unterschied
 steckt fast vollständig im Lebenszyklus — `std::jthread` joint beim Zerstören,
@@ -224,7 +246,7 @@ Gangbar sind stattdessen zwei Wege, beide implementiert:
 **Die Annahme „Klasse G ist zwangsläufig Stufe C" war falsch** — jedenfalls für
 CUDA. Nötig sind `-fmad=false`, korrekt gerundete Division und ganzzahlige
 Deposit-Atomics statt `atomicAdd(float*)`. Details in SPEC §8.2 und
-[RESULTS.md §6](RESULTS.md#6-gpu-klasse-g).
+[RESULTS.md §6](RESULTS.md#7-gpu-klasse-g).
 
 Offen: ein Host in einer zweiten Sprache (der GL-Weg macht das billig), eine
 Determinismus-Analyse für weitere Treiber, und eine Wiederholung auf nativem
