@@ -37,3 +37,7 @@ impl/shim/*.so
 
 # Go build output.
 impl/go/build/
+
+# Swift build output.
+impl/swift/build/
+impl/swift/.build*/

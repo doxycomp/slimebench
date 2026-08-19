@@ -639,6 +639,54 @@ updates  = ["deferred"]
 extra_args = ["--deposit-reduce", "private"]
 skip_conformance = true
 
+# ------------------------------------------------------------------- Swift
+
+[[target]]
+id       = "swift"
+lang     = "Swift"
+backend  = "headless"
+class    = "S"
+dir      = "impl/swift"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["swift"]
+# -Ounchecked removes bounds checks and integer overflow traps. The PRNG here
+# spells its wrapping with &* and &+, which wrap in both modes, so the flag
+# changes only the bounds checks for this code -- which is what makes the
+# comparison meaningful rather than a comparison of two different programs.
+profiles  = ["release", "unchecked"]
+
+[[target]]
+id       = "swift-par-binned"
+lang     = "Swift"
+backend  = "threads/binned"
+class    = "P"
+dir      = "impl/swift"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["swift"]
+profiles  = ["release"]
+updates  = ["deferred"]
+extra_args = ["--deposit-reduce", "binned"]
+skip_conformance = true
+
+[[target]]
+id       = "swift-par-private"
+lang     = "Swift"
+backend  = "threads/private"
+class    = "P"
+dir      = "impl/swift"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["swift"]
+profiles  = ["release"]
+updates  = ["deferred"]
+extra_args = ["--deposit-reduce", "private"]
+skip_conformance = true
+
 # ------------------------------------------------------------------- class G
 
 [[target]]
