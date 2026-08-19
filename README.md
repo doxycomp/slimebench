@@ -38,15 +38,20 @@ Dieselbe Simulation, `medium` (2048², 1 M Agenten), 100 Ticks:
 
 | Klasse | beste Konfiguration | ms | vs. 1 CPU-Kern |
 |---|---|---:|---:|
-| S — ein Thread | C, gcc `-O3 -march=native` | 4978 | 1× |
-| V — SIMD | C, AVX-512 | 4376 | 1.1× |
-| P — 16 Threads | C, pthreads, `binned` | 588 | 8× |
-| G — GPU | CUDA, RTX 5080 | **50** | **99×** |
+| S — ein Thread | C, clang `-O3 -march=native -flto` | 5609 | 1× |
+| P — 32 Threads | C++, `std::jthread`, `binned` | 698 | 8× |
+| G — GPU | CUDA, RTX 5080 | **52** | **108×** |
 
 Klasse P gibt es in allen sieben Sprachen, alle bit-identisch zum seriellen
 Lauf:
 
 ![Skalierung über Sprachen](docs/charts/scaling-langs.svg)
+
+Alle Zahlen aus **einem** Lauf über die ganze Matrix:
+
+```bash
+scripts/stage-wsl.sh && bench/full-run.sh
+```
 
 ## Schnellstart
 
@@ -130,9 +135,12 @@ make -C impl/c CC=gcc PROFILE=o3-native sdl2 && ./impl/c/build/gcc-o3-native/sli
   Deposit-Puffer sind nur *je Thread-Zahl* reproduzierbar, nicht bit-identisch
   zum seriellen Lauf. Die räumlich gebündelte Variante ist es — und ab acht
   Threads zusätzlich schneller. Siehe [SPEC §5.6](spec/SPEC.md).
-- **Warum `-O3` hier langsamer ist als `-O2`** — jedenfalls bei gcc; bei clang
-  bringt `-march=native` 18 %, und ohne es liegt clang hinter gcc. Siehe
+- **Warum `-O2` bei gcc reicht und clang `-march=native` braucht.** Bei `-O2`
+  ist gcc 20 % schneller, mit `-march=native` ist clang 13 % schneller. Wer nur
+  eine Zeile der Matrix ansieht, bekommt die falsche Antwort. Siehe
   [docs/RESULTS.md §3](docs/RESULTS.md#3-compiler).
+- **Warum `-Ofast` bei clang die Hälfte kostet** und bei gcc nur ein paar
+  Prozent — dasselbe Flag, dieselbe Schleife, gegenläufige Wirkung.
 - **Was alles nicht funktioniert hat.** PGO, die parallele Präfixsumme, der
   Lastausgleich, die reine Spin-Barriere — vier plausible Optimierungen, ein
   brauchbares Ergebnis. Mit Begründung in

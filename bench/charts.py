@@ -21,8 +21,15 @@ import sys
 from dataclasses import dataclass
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-RESULTS = ROOT / "results"
 OUT = ROOT / "docs" / "charts"
+
+# One run directory, not the accumulated pile: every chart has to come from the
+# same machine state as the tables in docs/RESULTS.md, or a reader comparing a
+# chart against a table is comparing two different afternoons. Override with
+#   bench/charts.py results/run-YYYYmmdd-HHMM
+RESULTS = ROOT / "results" / "run-20260819-2056"
+if len(sys.argv) > 1:
+    RESULTS = pathlib.Path(sys.argv[1])
 
 # Colour-blind-safe, and distinguishable in both themes.
 PALETTE = {
@@ -230,7 +237,17 @@ def line_chart(path: pathlib.Path, title: str, subtitle: str,
 
 
 def chart_languages() -> None:
-    rows = [r for r in load("A-crosslang.jsonl") if r.get("status") == "ok"]
+    rows = [r for r in load("A-crosslang-serial.jsonl")
+            if r.get("status") == "ok" and r.get("class") == "S"
+            and r.get("conformance_class") in ("A", "B")]
+    # One row per implementation, at its best profile -- the compiler axis has
+    # its own chart.
+    best: dict[str, dict] = {}
+    for r in rows:
+        k = (r["lang"], r.get("variant") or "", r["cc"])
+        if k not in best or r["ms_per_tick_median"] < best[k]["ms_per_tick_median"]:
+            best[k] = r
+    rows = list(best.values())
     if not rows:
         return
     rows.sort(key=lambda r: r["ms_per_tick_median"])
@@ -286,57 +303,54 @@ def chart_compilers() -> None:
 
 
 def chart_scaling() -> None:
-    rows = load("E-parallel-scaling.jsonl")
-    if not rows:
-        return
-    med = [r for r in rows if r.get("preset") == "medium" and r.get("status", "ok") == "ok"]
-    base = next((r["ms_total"] for r in med if r.get("threads", 1) == 1), None)
+    """The two reduction strategies, in C."""
+    rows = [r for r in load("P-parallel.jsonl") if r.get("lang_label") == "c"]
+    base = next((r["ms_total"] for r in rows if r.get("threads") == 1), None)
     if not base:
         return
     series = []
-    for variant, colour in (("binned", PALETTE["c"]), ("private", PALETTE["ts"])):
+    for want, colour in (("binned", PALETTE["c"]), ("private", PALETTE["ts"])):
         pts = [(1.0, 1.0)]
-        for r in sorted(med, key=lambda r: r.get("threads", 1)):
-            if r.get("variant") == variant and r.get("threads", 1) > 1:
+        for r in sorted(rows, key=lambda r: r.get("threads", 1)):
+            if r.get("threads", 1) > 1 and want in (r.get("variant") or ""):
                 pts.append((float(r["threads"]), base / r["ms_total"]))
         if len(pts) > 1:
-            series.append((variant, colour, pts))
+            series.append((want, colour, pts))
     if series:
         line_chart(OUT / "scaling.svg",
                    "Class P: how the two deposit reductions scale",
-                   "2048x2048, 1 048 576 agents, deferred. 16 physical cores, 32 logical.",
+                   "2048x2048, 1 048 576 agents, deferred. 16 physical cores, "
+                   "32 logical.",
                    series, "threads", "speedup vs 1 thread", ideal=True)
 
 
 def chart_classes() -> None:
     """The headline: how far the same simulation can be pushed."""
-    def pick(name, **match):
-        for r in load(name):
-            if all(r.get(k) == v for k, v in match.items()):
-                return r
+    par = load("P-parallel.jsonl")
+    gpu = load("H-gpu.jsonl")
+
+    def par_at(lang, threads, want):
+        for r in par:
+            if (r.get("lang_label") == lang and r.get("threads") == threads
+                    and (threads == 1 or want in (r.get("variant") or ""))):
+                return r["ms_total"]
         return None
 
+    def gpu_at(host, preset="medium"):
+        for r in gpu:
+            if r.get("lang_label") == host and r.get("preset") == preset:
+                return r["ms_total"]
+        return None
+
+    cpu1 = par_at("c", 1, "")
+    best_par = min((v for v in (par_at("cpp", t, "binned") for t in (16, 32))
+                    if v), default=None)
     entries = []
-    g = load("H-gpu.jsonl")
-
-    def gpu(impl):
-        c = [r for r in g if r.get("impl") == impl and r.get("preset") == "medium"]
-        return min((r["ms_total"] for r in c), default=None)
-
-    cpu1 = min((r["ms_total"] for r in g
-                if r.get("impl") == "c" and r.get("preset") == "medium"
-                and r.get("threads", 1) == 1), default=None)
-    cpu16 = min((r["ms_total"] for r in g
-                 if r.get("impl") == "c" and r.get("preset") == "medium"
-                 and r.get("threads", 1) == 16), default=None)
-    cuda = gpu("cuda")
-    gl = gpu("glcompute")
-
     for label, val, col in (
         ("C, 1 thread (class S)", cpu1, PALETTE["c"]),
-        ("C, 16 threads (class P)", cpu16, PALETTE["rust"]),
-        ("GL compute (class G)", gl, PALETTE["glcompute"]),
-        ("CUDA (class G)", cuda, PALETTE["cuda"]),
+        ("C++, 32 threads (class P)", best_par, PALETTE["cpp"]),
+        ("GL compute (class G)", gpu_at("gl43 C"), PALETTE["glcompute"]),
+        ("CUDA (class G)", gpu_at("cuda"), PALETTE["cuda"]),
     ):
         if val:
             entries.append(Bar(label, val, col,
@@ -374,34 +388,33 @@ def chart_haskell_style() -> None:
 
 def chart_scaling_langs() -> None:
     """Speedup curves for every language that has a class-P port."""
-    sources = [
-        ("C", PALETTE["c"], "E-parallel-scaling.jsonl", "medium", "binned"),
-        ("Rust", PALETTE["rust"], "K-parallel-rust.jsonl", "medium", "binned"),
-        ("TypeScript", PALETTE["ts"], "L-parallel-ts.jsonl", "medium", "binned"),
-        ("Haskell", PALETTE["haskell"], "N-parallel-haskell.jsonl", "medium", "binned"),
-        ("Python", PALETTE["python"], "O-parallel-python.jsonl", "medium", "binned"),
-        ("Perl", PALETTE["perl"], "P-parallel-perl.jsonl", "tiny", None),
-    ]
+    rows = load("P-parallel.jsonl")
+    if not rows:
+        return
+    colours = {"c": PALETTE["c"], "cpp": PALETTE["cpp"], "rust": PALETTE["rust"],
+               "ts": PALETTE["ts"], "haskell": PALETTE["haskell"],
+               "python": PALETTE["python"], "perl": PALETTE["perl"]}
+    names = {"c": "C", "cpp": "C++", "rust": "Rust", "ts": "TypeScript",
+             "haskell": "Haskell", "python": "Python", "perl": "Perl"}
     series = []
-    for name, colour, fname, preset, want in sources:
-        rows = load(fname)
-        if not rows:
-            continue
-        rows = [r for r in rows if r.get("preset") == preset]
-        base = next((r["ms_total"] for r in rows if r.get("threads", 1) == 1), None)
+    for lang in ("c", "cpp", "haskell", "rust", "ts", "python", "perl"):
+        mine = [r for r in rows if r.get("lang_label") == lang]
+        base = next((r["ms_total"] for r in mine if r.get("threads") == 1), None)
         if not base:
             continue
         pts = [(1.0, 1.0)]
-        for r in sorted(rows, key=lambda r: r.get("threads", 1)):
+        for r in sorted(mine, key=lambda r: r.get("threads", 1)):
             t = r.get("threads", 1)
+            v = r.get("variant") or ""
             if t <= 1:
                 continue
-            v = r.get("variant") or ""
-            if want and want not in v:
+            # Perl's reduction is replicated, not binned; take whatever the
+            # language's own best-guaranteed strategy produced.
+            if lang != "perl" and "binned" not in v:
                 continue
             pts.append((float(t), base / r["ms_total"]))
         if len(pts) > 1:
-            series.append((name, colour, pts))
+            series.append((names[lang], colours[lang], pts))
     if series:
         line_chart(OUT / "scaling-langs.svg",
                    "Class P: the same design in seven languages",
@@ -412,7 +425,7 @@ def chart_scaling_langs() -> None:
 
 def chart_render() -> None:
     """Class R: six languages, two backends, two renderers."""
-    rows = load("Q-render-all.jsonl")
+    rows = load("Q-render.jsonl")
     if not rows:
         return
     order = ["c", "cpp", "haskell", "rust", "python", "perl"]

@@ -13,6 +13,7 @@ Only the tables. The prose around them is the part worth writing by hand.
 
 from __future__ import annotations
 
+import io
 import json
 import pathlib
 import sys
@@ -62,8 +63,13 @@ def sec_crosslang(d: pathlib.Path) -> str:
         # Class S only: the same run also times the SIMD targets, and a
         # vectorised diffusion pass in a scalar table would make class V look
         # like a language result.
+        # Class S, and conformance tier A or B only. A fast-math build is a
+        # different tier and belongs in the compiler section; ranking one
+        # second in a language table would be comparing two different
+        # simulations.
         rows = [r for r in load(d, f"A-crosslang-{upd}.jsonl")
-                if r.get("status") == "ok" and r.get("class") == "S"]
+                if r.get("status") == "ok" and r.get("class") == "S"
+                and r.get("conformance_class") in ("A", "B")]
         if not rows:
             continue
         # The class S table compares implementations; the compiler axis has its
@@ -121,10 +127,9 @@ def sec_footprint(d: pathlib.Path) -> str:
         sz = r.get("stripped_bytes") or r.get("binary_bytes")
         body.append([name,
                      fnum(sz / 1024) if sz else "— (interpretiert)",
-                     str(round(r["max_rss_kb"] / 1024)) if r.get("max_rss_kb") else "—",
-                     f"{r.get('build_seconds', 0):.1f}" if r.get("build_seconds") else "—"])
+                     str(round(r["max_rss_kb"] / 1024)) if r.get("max_rss_kb") else "—"])
     return ("### §9 Footprint\n"
-            + table(["Sprache", "Binär KiB (gestrippt)", "RSS MiB", "Build s"], body) + "\n")
+            + table(["Sprache", "Binär KiB (gestrippt)", "RSS MiB"], body) + "\n")
 
 
 def sec_compilers(d: pathlib.Path) -> str:
@@ -150,33 +155,32 @@ def sec_parallel(d: pathlib.Path) -> str:
     by = defaultdict(dict)
     for r in rows:
         v = r.get("variant") or ""
-        strat = "binned" if "binned" in v else ("private" if "private" in v else "—")
         if r["threads"] == 1:
             strat = "1"
+        elif "binned" in v:
+            strat = "binned"
+        elif "private" in v:
+            strat = "private"
+        else:
+            # Perl's reduction is neither: it is replicated across processes,
+            # which is exactly the serial chain. See SPEC-1 5.6 and the header
+            # of impl/perl/slimebench.pl.
+            strat = "replicated"
         by[r["lang_label"]][(r["threads"], strat)] = r["ms_total"]
 
-    out = ["### §5 class P, Thread-Sweep\n"]
     threads = [1, 2, 4, 8, 16, 32]
-    for strat in ("binned", "private", "—"):
+    out = ["### §5 class P, Thread-Sweep\n"]
+    for strat in ("binned", "private", "replicated"):
         body = []
         for lang, d2 in by.items():
             base = d2.get((1, "1"))
-            if base is None:
+            have = [d2.get((t, strat)) for t in threads if t > 1]
+            if base is None or not any(v is not None for v in have):
                 continue
-            cells = []
-            have = False
-            for t in threads:
-                v = base if t == 1 else d2.get((t, strat))
-                if v is None:
-                    cells.append("—")
-                else:
-                    have = True
-                    cells.append(fnum(v))
-            if have:
-                bestv = min((d2.get((t, strat), 1e18) for t in threads if t > 1),
-                            default=None)
-                body.append([lang] + cells +
-                            [f"{base / bestv:.1f}×" if bestv and bestv < 1e17 else "—"])
+            cells = [fnum(base)] + [fnum(d2[(t, strat)]) if (t, strat) in d2 else "—"
+                                    for t in threads[1:]]
+            bestv = min(v for v in have if v is not None)
+            body.append([lang] + cells + [f"{base / bestv:.1f}×"])
         if body:
             out.append(f"\n**{strat}**\n")
             out.append(table(["Sprache"] + [f"T={t}" for t in threads] + ["Speedup"], body))
@@ -228,6 +232,13 @@ def sec_render(d: pathlib.Path) -> str:
 
 
 def main() -> int:
+    # The tables carry U+2713 and U+00D7; on a cp1252 console print() would
+    # raise rather than transliterate.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    else:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+
     if len(sys.argv) != 2:
         print(__doc__.strip())
         return 2
