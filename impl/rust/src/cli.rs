@@ -13,7 +13,7 @@ pub struct Opts {
 
 const USAGE: &str = "\
 usage: slimebench [options]   (slimebench SPEC-1)
-  --preset NAME        tiny|small|medium|large|browser
+  --preset NAME        tiny|small|medium|large|huge|browser
   --width N --height N powers of two
   --agents N  --ticks N  --warmup N  --seed N
   --update MODE        serial|deferred
@@ -37,6 +37,7 @@ fn apply_preset(c: &mut Config, name: &str) -> bool {
         "small" => (1024, 1024, 262_144, 1000),
         "medium" => (2048, 2048, 1_048_576, 1000),
         "large" => (4096, 4096, 4_194_304, 500),
+        "huge" => (8192, 8192, 16_777_216, 100),
         "browser" => (1024, 1024, 262_144, 0),
         _ => return false,
     };

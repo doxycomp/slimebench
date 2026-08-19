@@ -612,6 +612,23 @@ updates  = ["deferred"]
 skip_conformance = true
 
 [[target]]
+# The same GLSL 4.3 shaders as `glcompute`, driven from Python instead of C.
+# It exists to test the claim that class G measures the GPU and not the host:
+# both report an FNV-32 of the shader source they compiled, so "the same
+# shader" is checkable rather than asserted.
+id       = "pygl"
+lang     = "Python"
+backend  = "gl43"
+class    = "G"
+dir      = "impl/pygl"
+build    = ""
+binary   = "slimebench_pygl.py"
+run      = ["python3", "{binary}"]
+compilers = ["python3"]
+profiles  = ["default"]
+updates  = ["deferred"]
+
+[[target]]
 id       = "glcompute"
 lang     = "GLSL"
 backend  = "gl43"

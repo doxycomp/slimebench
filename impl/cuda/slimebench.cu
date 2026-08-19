@@ -232,7 +232,7 @@ struct Opts {
 static void usage(std::FILE *f, const char *a0) {
     std::fprintf(f,
         "usage: %s [options]   (slimebench %s, CUDA, class G)\n"
-        "  --preset NAME        tiny|small|medium|large|browser\n"
+        "  --preset NAME        tiny|small|medium|large|huge|browser\n"
         "  --width N --height N powers of two\n"
         "  --agents N  --ticks N  --warmup N  --seed N\n"
         "  --update MODE        deferred only (serial is refused)\n"
@@ -262,6 +262,7 @@ int main(int argc, char **argv) {
             else if (p == "small")  { o.width=1024; o.height=1024; o.agents=262144;  o.ticks=1000; }
             else if (p == "medium") { o.width=2048; o.height=2048; o.agents=1048576; o.ticks=1000; }
             else if (p == "large")  { o.width=4096; o.height=4096; o.agents=4194304; o.ticks=500; }
+            else if (p == "huge")   { o.width=8192; o.height=8192; o.agents=16777216; o.ticks=100; }
             else if (p == "browser"){ o.width=1024; o.height=1024; o.agents=262144;  o.ticks=0; }
             else { std::fprintf(stderr, "error: unknown preset '%s'\n", p.c_str()); return 2; }
             o.preset = p;

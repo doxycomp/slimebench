@@ -26,7 +26,7 @@ import Parallel (ReduceMode (..), runParallel)
 usage :: String
 usage = unlines
   [ "usage: slimebench [options]   (slimebench " ++ specVersion ++ ")"
-  , "  --preset NAME        tiny|small|medium|large|browser"
+  , "  --preset NAME        tiny|small|medium|large|huge|browser"
   , "  --width N --height N powers of two"
   , "  --agents N  --ticks N  --warmup N  --seed N"
   , "  --update MODE        serial|deferred"
@@ -51,6 +51,7 @@ preset "tiny"    = Just (512, 512, 65536, 1000)
 preset "small"   = Just (1024, 1024, 262144, 1000)
 preset "medium"  = Just (2048, 2048, 1048576, 1000)
 preset "large"   = Just (4096, 4096, 4194304, 500)
+preset "huge"    = Just (8192, 8192, 16777216, 100)
 preset "browser" = Just (1024, 1024, 262144, 0)
 preset _         = Nothing
 

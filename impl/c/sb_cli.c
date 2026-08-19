@@ -9,7 +9,7 @@
 void sb_print_usage(FILE *f, const char *argv0) {
     fprintf(f,
         "usage: %s [options]   (slimebench " SB_SPEC_VERSION ")\n"
-        "  --preset NAME        tiny|small|medium|large|browser\n"
+        "  --preset NAME        tiny|small|medium|large|huge|browser\n"
         "  --width N --height N powers of two\n"
         "  --agents N  --ticks N  --warmup N  --seed N\n"
         "  --update MODE        serial|deferred\n"
@@ -32,6 +32,8 @@ static int apply_preset(sb_config *c, const char *name) {
         c->width = 2048; c->height = 2048; c->agents = 1048576;  c->ticks = 1000;
     } else if (!strcmp(name, "large")) {
         c->width = 4096; c->height = 4096; c->agents = 4194304;  c->ticks = 500;
+    } else if (!strcmp(name, "huge")) {
+        c->width = 8192; c->height = 8192; c->agents = 16777216; c->ticks = 100;
     } else if (!strcmp(name, "browser")) {
         c->width = 1024; c->height = 1024; c->agents = 262144;   c->ticks = 0;
     } else {

@@ -154,15 +154,15 @@ setup_scripting() {
 }
 
 setup_render_bindings() {
-  log "render bindings (class R for Python and Perl)"
+  log "render bindings (class R for Python and Perl, class G for pygl)"
 
   # pygame is packaged, raylib-python-cffi is not. Both go into the user site
   # rather than the system one: Ubuntu marks the system Python
   # externally-managed (PEP 668) and neither is a system dependency.
-  python3 -m pip install --break-system-packages --user pygame raylib \
+  python3 -m pip install --break-system-packages --user pygame raylib PyOpenGL \
     || warn "pip install failed; the Python class R targets will not run"
-  if python3 -c "import pygame, pyray" 2>/dev/null; then
-    echo "  pygame + pyray: OK"
+  if python3 -c "import pygame, pyray, OpenGL" 2>/dev/null; then
+    echo "  pygame + pyray + PyOpenGL: OK"
   else
     warn "pygame/pyray not importable"
   fi
