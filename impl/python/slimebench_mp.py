@@ -1,12 +1,24 @@
 #!/usr/bin/env python3
 """slimebench -- class P for the numpy target (SPEC-1 section 5.6).
 
-Processes, not threads. CPython 3.12 has a GIL, so `threading` would serialise
-the very loops this is meant to spread out -- numpy releases the GIL inside
-large ufunc calls, but the agent pass is a chain of dozens of small ones with
-Python-level glue between them, and that glue holds the lock. `multiprocessing`
-over one `shared_memory` block is the only honest way to use more than one core
-here, and the plumbing it costs is itself part of the answer.
+Two backends, selected with `--mp-backend`:
+
+* **processes** (default). CPython 3.12 has a GIL, so `threading` would
+  serialise the very loops this is meant to spread out -- numpy releases the
+  GIL inside large ufunc calls, but the agent pass is a chain of dozens of
+  small ones with Python-level glue between them, and that glue holds the
+  lock. `multiprocessing` over one `shared_memory` block is the only way to
+  use more than one core, and the plumbing it costs is part of the answer.
+
+* **threads**. On a free-threaded build (3.13t/3.14t) there is no GIL and
+  plain `threading` works -- and needs none of the plumbing: numpy arrays are
+  simply shared, so the `shared_memory` block, the hand-placed offsets and
+  the fork requirement all disappear.
+
+Running both on both interpreters is a controlled experiment: same Worker,
+same phase order, same reduction, only the carrier changes. The four cells
+are what removing the GIL is worth on this workload -- see docs/RESULTS.md
+section 5.
 
 Both reduction strategies from SPEC-1 5.6, the same phase order and the same
 deposit order as the C reference, so `binned` is bit-identical to the
@@ -24,10 +36,11 @@ single-process run.
   That would dominate a C tick. It does not dominate here, because a numpy tick
   at `medium` is tens of milliseconds -- the slowest implementation can afford
   the most expensive barrier.
-* **`fork` is required.** With `spawn` each worker would re-import numpy and
-  re-run `_init_state`, which is a sequential SplitMix32 over four million
-  cells. The module refuses to run under `spawn` rather than take that cost
-  silently.
+* **`fork` is required** for the process backend. With `spawn` each worker
+  would re-import numpy and re-run `_init_state`, which is a sequential
+  SplitMix32 over four million cells. The module refuses to run under `spawn`
+  rather than take that cost silently. The thread backend has no such
+  constraint.
 """
 
 from __future__ import annotations
@@ -35,6 +48,7 @@ from __future__ import annotations
 import multiprocessing as mp
 import os
 import sys
+import threading
 import time
 from multiprocessing import shared_memory
 
@@ -309,8 +323,92 @@ def _child(shm_name, layout, cfg, tid, barrier, reduce, adaptive, ticks):
         shm.close()
 
 
+def gil_enabled() -> bool:
+    """True on a stock build, False on a free-threaded one."""
+    f = getattr(sys, "_is_gil_enabled", None)
+    return f() if f is not None else True
+
+
+def _plain_buffers(cfg: common.Config, threads: int, reduce: str) -> dict:
+    """The same set of arrays the shared-memory Layout produces, as ordinary
+    numpy arrays. With threads there is nothing to share explicitly -- which
+    is most of what the thread backend saves."""
+    cells = cfg.width * cfg.height
+    n, h, t = cfg.agents, cfg.height, threads
+    v = {
+        "grid": np.zeros(cells, np.float32),
+        "scratch": np.zeros(cells, np.float32),
+        "dep": np.zeros(cells, np.float32),
+        "ax": np.zeros(n, np.float32),
+        "ay": np.zeros(n, np.float32),
+        "adir": np.zeros(n, np.int32),
+        "arng": np.zeros((n, 4), np.uint32),
+    }
+    if reduce == "binned":
+        v.update({
+            "aidx": np.zeros(n, np.int32),
+            "sorted": np.zeros(n, np.int32),
+            "counts": np.zeros(t * t, np.int32),
+            "offsets": np.zeros(t * t, np.int32),
+            "ybucket": np.zeros(h, np.int32),
+            "rowcnt": np.zeros(t * h, np.int32),
+            "rowsum": np.zeros(h, np.int32),
+        })
+    else:
+        v["priv"] = np.zeros(t * cells, np.float32)
+    return v
+
+
+def _run_threads(cfg, threads, reduce, warmup, ticks):
+    """The thread backend. No shared_memory, no fork, no offset table."""
+    L = Layout(cfg, threads, reduce)   # kept for the shapes the Worker reads
+    v = _plain_buffers(cfg, threads, reduce)
+    sim = sbn.Sim(cfg, bufs=v, do_init=True)
+
+    if reduce == "binned":
+        for b in range(threads):
+            lo, hi = _split(cfg.height, threads, b)
+            v["ybucket"][lo:hi] = b
+
+    adaptive = os.environ.get("SLIMEBENCH_NO_REBALANCE") is None
+    barrier = threading.Barrier(threads)
+    total = warmup + ticks
+
+    def child(tid: int) -> None:
+        # Each worker gets its own Sim object over the *same* arrays, so the
+        # buffer swap is a local rebind exactly as in the TypeScript port.
+        s = sbn.Sim(cfg, bufs=dict(v), do_init=False)
+        w = Worker(s, dict(v), L, tid, barrier, reduce, adaptive)
+        for _ in range(total):
+            w.run_tick()
+
+    workers = [threading.Thread(target=child, args=(tid,), daemon=True)
+               for tid in range(1, threads)]
+    for w in workers:
+        w.start()
+
+    me = Worker(sim, v, L, 0, barrier, reduce, adaptive)
+    for _ in range(warmup):
+        me.run_tick()
+    sim.ns_agents = sim.ns_diffuse = 0
+
+    tick_ms = []
+    t0 = time.perf_counter_ns()
+    for _ in range(ticks):
+        a = time.perf_counter_ns()
+        me.run_tick()
+        tick_ms.append((time.perf_counter_ns() - a) / 1e6)
+    ms_total = (time.perf_counter_ns() - t0) / 1e6
+
+    for w in workers:
+        w.join()
+    sim.ns_agents = int(ms_total * 1e6)
+    sim.ns_diffuse = 0
+    return sim, ms_total, tick_ms
+
+
 def run_parallel(cfg: common.Config, threads: int, reduce: str,
-                 warmup: int, ticks: int):
+                 warmup: int, ticks: int, backend: str = "processes"):
     """Returns (sim, ms_total, tick_ms). Exits with a message on refusal."""
     if cfg.update != "deferred":
         sys.stderr.write(
@@ -319,6 +417,17 @@ def run_parallel(cfg: common.Config, threads: int, reduce: str,
             "       next agent in the same tick, which is a sequential\n"
             "       dependency; see SPEC-1 section 5.5.\n")
         sys.exit(2)
+
+    if backend == "threads":
+        if gil_enabled():
+            # Not refused: a threaded run under the GIL is the control half of
+            # the experiment, and pretending it is an error would remove the
+            # only way to measure what the GIL costs.
+            sys.stderr.write(
+                "note: this interpreter has the GIL enabled; the thread\n"
+                "      backend will not scale. That is the measurement.\n")
+        return _run_threads(cfg, threads, reduce, warmup, ticks)
+
     if mp.get_start_method(allow_none=True) not in (None, "fork"):
         sys.stderr.write("error: this target needs the 'fork' start method.\n")
         sys.exit(2)

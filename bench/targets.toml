@@ -302,6 +302,21 @@ profiles  = ["default"]
 # be vectorised. Documented in the module docstring; this is a finding.
 updates  = ["deferred"]
 
+# The free-threaded interpreter is a separate target rather than a profile of
+# the one above: it is a different binary with a different numpy, so pretending
+# it is the same target would hide the confound.
+[[target]]
+id       = "python-numpy-ft"
+lang     = "Python"
+backend  = "numpy-3.14t"
+class    = "S"
+dir      = "impl/python"
+run      = ["{python314t}", "{dir}/slimebench_numpy.py"]
+compilers = ["python3.14t"]
+profiles  = ["default"]
+updates  = ["deferred"]
+optional = true
+
 [[target]]
 id       = "python-pure"
 lang     = "Python"

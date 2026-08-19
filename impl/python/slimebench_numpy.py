@@ -327,8 +327,13 @@ def main() -> int:
         # Class P. Processes, not threads -- see slimebench_mp.py for why.
         import slimebench_mp
         sim, ms_total, tick_ms = slimebench_mp.run_parallel(
-            cfg, cfg.threads, cfg.deposit_reduce, cfg.warmup, cfg.ticks)
-        cls, variant = "P", cfg.deposit_reduce
+            cfg, cfg.threads, cfg.deposit_reduce, cfg.warmup, cfg.ticks,
+            backend=cfg.mp_backend)
+        cls = "P"
+        # The variant has to name the carrier as well as the strategy: on a
+        # free-threaded build these are two different measurements.
+        gil = "gil" if slimebench_mp.gil_enabled() else "nogil"
+        variant = f"{cfg.deposit_reduce}+{cfg.mp_backend[:4]}-{gil}"
     else:
         cls, variant = "S", "numpy"
         sim = Sim(cfg)
