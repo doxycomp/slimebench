@@ -82,7 +82,8 @@ def xoshiro128pp_vec(s: np.ndarray, sel: np.ndarray | None = None) -> np.ndarray
 
 
 class Sim:
-    def __init__(self, cfg: common.Config):
+    def __init__(self, cfg: common.Config, bufs: dict | None = None,
+                 do_init: bool = True):
         common.check_pow2(cfg)
         common.normalize_f32(cfg)
         if cfg.update != "deferred":
@@ -98,17 +99,31 @@ class Sim:
         self.ymask = np.uint32(cfg.height - 1)
 
         cells = cfg.width * cfg.height
-        self.grid = np.zeros(cells, dtype=np.float32)
-        self.dep = np.zeros(cells, dtype=np.float32)
+        if bufs is None:
+            self.grid = np.zeros(cells, dtype=np.float32)
+            self.scratch = np.zeros(cells, dtype=np.float32)
+            self.dep = np.zeros(cells, dtype=np.float32)
+            self.ax = np.zeros(cfg.agents, dtype=np.float32)
+            self.ay = np.zeros(cfg.agents, dtype=np.float32)
+            self.adir = np.zeros(cfg.agents, dtype=np.int32)
+            self.arng = np.zeros((cfg.agents, 4), dtype=np.uint32)
+        else:
+            # Class P: views over one multiprocessing.shared_memory block, so
+            # every worker process sees the same grid. See slimebench_mp.py.
+            for k in ("grid", "scratch", "dep", "ax", "ay", "adir", "arng"):
+                setattr(self, k, bufs[k])
 
         self.cos = np.frombuffer(np.array(COS_BITS, dtype=np.uint32).tobytes(),
                                  dtype=np.float32)
         self.sin = np.frombuffer(np.array(SIN_BITS, dtype=np.uint32).tobytes(),
                                  dtype=np.float32)
+        self._fw = np.float32(cfg.width)
+        self._fh = np.float32(cfg.height)
 
         self.ns_agents = 0
         self.ns_diffuse = 0
-        self._init_state()
+        if do_init:
+            self._init_state()
 
     def _init_state(self) -> None:
         cfg = self.cfg
@@ -132,7 +147,6 @@ class Sim:
         n = cfg.agents
         idx = np.arange(1, n + 1, dtype=np.uint32)
         state = (np.uint32(cfg.seed) + np.uint32(0x9E3779B9) * idx).astype(np.uint32)
-        self.arng = np.empty((n, 4), dtype=np.uint32)
         for k in range(4):
             self.arng[:, k] = splitmix32_vec(state)
         allzero = (self.arng[:, 0] | self.arng[:, 1] |
@@ -143,9 +157,9 @@ class Sim:
         r2 = xoshiro128pp_vec(self.arng)
         r3 = xoshiro128pp_vec(self.arng)
         inv = np.float32(1.0) / np.float32(16777216.0)
-        self.ax = ((r1 >> np.uint32(8)).astype(np.float32) * inv) * np.float32(cfg.width)
-        self.ay = ((r2 >> np.uint32(8)).astype(np.float32) * inv) * np.float32(cfg.height)
-        self.adir = (r3 % np.uint32(NDIR)).astype(np.int32)
+        self.ax[:] = ((r1 >> np.uint32(8)).astype(np.float32) * inv) * np.float32(cfg.width)
+        self.ay[:] = ((r2 >> np.uint32(8)).astype(np.float32) * inv) * np.float32(cfg.height)
+        self.adir[:] = (r3 % np.uint32(NDIR)).astype(np.int32)
 
     # ---- passes ----------------------------------------------------------
 
@@ -163,27 +177,48 @@ class Sim:
 
     def tick(self) -> None:
         t0 = time.perf_counter_ns()
-        self._agent_pass()
+        self.agent_range(0, self.cfg.agents)
         t1 = time.perf_counter_ns()
 
-        self.grid += self.dep
-        self.dep[:] = np.float32(0.0)
+        self.merge_rows(0, self.cfg.height)
+        self.diffuse_rows(0, self.cfg.height)
+        self.swap_buffers()
 
-        self._diffuse_pass()
         t2 = time.perf_counter_ns()
         self.ns_agents += t1 - t0
         self.ns_diffuse += t2 - t1
 
-    def _agent_pass(self) -> None:
+    def swap_buffers(self) -> None:
+        self.grid, self.scratch = self.scratch, self.grid
+
+    def merge_rows(self, y0: int, y1: int) -> None:
+        """Fold `dep` into `grid` over rows [y0, y1) and clear it."""
+        lo = y0 << self.log2w
+        hi = y1 << self.log2w
+        self.grid[lo:hi] += self.dep[lo:hi]
+        self.dep[lo:hi] = np.float32(0.0)
+
+    def agent_range(self, lo: int, hi: int, aidx: np.ndarray | None = None) -> None:
+        """SPEC-1 section 5.3 over agents [lo, hi).
+
+        With `aidx` the deposit is *not* applied; the target cell is written to
+        `aidx[lo:hi]` for a later phase to apply in a chosen order. That is the
+        only thing the multi-process caller does differently -- everything
+        above it stays identical, or the parallel run stops being the same
+        simulation.
+
+        Every write goes back into the caller's arrays in place: under class P
+        those are views onto shared memory, and rebinding `self.ax` would leave
+        the other processes looking at the old values.
+        """
         cfg = self.cfg
-        self._fw = np.float32(cfg.width)
-        self._fh = np.float32(cfg.height)
         ndir = np.int32(NDIR)
         ss = np.int32(cfg.sensor_steps)
         rs = np.int32(cfg.rot_steps)
 
-        d = self.adir
-        x, y = self.ax, self.ay
+        d = self.adir[lo:hi]
+        x, y = self.ax[lo:hi].copy(), self.ay[lo:hi].copy()
+        arng = self.arng[lo:hi]
 
         dl = (d - ss + ndir) % ndir
         dr = (d + ss) % ndir
@@ -200,45 +235,58 @@ class Sim:
         # Only dead-end agents consume randomness (SPEC-1 section 5.3).
         newd = d.copy()
         if deadend.any():
-            bits = xoshiro128pp_vec(self.arng, deadend) & np.uint32(1)
+            bits = xoshiro128pp_vec(arng, deadend) & np.uint32(1)
             sub = d[deadend]
             turn_right = bits != 0
             sub = np.where(turn_right, (sub + rs) % ndir, (sub - rs + ndir) % ndir)
             newd[deadend] = sub
         newd[left] = (d[left] - rs + ndir) % ndir
         newd[right] = (d[right] + rs) % ndir
-        self.adir = newd
+        self.adir[lo:hi] = newd
 
         x = self._wrapf(x + self.cos[newd] * cfg.step, self._fw)
         y = self._wrapf(y + self.sin[newd] * cfg.step, self._fh)
-        self.ax, self.ay = x, y
+        self.ax[lo:hi] = x
+        self.ay[lo:hi] = y
 
         idx = ((y.astype(np.uint32) & self.ymask) << np.uint32(self.log2w)) | \
               (x.astype(np.uint32) & self.xmask)
+        if aidx is not None:
+            aidx[lo:hi] = idx
+            return
         # Unbuffered, in index order: matches SPEC-1's per-agent accumulation.
         np.add.at(self.dep, idx, np.float32(cfg.deposit))
 
-    def _diffuse_pass(self) -> None:
+    def diffuse_rows(self, y0: int, y1: int) -> None:
+        """SPEC-1 section 5.4 over rows [y0, y1), writing into `scratch`.
+
+        Output cells are independent, so splitting the row range across
+        processes is unconditionally bit-identical. The rows are gathered by
+        index rather than by np.roll on the whole grid, because a row block
+        needs its two neighbouring rows and those may wrap.
+        """
         cfg = self.cfg
-        g = self.grid.reshape(cfg.height, cfg.width)
+        h, w = cfg.height, cfg.width
+        g = self.grid.reshape(h, w)
 
-        # Summation order is normative (SPEC-1 section 5.4); each np.roll is
-        # one term of that sum, applied in exactly the specified sequence.
-        up = np.roll(g, 1, axis=0)
-        dn = np.roll(g, -1, axis=0)
+        rows = np.arange(y0, y1)
+        up = g[(rows - 1) % h]
+        mid = g[rows]
+        dn = g[(rows + 1) % h]
 
+        # Summation order is normative; each term is applied in sequence.
         acc = np.roll(up, 1, axis=1)
         acc = acc + up
         acc = acc + np.roll(up, -1, axis=1)
-        acc = acc + np.roll(g, 1, axis=1)
-        acc = acc + np.float32(4.0) * g
-        acc = acc + np.roll(g, -1, axis=1)
+        acc = acc + np.roll(mid, 1, axis=1)
+        acc = acc + np.float32(4.0) * mid
+        acc = acc + np.roll(mid, -1, axis=1)
         acc = acc + np.roll(dn, 1, axis=1)
         acc = acc + dn
         acc = acc + np.roll(dn, -1, axis=1)
 
         out = (acc / np.float32(12.0)) * np.float32(cfg.decay)
-        self.grid = out.reshape(-1)
+        self.scratch.reshape(h, w)[y0:y1] = out
 
     # ---- checksums -------------------------------------------------------
 
@@ -274,35 +322,44 @@ def dirtable_hash() -> int:
 def main() -> int:
     o = common.parse_args()
     cfg = o.cfg
-    sim = Sim(cfg)
 
-    for _ in range(cfg.warmup):
-        sim.tick()
-    sim.ns_agents = sim.ns_diffuse = 0
+    if cfg.threads > 1:
+        # Class P. Processes, not threads -- see slimebench_mp.py for why.
+        import slimebench_mp
+        sim, ms_total, tick_ms = slimebench_mp.run_parallel(
+            cfg, cfg.threads, cfg.deposit_reduce, cfg.warmup, cfg.ticks)
+        cls, variant = "P", cfg.deposit_reduce
+    else:
+        cls, variant = "S", "numpy"
+        sim = Sim(cfg)
 
-    tick_ms: list[float] = []
-    t_start = time.perf_counter_ns()
-    for t in range(cfg.ticks):
-        a = time.perf_counter_ns()
-        sim.tick()
-        tick_ms.append((time.perf_counter_ns() - a) / 1e6)
-        if cfg.hash_every and (t + 1) % cfg.hash_every == 0:
-            sys.stderr.write(f"tick {t+1} grid=0x{sim.hash_grid():08X} "
-                             f"agents=0x{sim.hash_agents():08X}\n")
-    ms_total = (time.perf_counter_ns() - t_start) / 1e6
+        for _ in range(cfg.warmup):
+            sim.tick()
+        sim.ns_agents = sim.ns_diffuse = 0
+
+        tick_ms: list[float] = []
+        t_start = time.perf_counter_ns()
+        for t in range(cfg.ticks):
+            a = time.perf_counter_ns()
+            sim.tick()
+            tick_ms.append((time.perf_counter_ns() - a) / 1e6)
+            if cfg.hash_every and (t + 1) % cfg.hash_every == 0:
+                sys.stderr.write(f"tick {t+1} grid=0x{sim.hash_grid():08X} "
+                                 f"agents=0x{sim.hash_agents():08X}\n")
+        ms_total = (time.perf_counter_ns() - t_start) / 1e6
 
     if o.dump_grid:
         sim.grid.tofile(o.dump_grid)
 
     if o.want_json:
         print(common.result_json(
-            cfg, impl="python", backend="numpy", cls="S", variant="numpy",
+            cfg, impl="python", backend="numpy", cls=cls, variant=variant,
             grid_hash=sim.hash_grid(), agent_hash=sim.hash_agents(),
             dirtable_hash=dirtable_hash(), ms_total=ms_total,
             ms_agents=sim.ns_agents / 1e6, ms_diffuse=sim.ns_diffuse / 1e6,
             tick_ms=tick_ms))
     else:
-        common.print_human(cfg, "numpy", sim.hash_grid(), sim.hash_agents(),
+        common.print_human(cfg, variant, sim.hash_grid(), sim.hash_agents(),
                            ms_total, sim.ns_agents / 1e6, sim.ns_diffuse / 1e6,
                            cfg.ticks)
     return 0

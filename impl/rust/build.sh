@@ -19,6 +19,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 PROFILE="${1:-release}"
 
 cargo_profile=release
+binname=slimebench
 features=()
 rustflags=""
 
@@ -33,6 +34,13 @@ case "$PROFILE" in
   release-native-lto-unchecked)
                              cargo_profile=release-lto; rustflags="-C target-cpu=native"
                              features=(unchecked) ;;
+  # Windowed frontends (class R). They are separate [[bin]] targets behind
+  # cargo features, so the headless build still works with no SDL2 and no
+  # raylib installed -- the same split the C Makefile makes.
+  render-sdl2)               rustflags="-C target-cpu=native"
+                             features=(unchecked sdl2-frontend); binname=slimebench-sdl2 ;;
+  render-raylib)             rustflags="-C target-cpu=native"
+                             features=(unchecked raylib-frontend); binname=slimebench-raylib ;;
   *) echo "unknown profile '$PROFILE'" >&2; exit 2 ;;
 esac
 
@@ -40,7 +48,13 @@ esac
 # and sharing one dir would make every matrix entry a full rebuild.
 target_dir="target/$PROFILE"
 
-args=(build --profile "$cargo_profile" --target-dir "$target_dir")
+args=(build --profile "$cargo_profile")
+# The render binaries stay in the default target dir: they link SDL2 or
+# raylib and rebuilding those per profile is minutes, not seconds.
+case "$PROFILE" in
+  render-*) args+=(--bin "$binname") ;;
+  *)        args+=(--target-dir "$target_dir") ;;
+esac
 if [ ${#features[@]} -gt 0 ]; then
   args+=(--features "$(IFS=,; echo "${features[*]}")")
 fi
@@ -50,6 +64,12 @@ if [ -n "$rustflags" ]; then
 else
   cargo "${args[@]}"
 fi
+
+case "$PROFILE" in
+  render-*)
+    echo "built target/release/$binname"
+    exit 0 ;;
+esac
 
 # cargo puts dev builds under debug/, everything else under the profile name.
 case "$cargo_profile" in

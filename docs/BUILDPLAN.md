@@ -41,8 +41,14 @@ Das ist die Voraussetzung für alles Weitere.
   C-Transliteration. Bit-exakt.
 - ✅ **Rust** — zwei Varianten über ein Cargo-Feature: `safe` und `unchecked`.
   Beide bit-exakt.
-- ✅ **Haskell** — `IOUArray` in `IO`, durchgehend strikt, `unsafeRead`.
-  Bit-exakt beim ersten Lauf.
+- ✅ **Haskell** — zwei Stile, beide bit-exakt und gegeneinander geprüft:
+  `IOUArray` in `IO` mit `unsafeRead`/`unsafeAt` (**1.06× von C**), und eine
+  idiomatische Fassung über unveränderliche `Data.Vector.Unboxed` (3.48× von
+  C). Der Anstoß kam von außen: ein Haskell-Programmierer las den ersten Port
+  und nannte ihn eine zeilenweise C-Transliteration, was zutraf. Was dabei
+  herauskam, steht in [RESULTS.md §4](RESULTS.md#4-wie-sehr-der-programmierstil-zählt-haskell)
+  — unter anderem, dass vier Zeichen (`(!)` → `unsafeAt`) Faktor 1.45
+  ausmachten.
 - ✅ Konformitätsgate grün.
 
 ---
@@ -64,7 +70,7 @@ Das ist die Voraussetzung für alles Weitere.
 
 ---
 
-## Phase 4 — Rendering-Backends 🔨
+## Phase 4 — Rendering-Backends ✅
 
 Beide Backends erhalten exakt denselben Graustufen-Puffer; `--freeze-sim`
 hält die Simulation an, damit wirklich nur der Upload-Pfad Grid → Textur →
@@ -74,24 +80,42 @@ Bildschirm gemessen wird.
 |---|---|---|
 | C | ✅ | ✅ |
 | C++ | ✅ | ✅ |
-| Rust | ⬜ `sdl2` crate | ⬜ `raylib` crate |
-| Haskell | ⬜ `sdl2` | ⬜ `h-raylib` |
-| Python | ⬜ `pygame` | ⬜ `raylib-python-cffi` |
-| Perl | ⬜ `SDL2::FFI` | ⬜ `Raylib::FFI` |
+| Rust | ✅ `sdl2` crate | ✅ `raylib` crate |
+| Haskell | ✅ `sdl2` | ✅ `foreign import` + Shim |
+| Python | ✅ `pygame` | ✅ `raylib-python-cffi` |
+| Perl | ✅ `FFI::Platypus` | ✅ `FFI::Platypus` + Shim |
 
-**Ergebnis** (1024², 300 Frames, eingefrorene Simulation): raylib ist auf der
-RTX 5080 **2.1× schneller** als SDL2, auf dem Software-Rasterizer 1.4×. C und
-C++ sind ununterscheidbar. Die Erwartung hat sich bestätigt: es liegt am
-Pixelformat, nicht an der Bibliothek. raylib nimmt den 8-Bit-Graustufenpuffer
-direkt entgegen (`UNCOMPRESSED_GRAYSCALE`), SDL2 braucht ARGB8888 und damit
-eine Expansionsschleife über eine Million Pixel pro Frame.
+Für Haskell/raylib und Perl/raylib steht bewusst nicht das Ökosystem-Paket im
+Baum: `h-raylib` und die Perl-raylib-Distributionen vendorn raylib und bauen
+eine eigene Kopie, womit man eine Sprache gegen einen *anderen Build* der
+Bibliothek vergliche. Beide binden stattdessen dasselbe
+`/usr/local/lib/libraylib.so` wie alle anderen — und stoßen dabei auf dieselbe
+Grenze, weil raylib `Image`, `Texture2D` und `Color` by value übergibt. Die
+fünf betroffenen Aufrufe teilen sich
+[`impl/shim/raylib_shim.c`](../impl/shim/raylib_shim.c).
 
-Die erste Messung lief unbemerkt auf llvmpipe — WSL2 stellt unter Linux
-standardmäßig keine GPU für OpenGL bereit. Beide Reihen stehen jetzt
-nebeneinander in [RESULTS.md §7](RESULTS.md#7-rendering-klasse-r), und die
-Binaries drucken ihren Renderer-String. Überraschend dabei: SDL2 ist auf der
-echten GPU *langsamer* als auf Software — beide Pfade sind bei 1024²
-CPU-gebunden.
+**Ergebnis** (1024², eingefrorene Simulation, RTX 5080, ms/Frame):
+
+| | SDL2 | raylib |
+|---|---:|---:|
+| C | 4.27 | 2.06 |
+| C++ | 4.39 | **1.91** |
+| Haskell | 4.30 | 1.95 |
+| Rust | 4.60 | 1.99 |
+| Python | 4.98 | 4.58 |
+| Perl | 118.5 | 78.5 |
+
+raylib gewinnt überall, auf der GPU um **2.2×**. Es liegt am Pixelformat, nicht
+an der Bibliothek: raylib nimmt den 8-Bit-Graustufenpuffer direkt entgegen,
+SDL2 braucht ARGB8888 und damit eine Expansionsschleife über eine Million
+Pixel pro Frame.
+
+Der eigentliche Befund ist aber, dass **die vier kompilierten Sprachen auf
+raylib innerhalb von 9 % liegen**. Steht das Backend fest, ist die Sprache in
+dieser Klasse fast egal — anders als in Klasse S. Und SDL2 ist auf der echten
+GPU *langsamer* als auf dem Software-Rasterizer, in allen vieren: beide Pfade
+sind bei 1024² CPU-gebunden. Details in
+[RESULTS.md §8](RESULTS.md#8-rendering-klasse-r).
 
 ---
 
@@ -126,11 +150,11 @@ ersatzweise über `hyperfine` und die Phasen-Timer).
 Vier-Wege-Verzweigung auf die Sensorwerte ist datenabhängig und nahezu
 gleichverteilt; PGO kann nur *vorhersagbare* Verzweigungen verbessern. Die
 Vermutung an dieser Stelle war falsch. Details in
-[RESULTS.md §9](RESULTS.md#9-was-nicht-funktioniert-hat).
+[RESULTS.md §9](RESULTS.md#10-was-nicht-funktioniert-hat).
 
 ---
 
-## Phase 6 — Parallelität 🔨 (C und C++ fertig)
+## Phase 6 — Parallelität ✅
 
 Ausschließlich im `deferred`-Update-Modus (SPEC §5.5) — `serial` ist
 prinzipiell nicht deterministisch parallelisierbar.
@@ -145,18 +169,47 @@ Kette. SPEC §5.6 unterscheidet jetzt zwei Strategien, und beide sind gemessen.
 |---|---|---|
 | C | pthreads, `binned` + `private` | ✅ |
 | C++ | `std::jthread` + `std::barrier`, beide Strategien | ✅ |
-| Rust | rayon oder `std::thread::scope` | ⬜ |
-| Haskell | `-threaded -N` | ⬜ |
-| TypeScript | Web Worker + `SharedArrayBuffer` | ⬜ |
-| Python | `multiprocessing`, oder Free-Threaded 3.13+ | ⬜ |
-| Perl | `threads` — vermutlich der ernüchterndste Datenpunkt der Suite | ⬜ |
+| Rust | `std::thread::scope`, beide Strategien | ✅ |
+| TypeScript | `worker_threads` + `SharedArrayBuffer`, beide Strategien | ✅ |
+| Haskell | `forkOn` + `-threaded`, MVar-Barriere, beide Strategien | ✅ |
+| Python | `multiprocessing` + `shared_memory`, beide Strategien | ✅ |
+| Perl | `fork` + Pipes, replizierte Reduktion | ✅ |
+
+**Alle sieben Ports sind bit-identisch zum jeweils seriellen Lauf**, und die
+fünf mit `private`-Strategie liefern bei `--deposit 0.1` und T=4 sogar
+denselben *falschen* Hash (`0xE82B2012`). Skalierung bei `medium`/100:
+
+| Sprache | 1 Thread | bester | Speedup |
+|---|---:|---:|---:|
+| C++ | 5659 | 674 | 8.4× |
+| C | 5233 | 635 | 8.2× |
+| Haskell | 5339 | 741 | 7.2× |
+| Rust | 6808 | 1007 | 6.8× |
+| TypeScript | 13345 | 1190 | **11.2×** |
+| Python | 7857 | 1888 | 4.2× |
+| Perl (bei `tiny`) | 4141 | 1568 | 2.6× |
+
+Zwei Dinge, die sich aus Klasse S nicht vorhersagen ließen: **TypeScript
+skaliert am besten** und schrumpft den Abstand zu C von 3.0× auf 1.6×; und
+**Haskell holt C ein** (741 gegen 729 ms), nachdem die `unsafeAt`-Korrektur
+aus Phase 2 den Agenten-Pass entlastet hat.
+
+**Perl brauchte einen eigenen Entwurf.** `threads::shared` kostet auf dieser
+Maschine 7.6× pro zufälligem Read-Modify-Write; der Diffusionsstencil liest
+neun Zellen pro Ausgabezelle, ein geteiltes Grid könnte also nie gewinnen. Ein
+ganzer Block durch `pack`/`unpack` kostet dagegen so viel wie *ein* Durchlauf
+über ein normales Array. Also `fork` mit privaten Grids und gepacktem Binär
+über Pipes — und eine dritte Reduktionsstrategie, **repliziert**, die SPEC §5.6
+nicht kennt: jeder Prozess wendet jeden Deposit in aufsteigendem Agentenindex
+an, also exakt die serielle Kette. Bit-identisch für jede Prozesszahl ohne den
+`binned`-Sort, zum Preis eines N-fach ausgeführten Deposit- und Merge-Passes.
 
 **Ergebnis** (2048², 1 M Agenten): `binned` skaliert auf **9.5× bei 16
 Threads** und ist für jede Thread-Zahl bit-identisch zum seriellen Lauf.
 `private` erreicht nur 3.5× und **fällt bei 32 Threads unter die serielle
 Laufzeit** — die Reduktion liest dort 512 MiB pro Tick. C und C++ sind bis
 acht Threads ununterscheidbar. Zahlen und Begründung in
-[RESULTS.md §4](RESULTS.md#4-parallelität-klasse-p).
+[RESULTS.md §4](RESULTS.md#5-parallelität-klasse-p).
 
 Codeumfang für dieselbe Garantie: **C 326 Zeilen, C++ 264**. Der Unterschied
 steckt fast vollständig im Lebenszyklus — `std::jthread` joint beim Zerstören,
@@ -224,7 +277,7 @@ Gangbar sind stattdessen zwei Wege, beide implementiert:
 **Die Annahme „Klasse G ist zwangsläufig Stufe C" war falsch** — jedenfalls für
 CUDA. Nötig sind `-fmad=false`, korrekt gerundete Division und ganzzahlige
 Deposit-Atomics statt `atomicAdd(float*)`. Details in SPEC §8.2 und
-[RESULTS.md §6](RESULTS.md#6-gpu-klasse-g).
+[RESULTS.md §6](RESULTS.md#7-gpu-klasse-g).
 
 Offen: ein Host in einer zweiten Sprache (der GL-Weg macht das billig), eine
 Determinismus-Analyse für weitere Treiber, und eine Wiederholung auf nativem

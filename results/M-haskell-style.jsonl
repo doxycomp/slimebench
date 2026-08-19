@@ -1,0 +1,4 @@
+{"schema": 1, "impl": "haskell", "class": "S", "preset": "small", "ticks": 300, "update": "deferred", "variant": "C reference (gcc -O3 -native)", "ms_total": 1658.72, "grid_hash": "0x7A67A29B"}
+{"schema": 1, "impl": "haskell", "class": "S", "preset": "small", "ticks": 300, "update": "deferred", "variant": "haskell lowlevel, (!) lookups", "ms_total": 2561.42, "grid_hash": "0x7A67A29B"}
+{"schema": 1, "impl": "haskell", "class": "S", "preset": "small", "ticks": 300, "update": "deferred", "variant": "haskell lowlevel, unsafeAt", "ms_total": 1764.29, "grid_hash": "0x7A67A29B"}
+{"schema": 1, "impl": "haskell", "class": "S", "preset": "small", "ticks": 300, "update": "deferred", "variant": "haskell idiomatic (vector)", "ms_total": 5778.12, "grid_hash": "0x7A67A29B"}

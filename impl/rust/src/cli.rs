@@ -1,6 +1,6 @@
 //! CLI parsing and result reporting (SPEC-1 section 10).
 
-use crate::sim::{Config, Sim, Update};
+use crate::sim::{Config, Reduce, Sim, Update};
 
 pub struct Opts {
     pub cfg: Config,
@@ -18,6 +18,7 @@ usage: slimebench [options]   (slimebench SPEC-1)
   --agents N  --ticks N  --warmup N  --seed N
   --update MODE        serial|deferred
   --threads N
+  --deposit-reduce M   private|binned  (SPEC-1 5.6)
   --sensor-dist F  --sensor-steps N  --rot-steps N
   --step F  --deposit F  --decay F
   --headless  --render  --freeze-sim
@@ -107,6 +108,15 @@ pub fn parse_args() -> Opts {
                 };
                 i += 1;
             }
+            "--deposit-reduce" => {
+                let m = need(i, &argv, a);
+                o.cfg.reduce = match m.as_str() {
+                    "private" => Reduce::Private,
+                    "binned" => Reduce::Binned,
+                    _ => fail("--deposit-reduce must be private|binned"),
+                };
+                i += 1;
+            }
             "--simd" => o.cfg.simd = true,
             "--no-simd" => o.cfg.simd = false,
             "--headless" => o.want_render = false,
@@ -140,13 +150,17 @@ pub fn result_json(
     let mean = if n > 0 { tick_ms.iter().sum::<f64>() / n as f64 } else { 0.0 };
 
     let c = &sim.cfg;
-    // One field describing what actually ran: the indexing variant, and the
-    // vector ISA the diffusion pass was compiled for.
-    let variant = if c.simd {
-        format!("{}+simd-{}", Sim::variant(), crate::simd::simd_name())
-    } else {
-        Sim::variant().to_string()
-    };
+    // One field describing what actually ran: the indexing variant, the
+    // reduction strategy when threaded, and the vector ISA the diffusion pass
+    // was compiled for.
+    let mut variant = Sim::variant().to_string();
+    if c.threads > 1 {
+        variant.push('+');
+        variant.push_str(if c.reduce == Reduce::Binned { "binned" } else { "private" });
+    }
+    if c.simd {
+        variant.push_str(&format!("+simd-{}", crate::simd::simd_name()));
+    }
     let cells = c.width as f64 * c.height as f64;
     let maups = if ms_total > 0.0 { c.agents as f64 * n as f64 / ms_total / 1000.0 } else { 0.0 };
     let mcups = if ms_total > 0.0 { cells * n as f64 / ms_total / 1000.0 } else { 0.0 };

@@ -58,6 +58,14 @@ pub enum Update {
     Deferred,
 }
 
+/// SPEC-1 section 5.6. `Binned` is bit-identical to the single-threaded run for
+/// every thread count; `Private` only reproduces itself per thread count.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Reduce {
+    Private,
+    Binned,
+}
+
 #[derive(Clone, Debug)]
 pub struct Config {
     pub width: u32,
@@ -68,6 +76,7 @@ pub struct Config {
     pub seed: u32,
     pub threads: u32,
     pub update: Update,
+    pub reduce: Reduce,
     pub sensor_dist: f32,
     pub step: f32,
     pub deposit: f32,
@@ -90,6 +99,7 @@ impl Default for Config {
             seed: 12345,
             threads: 1,
             update: Update::Serial,
+            reduce: Reduce::Binned,
             sensor_dist: 9.0,
             step: 1.0,
             deposit: 10.0,
@@ -147,19 +157,35 @@ fn wrapf(mut v: f32, m: f32) -> f32 {
 
 /// Everything the agent loop needs that is not a buffer.
 #[derive(Clone, Copy)]
-struct AgentParams {
-    xmask: u32,
-    ymask: u32,
-    log2w: u32,
-    fw: f32,
-    fh: f32,
-    sdist: f32,
-    step: f32,
-    deposit: f32,
-    ss: i32,
-    rs: i32,
-    ndir: i32,
-    agents: usize,
+pub struct AgentParams {
+    pub xmask: u32,
+    pub ymask: u32,
+    pub log2w: u32,
+    pub fw: f32,
+    pub fh: f32,
+    pub sdist: f32,
+    pub step: f32,
+    pub deposit: f32,
+    pub ss: i32,
+    pub rs: i32,
+    pub ndir: i32,
+    pub agents: usize,
+}
+
+/// The per-agent buffers, gathered so the single-threaded and the threaded
+/// caller can hand the same set to [`agent_step_one`].
+///
+/// Callers destructure this into locals *before* their loop rather than
+/// passing it in by reference. Reaching the slices through `&mut AgentBufs`
+/// each iteration costs ~6% on the agent pass: LLVM reloads the slice
+/// pointers from the struct instead of keeping them in registers.
+pub struct AgentBufs<'a> {
+    pub ax: &'a mut [f32],
+    pub ay: &'a mut [f32],
+    pub adir: &'a mut [u16],
+    pub arng: &'a mut [u32],
+    pub cos_tab: &'a [f32],
+    pub sin_tab: &'a [f32],
 }
 
 // ---- simulation ----------------------------------------------------------
@@ -271,9 +297,8 @@ impl Sim {
         self.ns_diffuse += t2 - t1;
     }
 
-    /// SPEC-1 section 5.3.
-    fn agent_pass(&mut self) {
-        let p = AgentParams {
+    pub fn agent_params(&self) -> AgentParams {
+        AgentParams {
             xmask: self.xmask,
             ymask: self.ymask,
             log2w: self.log2w,
@@ -286,62 +311,65 @@ impl Sim {
             rs: self.cfg.rot_steps as i32,
             ndir: NDIR as i32,
             agents: self.cfg.agents as usize,
-        };
+        }
+    }
+
+    /// SPEC-1 section 5.3.
+    fn agent_pass(&mut self) {
+        let p = self.agent_params();
 
         // Disjoint field borrows; no aliasing anywhere.
         let Self {
             grid, dep, ax, ay, adir, arng, cos_tab, sin_tab, ..
         } = self;
+        let b = AgentBufs { ax, ay, adir, arng, cos_tab, sin_tab };
 
         if self.cfg.update == Update::Deferred {
-            agent_loop::<false>(p, grid, dep, ax, ay, adir, arng, cos_tab, sin_tab);
+            agent_loop::<false>(p, grid, dep, b);
         } else {
             // `read` is unused when INPLACE; pass an empty slice to prove it.
-            agent_loop::<true>(p, &[], grid, ax, ay, adir, arng, cos_tab, sin_tab);
+            agent_loop::<true>(p, &[], grid, b);
         }
     }
 
     pub fn log2w(&self) -> u32 { self.log2w }
+
+    /// Raw views the thread pool needs. Every buffer is a separate allocation,
+    /// so handing them out together cannot alias.
+    pub fn parts(&mut self) -> (&mut [f32], &mut [f32], &mut [f32], AgentBufs<'_>) {
+        let Self { grid, scratch, dep, ax, ay, adir, arng, cos_tab, sin_tab, .. } = self;
+        (grid, scratch, dep, AgentBufs { ax, ay, adir, arng, cos_tab, sin_tab })
+    }
+
+    pub fn swap_buffers(&mut self) {
+        std::mem::swap(&mut self.grid, &mut self.scratch);
+    }
 
     /// Disjoint borrows of the two grid buffers, for the vectorised kernel.
     pub fn grid_and_scratch(&mut self) -> (&[f32], &mut [f32]) {
         (&self.grid, &mut self.scratch)
     }
 
-    /// SPEC-1 section 5.4 over rows `[y0, y1)`, scalar. Output cells are
-    /// independent, so splitting the range is unconditionally bit-identical.
+    /// SPEC-1 section 5.4 over rows `[y0, y1)`, scalar.
     pub fn diffuse_rows(&mut self, y0: u32, y1: u32) {
-        let w = self.cfg.width;
-        let log2w = self.log2w;
-        let xmask = self.xmask;
-        let ymask = self.ymask;
-        let decay = self.cfg.decay;
-        let src = &self.grid;
-        let dst = &mut self.scratch;
+        self.stencil().run(y0, y1);
+    }
 
-        for y in y0..y1 {
-            let rowm = (y.wrapping_sub(1) & ymask) << log2w;
-            let row0 = y << log2w;
-            let rowp = ((y + 1) & ymask) << log2w;
-
-            for x in 0..w {
-                let xm = x.wrapping_sub(1) & xmask;
-                let xp = (x + 1) & xmask;
-
-                let mut acc = at!(src, rowm | xm);
-                acc = acc + at!(src, rowm | x);
-                acc = acc + at!(src, rowm | xp);
-                acc = acc + at!(src, row0 | xm);
-                acc = acc + 4.0 * at!(src, row0 | x);
-                acc = acc + at!(src, row0 | xp);
-                acc = acc + at!(src, rowp | xm);
-                acc = acc + at!(src, rowp | x);
-                acc = acc + at!(src, rowp | xp);
-
-                *at_mut!(dst, row0 | x) = (acc / 12.0) * decay;
-            }
+    /// The stencil view over this sim's two buffers.
+    pub fn stencil(&mut self) -> Stencil<'_> {
+        let Self { grid, scratch, cfg, log2w, xmask, ymask, .. } = self;
+        Stencil {
+            src: grid,
+            dst: scratch,
+            w: cfg.width,
+            log2w: *log2w,
+            xmask: *xmask,
+            ymask: *ymask,
+            decay: cfg.decay,
         }
     }
+
+    pub fn masks(&self) -> (u32, u32) { (self.xmask, self.ymask) }
 
     /// SPEC-1 section 5.4. Summation order is normative -- do not reorder.
     fn diffuse_pass(&mut self) {
@@ -400,75 +428,156 @@ impl Sim {
     }
 }
 
-/// The agent loop. `INPLACE` selects SPEC-1's `serial` semantics, where the
-/// deposit target is also the sensing source; `read` is then unused.
+/// SPEC-1 section 5.4 over rows `[y0, y1)`. Summation order is normative --
+/// do not reorder. Output cells are independent, so splitting the row range
+/// across threads is unconditionally bit-identical.
+///
+/// The two grid buffers plus the geometry the stencil needs, so the
+/// single-threaded path and the thread pool run literally the same kernel.
+///
+/// ## Why the buffers live in a struct instead of being two parameters
+///
+/// This looks like pointless indirection and is worth 2.1x. Written as
+/// `fn(src: &[f32], dst: &mut [f32], ...)`, LLVM gets `noalias` on both, proves
+/// the stencil's reads and writes are independent, and autovectorises the loop
+/// -- but the indices go through `& xmask`, so it cannot prove they are
+/// contiguous and emits **gathers**. On Zen 5 that is slower than the scalar
+/// loop it replaced: 290 -> 602 ms at `small`/300, reproducibly, and neither
+/// `inline(always)` nor `inline(never)` changes it.
+///
+/// Reaching both buffers through one `&mut self` withholds that `noalias`, so
+/// LLVM must assume they may alias and leaves the loop scalar -- which is
+/// faster here, and is also exactly the situation the C reference is in, since
+/// it passes two plain `float *` without `restrict`. Matching it is what makes
+/// the cross-language numbers comparable rather than a comparison of two
+/// different compiler decisions.
+///
+/// The vectorisation that *does* pay is the hand-written one in `simd.rs`,
+/// which knows the rows are contiguous and uses unaligned loads: 4.2x, against
+/// autovectorisation's 0.48x.
+pub struct Stencil<'a> {
+    pub src: &'a [f32],
+    pub dst: &'a mut [f32],
+    pub w: u32,
+    pub log2w: u32,
+    pub xmask: u32,
+    pub ymask: u32,
+    pub decay: f32,
+}
+
+impl Stencil<'_> {
+    /// SPEC-1 section 5.4 over rows `[y0, y1)`. Summation order is normative --
+    /// do not reorder. Output cells are independent, so splitting the row range
+    /// across threads is unconditionally bit-identical.
+    pub fn run(&mut self, y0: u32, y1: u32) {
+        for y in y0..y1 {
+            let rowm = (y.wrapping_sub(1) & self.ymask) << self.log2w;
+            let row0 = y << self.log2w;
+            let rowp = ((y + 1) & self.ymask) << self.log2w;
+
+            for x in 0..self.w {
+                let xm = x.wrapping_sub(1) & self.xmask;
+                let xp = (x + 1) & self.xmask;
+
+                let mut acc = at!(self.src, rowm | xm);
+                acc = acc + at!(self.src, rowm | x);
+                acc = acc + at!(self.src, rowm | xp);
+                acc = acc + at!(self.src, row0 | xm);
+                acc = acc + 4.0 * at!(self.src, row0 | x);
+                acc = acc + at!(self.src, row0 | xp);
+                acc = acc + at!(self.src, rowp | xm);
+                acc = acc + at!(self.src, rowp | x);
+                acc = acc + at!(self.src, rowp | xp);
+
+                *at_mut!(self.dst, row0 | x) = (acc / 12.0) * self.decay;
+            }
+        }
+    }
+}
+
+/// One agent's step: sense, turn, move, and report the cell it lands on.
+/// **Applying the deposit is the caller's job** -- that is the one thing the
+/// serial, deferred and threaded paths do differently, and everything else has
+/// to stay identical between them. Keeping the rule in a single function is
+/// what stops the parallel path drifting away from it; the C reference splits
+/// it the same way (`sb_agent.h`).
+///
+/// `field` is what the agent senses: the grid in `deferred`, and in `serial` a
+/// short-lived reborrow of the very buffer the caller is depositing into.
+#[inline(always)]
 #[allow(clippy::too_many_arguments)]
-fn agent_loop<const INPLACE: bool>(
-    p: AgentParams,
-    read: &[f32],
-    write: &mut [f32],
+pub fn agent_step_one(
+    p: &AgentParams,
+    field: &[f32],
     ax: &mut [f32],
     ay: &mut [f32],
     adir: &mut [u16],
     arng: &mut [u32],
     cos_tab: &[f32],
     sin_tab: &[f32],
-) {
-    // Reading through a short-lived reborrow of `write` is sound; the borrow
-    // ends before the next store.
-    macro_rules! cell {
-        ($i:expr) => {{
-            let _idx = $i;
-            if INPLACE {
-                at!(write, _idx)
-            } else {
-                at!(read, _idx)
-            }
-        }};
-    }
+    i: usize,
+) -> u32 {
     macro_rules! sense {
         ($x:expr, $y:expr, $d:expr) => {{
             let sx = wrapf($x + at!(cos_tab, $d) * p.sdist, p.fw);
             let sy = wrapf($y + at!(sin_tab, $d) * p.sdist, p.fh);
-            cell!((((sy as u32) & p.ymask) << p.log2w) | ((sx as u32) & p.xmask))
+            at!(field, (((sy as u32) & p.ymask) << p.log2w) | ((sx as u32) & p.xmask))
         }};
     }
 
-    for i in 0..p.agents {
-        let mut d = adir[i] as i32;
-        let mut x = ax[i];
-        let mut y = ay[i];
+    let mut d = adir[i] as i32;
+    let mut x = ax[i];
+    let mut y = ay[i];
 
-        let dl = (d - p.ss + p.ndir) % p.ndir;
-        let dr = (d + p.ss) % p.ndir;
+    let dl = (d - p.ss + p.ndir) % p.ndir;
+    let dr = (d + p.ss) % p.ndir;
 
-        let fl = sense!(x, y, dl);
-        let fc = sense!(x, y, d);
-        let fr = sense!(x, y, dr);
+    let fl = sense!(x, y, dl);
+    let fc = sense!(x, y, d);
+    let fr = sense!(x, y, dr);
 
-        if fc >= fl && fc >= fr {
-            // straight on
-        } else if fc < fl && fc < fr {
-            if xoshiro128pp(&mut arng[i * 4..i * 4 + 4]) & 1 != 0 {
-                d = (d + p.rs) % p.ndir;
-            } else {
-                d = (d - p.rs + p.ndir) % p.ndir;
-            }
-        } else if fl > fr {
-            d = (d - p.rs + p.ndir) % p.ndir;
-        } else {
+    if fc >= fl && fc >= fr {
+        // straight on
+    } else if fc < fl && fc < fr {
+        if xoshiro128pp(&mut arng[i * 4..i * 4 + 4]) & 1 != 0 {
             d = (d + p.rs) % p.ndir;
+        } else {
+            d = (d - p.rs + p.ndir) % p.ndir;
         }
+    } else if fl > fr {
+        d = (d - p.rs + p.ndir) % p.ndir;
+    } else {
+        d = (d + p.rs) % p.ndir;
+    }
 
-        x = wrapf(x + at!(cos_tab, d) * p.step, p.fw);
-        y = wrapf(y + at!(sin_tab, d) * p.step, p.fh);
+    x = wrapf(x + at!(cos_tab, d) * p.step, p.fw);
+    y = wrapf(y + at!(sin_tab, d) * p.step, p.fh);
 
-        let idx = (((y as u32) & p.ymask) << p.log2w) | ((x as u32) & p.xmask);
+    adir[i] = d as u16;
+    ax[i] = x;
+    ay[i] = y;
+
+    (((y as u32) & p.ymask) << p.log2w) | ((x as u32) & p.xmask)
+}
+
+/// The agent loop. `INPLACE` selects SPEC-1's `serial` semantics, where the
+/// deposit target is also the sensing source; `read` is then unused.
+fn agent_loop<const INPLACE: bool>(
+    p: AgentParams,
+    read: &[f32],
+    write: &mut [f32],
+    b: AgentBufs<'_>,
+) {
+    let AgentBufs { ax, ay, adir, arng, cos_tab, sin_tab } = b;
+    for i in 0..p.agents {
+        // In-place sensing reads through a short-lived reborrow of `write`;
+        // the borrow ends before the store below, so this is sound.
+        let idx = if INPLACE {
+            agent_step_one(&p, &*write, ax, ay, adir, arng, cos_tab, sin_tab, i)
+        } else {
+            agent_step_one(&p, read, ax, ay, adir, arng, cos_tab, sin_tab, i)
+        };
         *at_mut!(write, idx) += p.deposit;
-
-        adir[i] = d as u16;
-        ax[i] = x;
-        ay[i] = y;
     }
 }
 

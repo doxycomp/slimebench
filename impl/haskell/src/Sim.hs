@@ -16,10 +16,16 @@
 --     cell and the whole grid becomes a graph of suspended additions. That is
 --     the difference between "a few times slower than C" and "unusable".
 --
---   * @unsafeRead@/@unsafeWrite@. Every index has already been masked with
---     @width-1@, so the bounds check in 'readArray' can never fire, but GHC
---     cannot prove it. This is the same trade the Rust target measures with
---     its @unchecked@ feature.
+--   * @unsafeRead@/@unsafeWrite@, and @unsafeAt@ on the trig tables. Every
+--     index has already been masked with @width-1@ or reduced mod NDIR, so the
+--     bounds check can never fire, but GHC cannot prove it. This is the same
+--     trade the Rust target measures with its @unchecked@ feature -- and it is
+--     far more expensive here than there. Using @Data.Array.Unboxed.(!)@ for
+--     the four trig lookups per agent, which is the obvious way to write it,
+--     costs **1.52x overall**: 2253 -> 1479 ms at small/300, almost all of it
+--     in the agent pass (1962 -> 1197). @(!)@ goes through the @Ix@ class to
+--     compute the offset and range-checks it, and GHC does not eliminate
+--     either even though the bounds are a compile-time constant.
 module Sim
   ( Config(..)
   , Update(..)
@@ -27,10 +33,16 @@ module Sim
   , defaultConfig
   , newSim
   , tick
+  , agentRange
+  , diffuseRows
+  , mergeRows
+  , swapBuffers
   , hashGrid
   , hashAgents
   , dirtableHashRuntime
   , renderGray
+  , renderGrayPtr
+  , renderArgbPtr
   , gridValues
   , resetTimers
   , readNsAgent
@@ -40,13 +52,14 @@ module Sim
   ) where
 
 import Control.Monad (forM_)
-import Data.Array.Base (unsafeRead, unsafeWrite)
+import Data.Array.Base (unsafeAt, unsafeRead, unsafeWrite)
 import Data.Array.IO (IOUArray, getElems, newArray)
-import Data.Array.Unboxed ((!))
 import Data.Bits (shiftL, shiftR, xor, (.&.), (.|.))
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Word (Word32, Word64, Word8)
 import GHC.Clock (getMonotonicTimeNSec)
+import Foreign.Ptr (Ptr)
+import Foreign.Storable (pokeByteOff)
 import GHC.Float (castFloatToWord32)
 
 import DirTable (cosBits, cosTable, ndir, sinBits, sinTable)
@@ -251,7 +264,17 @@ tick sim@Sim{..} = do
 
 -- | SPEC-1 section 5.3.
 agentPass :: Sim -> IO ()
-agentPass Sim{..} = do
+agentPass sim = agentRange sim 0 (cfgAgents (simCfg sim)) Nothing
+
+-- | SPEC-1 section 5.3 over agents @[lo, hi)@.
+--
+-- With @Just aidx@ the deposit is /not/ applied; the target cell is recorded
+-- in @aidx[i]@ for a later phase to apply in a chosen order. That is what
+-- class P's @binned@ reduction needs, and it is the only thing the threaded
+-- caller does differently -- everything above it has to stay identical, or the
+-- threaded run stops being the same simulation.
+agentRange :: Sim -> Int -> Int -> Maybe (IOUArray Int Int) -> IO ()
+agentRange Sim{..} !lo !hi !mAidx = do
   grid <- readIORef simGrid
   target <- case simDep of
     Just dep -> pure dep
@@ -267,8 +290,8 @@ agentPass Sim{..} = do
 
       sense :: Float -> Float -> Int -> IO Float
       sense !x !y !d = do
-        let !sx = wrapf (x + (cosTable ! d) * cfgSensorDist) fw
-            !sy = wrapf (y + (sinTable ! d) * cfgSensorDist) fh
+        let !sx = wrapf (x + (cosTable `unsafeAt` d) * cfgSensorDist) fw
+            !sy = wrapf (y + (sinTable `unsafeAt` d) * cfgSensorDist) fh
             !ix = truncate sx .&. xmask
             !iy = truncate sy .&. ymask
         unsafeRead grid ((iy `shiftL` log2w) .|. ix)
@@ -276,7 +299,7 @@ agentPass Sim{..} = do
 
       go :: Int -> IO ()
       go !i
-        | i >= cfgAgents = pure ()
+        | i >= hi = pure ()
         | otherwise = do
             !d0 <- unsafeRead simAdir i
             !x0 <- unsafeRead simAx i
@@ -300,28 +323,63 @@ agentPass Sim{..} = do
                         then pure ((d0 - cfgRotSteps + ndirI) `mod` ndirI)
                         else pure ((d0 + cfgRotSteps) `mod` ndirI)
 
-            let !x = wrapf (x0 + (cosTable ! d) * cfgStep) fw
-                !y = wrapf (y0 + (sinTable ! d) * cfgStep) fh
+            let !x = wrapf (x0 + (cosTable `unsafeAt` d) * cfgStep) fw
+                !y = wrapf (y0 + (sinTable `unsafeAt` d) * cfgStep) fh
                 !ix = truncate x .&. xmask
                 !iy = truncate y .&. ymask
                 !idx = (iy `shiftL` log2w) .|. ix
 
-            !cur <- unsafeRead target idx
-            unsafeWrite target idx (cur + cfgDeposit)
+            case mAidx of
+              Nothing -> do
+                !cur <- unsafeRead target idx
+                unsafeWrite target idx (cur + cfgDeposit)
+              Just aidx -> unsafeWrite aidx i idx
             unsafeWrite simAdir i d
             unsafeWrite simAx i x
             unsafeWrite simAy i y
             go (i + 1)
-  go 0
+  go lo
 
 -- | SPEC-1 section 5.4. Summation order is normative -- do not reorder.
 diffusePass :: Sim -> IO ()
-diffusePass Sim{..} = do
+diffusePass sim = diffuseRows sim 0 (cfgHeight (simCfg sim)) >> swapBuffers sim
+
+-- | Exchange the two grid buffers. Separate from 'diffuseRows' because the
+-- threaded path swaps once for the whole pool, not once per row block.
+swapBuffers :: Sim -> IO ()
+swapBuffers Sim{..} = do
+  src <- readIORef simGrid
+  dst <- readIORef simScratch
+  writeIORef simGrid dst
+  writeIORef simScratch src
+
+-- | Fold @dep@ into @grid@ over rows @[y0, y1)@ and clear it.
+mergeRows :: Sim -> Int -> Int -> IO ()
+mergeRows Sim{..} !y0 !y1 = case simDep of
+  Nothing -> pure ()
+  Just dep -> do
+    grid <- readIORef simGrid
+    let !lo = y0 `shiftL` simLog2w
+        !hi = y1 `shiftL` simLog2w
+        go !i
+          | i >= hi = pure ()
+          | otherwise = do
+              !g <- unsafeRead grid i
+              !d <- unsafeRead dep i
+              unsafeWrite grid i (g + d)
+              unsafeWrite dep i 0.0
+              go (i + 1)
+    go lo
+
+-- | SPEC-1 section 5.4 over rows @[y0, y1)@, writing into @scratch@ without
+-- swapping. Output cells are independent, so splitting the row range across
+-- threads is unconditionally bit-identical.
+diffuseRows :: Sim -> Int -> Int -> IO ()
+diffuseRows Sim{..} !y0 !y1 = do
   src <- readIORef simGrid
   dst <- readIORef simScratch
   let Config{..} = simCfg
       !w = cfgWidth
-      !h = cfgHeight
       !log2w = simLog2w
       !xmask = simXmask
       !ymask = simYmask
@@ -332,7 +390,7 @@ diffusePass Sim{..} = do
       {-# INLINE row #-}
 
       goY !y
-        | y >= h = pure ()
+        | y >= y1 = pure ()
         | otherwise = do
             let !rowm = row (y - 1)
                 !row0 = y `shiftL` log2w
@@ -363,9 +421,7 @@ diffusePass Sim{..} = do
                       goX (x + 1)
             goX 0
             goY (y + 1)
-  goY 0
-  writeIORef simGrid dst
-  writeIORef simScratch src
+  goY y0
 
 -- ---- checksums (SPEC-1 section 6) ----------------------------------------
 
@@ -398,6 +454,51 @@ hashAgents Sim{..} = do
 dirtableHashRuntime :: Word32
 dirtableHashRuntime = foldl step fnvOffset (cosBits ++ sinBits)
   where step !h !b = (h `xor` b) * fnvPrime
+
+-- | SPEC-1 section 11, straight into a caller-supplied buffer.
+--
+-- 'renderGray' returns a list, which is fine for a one-shot dump and useless
+-- at 60 frames a second: a four-million-element @[Word8]@ is four million
+-- cons cells per frame. The windowed frontends poke the bytes instead.
+renderGrayPtr :: Sim -> Float -> Ptr Word8 -> IO ()
+renderGrayPtr Sim{..} !displayMax !dst = do
+  grid <- readIORef simGrid
+  let !cells = cfgWidth simCfg * cfgHeight simCfg
+      !scale = 255.0 / displayMax
+      go !i
+        | i >= cells = pure ()
+        | otherwise = do
+            !v <- unsafeRead grid i
+            let !b = truncate (v * scale) :: Int
+                !c = if b < 0 then 0 else if b > 255 then 255 else b
+            pokeByteOff dst i (fromIntegral c :: Word8)
+            go (i + 1)
+  go 0
+
+-- | The same, expanded to ARGB8888.
+--
+-- SDL2 has no 8-bit greyscale texture, so this loop exists in the SDL2
+-- frontend and not in the raylib one. That asymmetry is the thing class R
+-- measures, so it is written out rather than hidden behind a helper both
+-- backends share.
+renderArgbPtr :: Sim -> Float -> Ptr Word8 -> IO ()
+renderArgbPtr Sim{..} !displayMax !dst = do
+  grid <- readIORef simGrid
+  let !cells = cfgWidth simCfg * cfgHeight simCfg
+      !scale = 255.0 / displayMax
+      go !i
+        | i >= cells = pure ()
+        | otherwise = do
+            !v <- unsafeRead grid i
+            let !b = truncate (v * scale) :: Int
+                !c = fromIntegral (if b < 0 then 0 else if b > 255 then 255 else b) :: Word8
+                !o = i * 4
+            pokeByteOff dst o       c
+            pokeByteOff dst (o + 1) c
+            pokeByteOff dst (o + 2) c
+            pokeByteOff dst (o + 3) (255 :: Word8)
+            go (i + 1)
+  go 0
 
 -- | SPEC-1 section 11.
 renderGray :: Sim -> Float -> IO [Word8]

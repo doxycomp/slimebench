@@ -20,14 +20,15 @@ scripts/stage-wsl.sh bench --preset small --ticks 300 --reps 3
 1. [Die kurze Fassung](#1-die-kurze-fassung)
 2. [Sprachvergleich (Klasse S)](#2-sprachvergleich-klasse-s)
 3. [Compiler](#3-compiler)
-4. [Parallelität (Klasse P)](#4-parallelität-klasse-p)
-5. [SIMD (Klasse V)](#5-simd-klasse-v)
-6. [GPU (Klasse G)](#6-gpu-klasse-g)
-7. [Rendering (Klasse R)](#7-rendering-klasse-r)
-8. [Footprint](#8-footprint)
-9. [Was nicht funktioniert hat](#9-was-nicht-funktioniert-hat)
-10. [Wo ich mich geirrt habe](#10-wo-ich-mich-geirrt-habe)
-11. [Offene Punkte](#11-offene-punkte)
+4. [Wie sehr der Programmierstil zählt (Haskell)](#4-wie-sehr-der-programmierstil-zählt-haskell)
+5. [Parallelität (Klasse P)](#5-parallelität-klasse-p)
+6. [SIMD (Klasse V)](#6-simd-klasse-v)
+7. [GPU (Klasse G)](#7-gpu-klasse-g)
+8. [Rendering (Klasse R)](#8-rendering-klasse-r)
+9. [Footprint](#9-footprint)
+10. [Was nicht funktioniert hat](#10-was-nicht-funktioniert-hat)
+11. [Wo ich mich geirrt habe](#11-wo-ich-mich-geirrt-habe)
+12. [Offene Punkte](#12-offene-punkte)
 
 ---
 
@@ -51,17 +52,24 @@ und `H-gpu`) an verschiedenen Tagen. Die Spannweite ist die Lauf-zu-Lauf-Streuun
 auf einer Maschine, auf der auch Windows läuft — Vergleiche werden deshalb
 immer innerhalb einer Reihe gezogen, nie über Reihen hinweg.
 
-Die drei Ergebnisse, die ich vorher nicht erwartet hätte:
+Die vier Ergebnisse, die ich vorher nicht erwartet hätte:
 
-- **Bit-Exaktheit reicht bis auf die GPU.** CUDA liefert exakt dieselben
-  Prüfsummen wie die C-Referenz — Grid *und* Agenten. Ebenso SIMD, ebenso alle
-  16 Thread-Zahlen der `binned`-Reduktion. Die Spec hatte für SIMD und GPU
-  jeweils das Gegenteil angenommen.
+- **Bit-Exaktheit reicht bis auf die GPU — und durch jede Parallelisierung.**
+  CUDA liefert exakt dieselben Prüfsummen wie die C-Referenz, Grid *und*
+  Agenten. Ebenso SIMD, ebenso Klasse P in **allen sieben Sprachen**, für jede
+  Thread-Zahl. Und die fünf Ports mit `private`-Strategie liefern bei
+  `--deposit 0.1` sogar denselben *falschen* Hash — dieselbe Klammerung,
+  derselbe Fehler, fünf Sprachen.
+- **Was schnell ist, hängt von der Klasse ab.** TypeScript ist in Klasse S
+  dreimal langsamer als C und skaliert in Klasse P am besten von allen (11.2×).
+  Haskell liegt in Klasse S bei 2.2× und trifft in Klasse P und in Klasse R
+  jeweils C. Eine Sprachrangliste aus einer Klasse überträgt sich nicht auf die
+  nächste.
 - **Perl und reines Python liegen 0,9 % auseinander.** Zwei unabhängig
   entwickelte Interpreter, dieselbe Schleife, praktisch dieselbe Zeit.
 - **Fast jede „offensichtliche" Optimierung hat verloren.** PGO, die parallele
   Präfixsumme, der Lastausgleich, die reine Spin-Barriere — vier Versuche, ein
-  brauchbares Ergebnis. Details in §9.
+  brauchbares Ergebnis. Details in §10.
 
 ---
 
@@ -81,14 +89,14 @@ in Sekunden schaffen**, denn nur so passen alle Sprachen in eine Tabelle.
 | 4 | C | gcc -O2 | A | 0.240 | 1.09× | 18 |
 | 5 | Rust | unchecked | A | 0.253 | 1.15× | 18 |
 | 6 | Rust | safe | A | 0.295 | 1.34× | 18 |
-| 7 | Haskell | ghc -O2 | A | 0.478 | 2.16× | 18 |
+| 7 | Haskell | ghc -O2 ¹ | A | 0.478 | 2.16× | 18 |
 | 8 | TypeScript | Node | A | 0.664 | 3.00× | 79 |
 | 9 | Perl | | B | 37.19 | **168×** | 22 |
 | 10 | Python | pur | B | 37.52 | **170×** | 18 |
 | 11 | Python | `--strict-f32` | A | 85.72 | 388× | 18 |
 | 12 | Perl | `--strict-f32` | A | 123.36 | 558× | 22 |
 
-numpy fehlt hier, weil es `--update serial` prinzipiell nicht kann (§6). Im
+numpy fehlt hier, weil es `--update serial` prinzipiell nicht kann (§7). Im
 `deferred`-Modus, wo alle Sprachen antreten können:
 
 | Sprache | Konf. | ms/Tick | rel. |
@@ -99,6 +107,10 @@ numpy fehlt hier, weil es `--update serial` prinzipiell nicht kann (§6). Im
 | Haskell -O2 | A | 0.508 | 2.23× |
 | TypeScript | A | 0.710 | 3.11× |
 | **Python / numpy** | A | 0.717 | **3.14×** |
+
+¹ vor der `unsafeAt`-Korrektur aus §4 gemessen; die macht Haskell dort um
+Faktor 1.45 schneller. Diese Tabelle wird beim nächsten vollen Matrixlauf
+ersetzt.
 
 **Alle Stufe-A-Läufe liefern `0x9E8B1688 / 0x0E6A2341`.** Dieselbe Simulation,
 sechs Sprachen, Bit für Bit.
@@ -213,7 +225,8 @@ Programm.
 | `-O2 -fllvm` | **2131** | **0.76×** | 3168 |
 
 Das LLVM-Backend bringt **24 %** gegenüber dem nativen Codegenerator, für 2 %
-mehr Binärgröße. Alle drei bit-exakt (`0x4F236CC6 / 0x4236A1D1`). GHC 9.10
+mehr Binärgröße. (Gemessen vor der `unsafeAt`-Korrektur aus §4; die wirkt auf
+alle drei Profile gleichermaßen und verschiebt das Verhältnis nicht.) Alle drei bit-exakt (`0x4F236CC6 / 0x4236A1D1`). GHC 9.10
 warnt, dass LLVM 18 außerhalb des unterstützten Bereichs liegt, und macht
 trotzdem korrekt weiter — geprüft gegen die Konformitätsvektoren, nicht
 geglaubt.
@@ -232,7 +245,73 @@ zählt Bandbreite und Vektorisierung zahlt sich aus.
 
 ---
 
-## 4. Parallelität (Klasse P)
+## 4. Wie sehr der Programmierstil zählt (Haskell)
+
+Ein Haskell-Programmierer, der den Port gelesen hat, hat ihn so beschrieben:
+*„it looks just like if you took the C and tried to just line by line re-create
+it in Haskell — this is not how you write Haskell code."* Das trifft zu.
+`impl/haskell/src/Sim.hs` ist `IOUArray` in `IO` mit handgeschriebener
+Endrekursion und expliziter Indexarithmetik, und so schreibt das niemand, der
+nicht gerade eine C-Referenz Anweisung für Anweisung nachbaut.
+
+Derselbe Programmierer nannte zwei Dinge, die sich hier gegenseitig
+widersprechen: dass man in Haskell üblicherweise *hochlevel* schreibt und GHC
+machen lässt — und dass man mit sorgfältigem Low-Level-Code *nahe an C*
+herankommt. Beides ist messbar. Also drei Varianten, alle vier bit-identisch
+(`0x7A67A29B` bei `small`/300, `deferred`):
+
+![Haskell-Stile](charts/haskell-style.svg)
+
+| Variante | ms | vs. C | vs. bester Haskell |
+|---|---:|---:|---:|
+| C-Referenz, gcc `-O3 -march=native` | 1659 | 1.00× | – |
+| **Haskell low-level, `unsafeAt`** | **1764** | **1.06×** | 1.00× |
+| Haskell low-level, `Data.Array.Unboxed.(!)` | 2561 | 1.54× | 1.45× |
+| Haskell idiomatisch, `Data.Vector.Unboxed` | 5778 | 3.48× | 3.28× |
+
+Drei Befunde:
+
+**„Nahe an C" stimmt — und hing an vier Zeichen.** Die Trigonometrie-Tabelle
+wurde mit `Data.Array.Unboxed.(!)` gelesen, viermal pro Agent. Das ist die
+naheliegende Schreibweise, geht aber über die `Ix`-Klasse, rechnet den Offset
+aus und prüft die Grenzen — und GHC eliminiert beides nicht, obwohl die Grenzen
+Compile-Time-Konstanten sind. Ersetzt durch `unsafeAt` fällt der Agenten-Pass
+von 1962 auf 1197 ms und die Gesamtzeit um **1.45×**. Erst danach liegt Haskell
+6 % hinter C statt 54 %.
+
+**Hochlevel kostet hier 3.3×.** Die idiomatische Fassung ist ehrlich
+idiomatisch: reine Funktionen über unveränderliche `U.Vector`, kein `IO` im
+Kern, der Diffusionspass ist ein `U.generate`, der Deposit-Scatter ein
+`U.accumulate`. Der Stencil ist als reine Abbildung genau der Fall, in dem
+Fusion funktioniert. Der Agenten-Pass ist es nicht: jeder Tick baut fünf neue
+Vektoren auf, wo die mutable Fassung in bestehende Puffer schreibt. Bei 1024²
+sind das 20 MiB Allokation pro Tick, die der Kopiervorgang nicht wieder
+einspart.
+
+**Der idiomatische Stil scheitert an derselben Stelle wie numpy.**
+`--update serial` verlangt, dass ein Agent die Deposits seiner Vorgänger
+*innerhalb desselben Ticks* sieht. Über unveränderliche Vektoren hieße das, das
+Grid einmal pro Agent neu zu bauen. Die Implementierung lehnt den Modus mit
+Exit-Code 3 ab — dieselbe Wand wie in
+[`slimebench_numpy.py`](../impl/python/slimebench_numpy.py), aus demselben
+Grund. Die funktionale und die vektorisierte Formulierung brechen an genau
+derselben Konstruktion.
+
+Und ein Fehler, den die getrennten Prüfsummen gefangen haben: die erste Fassung
+akkumulierte die Deposits per `U.accumulate` direkt ins Grid. Zwei Deposits auf
+dieselbe Zelle ergeben dann `(g + d₁) + d₂` statt der vorgeschriebenen
+`g + (d₁ + d₂)` — 1 ULP Unterschied, sobald `g` groß genug ist. Der
+*Grid*-Hash wich ab, der *Agenten*-Hash nicht, und damit war der Fehler ohne
+Suche lokalisiert. Genau dafür trennt [SPEC §6.3](../spec/SPEC.md) die beiden.
+
+> Was das *nicht* zeigt: dass idiomatisches Haskell langsam ist. Es zeigt, dass
+> es auf **dieser** Last langsam ist — ein mutables Gitter, das eine Million
+> Mal pro Tick punktuell verändert wird. Das ist der ungünstigste denkbare Fall
+> für persistente Datenstrukturen, und die Spec schreibt ihn vor.
+
+---
+
+## 5. Parallelität (Klasse P)
 
 Nur im `deferred`-Modus — `serial` lässt Agenten die Deposits ihrer Vorgänger
 im selben Tick sehen und ist damit prinzipiell nicht deterministisch
@@ -299,6 +378,87 @@ amortisieren.
 Präfixsumme, die vorher als „serielle O(T²)-Sektion" im Verdacht stand,
 leistet 0,000 ms messbare Arbeit.
 
+### Alle sieben Sprachen
+
+`medium` (2048², 1 048 576 Agenten), 100 Ticks, `binned` bzw. das jeweils beste
+Äquivalent. Perl steht bei `tiny`, weil `medium` dort Stunden dauern würde —
+seine Zahl ist die Form der Kurve, kein Quervergleich.
+
+![Skalierung über Sprachen](charts/scaling-langs.svg)
+
+| Sprache | Mechanismus | 1 Thread | bester | bei T | Speedup |
+|---|---|---:|---:|:-:|---:|
+| C | pthreads | 5233 | **635** | 32 | 8.2× |
+| Haskell | `forkOn`, `-threaded` | 5339 | **741** | 16 | 7.2× |
+| Rust | `std::thread::scope` | 6808 | 1007 | 16 | 6.8× |
+| TypeScript | `worker_threads` + SAB | 13345 | 1190 | 16 | **11.2×** |
+| C++ | `std::jthread` | 5659 | 674 | 32 | 8.4× |
+| Python | `multiprocessing` + `shared_memory` | 7857 | 1888 | 16 | 4.2× |
+| Perl ¹ | `fork` + Pipes | 4141 | 1568 | 8 | 2.6× |
+
+¹ `tiny` (512², 65 536 Agenten), 20 Ticks.
+
+**Alle sieben sind bit-identisch zum jeweils seriellen Lauf**, und die fünf mit
+`private`-Strategie liefern bei `--deposit 0.1` und T=4 sogar denselben
+*falschen* Hash `0xE82B2012`. Dieselbe Klammerung, derselbe Fehler, fünf
+Sprachen — das ist ein besserer Beleg dafür, dass die Ports dieselbe Rechnung
+machen, als es die richtigen Ergebnisse allein wären.
+
+Vier Beobachtungen, die sich nicht aus der Klasse-S-Tabelle vorhersagen ließen:
+
+**TypeScript skaliert am besten, obwohl es in Klasse S dreimal so langsam ist.**
+Der Abstand zu C schrumpft von 3.0× auf 1.6×. Und `binned` ist dort bei *zwei*
+Threads schon 2.9× schneller als ein Thread — das ist nicht die Parallelität,
+sondern die Lokalität: bei gleicher Thread-Zahl schlägt `binned` die
+`private`-Strategie um 1.56×, in C nur um 1.15×. Die Zielzellen sequenziell in
+`aidx` zu schreiben und sie danach zeilenblockweise anzuwenden ersetzt ein
+gestreutes Read-Modify-Write über 16 MiB durch einen sequenziellen Write plus
+einen sortierten. In V8 ist das viel mehr wert als in C.
+
+**Haskell holt C ein.** 741 ms gegen 729 ms bei 16 Threads, nach der
+`unsafeAt`-Korrektur aus §4. Die Barriere ist `MVar`-basiert, nicht STM: die
+STM-Variante liest sich schöner (`retry` blockiert, bis der Generationszähler
+sich ändert), aber jeder Wartende validiert seine Transaktion bei jedem
+Aufwachen neu, und bei sechs Barrieren pro Tick ist das ein Retry-Sturm.
+
+**Python zahlt für den GIL mit Prozessen.** `threading` würde genau die
+Schleifen serialisieren, um die es geht — numpy gibt den GIL in großen
+ufunc-Aufrufen frei, aber der Agenten-Pass ist eine Kette von Dutzenden
+kleiner, mit Python-Code dazwischen, und der hält das Lock. Also
+`multiprocessing` über einen `shared_memory`-Block, jedes Array von Hand
+platziert. Der Nebeneffekt: die Barriere ist ein OS-Objekt und kostet
+Zehner-Mikrosekunden statt Hunderter-Nanosekunden — in C wäre das der
+Flaschenhals, hier verschwindet es in einem Tick von 19 ms. Die langsamste
+Implementierung kann sich die teuerste Barriere leisten.
+
+**Perl hat Threads, und sie sind hier das falsche Werkzeug.** Gemessen auf
+dieser Maschine, für 262 144 Elemente:
+
+| Operation | einfaches Array | `threads::shared` | Faktor |
+|---|---:|---:|---:|
+| sequenzielles Read-Modify-Write | 4.5 ms | 78.2 ms | 17× |
+| zufälliges Read-Modify-Write | 13.9 ms | 105.7 ms | **7.6×** |
+| `pack`+`unpack` derselben Werte | 12.0 ms | – | – |
+
+Der Diffusionsstencil liest neun Zellen pro Ausgabezelle. Ein geteiltes Grid
+müsste also erst Faktor 7.6 aufholen, bevor der erste Thread etwas beiträgt —
+das kann nicht gewinnen. Ein ganzer Block durch `pack`/`unpack` kostet dagegen
+etwa so viel wie *ein* Durchlauf über ein normales Array. Also `fork` mit
+privaten Grids, und über die Pipes läuft nur gepacktes Binär.
+
+Das erzwingt eine dritte Reduktionsstrategie, die
+[SPEC §5.6](../spec/SPEC.md) nicht kennt: **repliziert**. Jeder Prozess wendet
+*jeden* Deposit an, in aufsteigendem Agentenindex — also exakt die serielle
+Kette, bit-identisch für jede Prozesszahl, ohne den `binned`-Sort. Der Preis
+ist, dass Deposit- und Merge-Pass N-mal statt einmal laufen, und genau das
+deckelt den Speedup bei 2.6×: parallel ist nur der Agenten-Pass.
+
+Ein Fehler auf dem Weg dorthin, den die Prüfsummen gefangen haben: ich habe das
+Grid als `pack('f<*')` durch die Pipe geschickt. In Stufe A ist das verlustfrei,
+weil dort ohnehin alle Werte f32 sind — in Stufe B hält ein Perl-Skalar aber
+einen Double, und das rundete einmal pro Tick das ganze Grid. Stufe A war
+grün, Stufe B nicht. `d<` behebt es, für die doppelte Bytezahl.
+
 ### C (pthreads) gegen C++ (`std::jthread`)
 
 Dieselbe Strategie, andere Sprachmittel:
@@ -317,7 +477,7 @@ Lebenszyklus (`std::jthread` joint beim Zerstören, `std::barrier` braucht kein
 
 ---
 
-## 5. SIMD (Klasse V)
+## 6. SIMD (Klasse V)
 
 Explizite Intrinsics für den Diffusionspass, `--simd`. Der Agenten-Pass bleibt
 skalar: mehrere Agenten pro Vektor deponieren routinemäßig in dieselbe Zelle,
@@ -388,7 +548,7 @@ aufzurufen ist. `std::simd` wäre portabler, ist aber weiterhin nightly-only.
 
 ---
 
-## 6. GPU (Klasse G)
+## 7. GPU (Klasse G)
 
 Zwei Implementierungen desselben Kernels: CUDA und ein GLSL-4.3-Compute-Shader.
 Beide nur `deferred`.
@@ -465,41 +625,92 @@ Sackgassen-Agenten ihren PRNG-Strom weiterdrehen dürfen.
 
 ---
 
-## 7. Rendering (Klasse R)
+## 8. Rendering (Klasse R)
 
-1024², 300 Frames, `--freeze-sim` (Simulation angehalten, damit nur der
-Upload-Pfad Grid → Textur → Bildschirm gemessen wird).
+1024², 300 Frames (Perl 20), `--freeze-sim` — die Simulation ist angehalten,
+sodass nur der Upload-Pfad Grid → Textur → Bildschirm gemessen wird.
 
-| Sprache | Backend | llvmpipe | RTX 5080 (D3D12) |
-|---|---|---:|---:|
-| C | SDL2 | 3.166 ms | **5.134 ms** |
-| C++ | SDL2 | 3.126 ms | 4.638 ms |
-| C | raylib | 2.217 ms | 2.329 ms |
-| C++ | raylib | 2.299 ms | 2.220 ms |
+![Rendering](charts/render.svg)
 
-**raylib ist auf der echten GPU 2,1× schneller als SDL2**, auf Software 1,4×.
-C und C++ sind ununterscheidbar.
+Millisekunden pro Frame, Median:
 
-Die Ursache ist das Pixelformat, nicht die Bibliothek: raylib nimmt den
+| Sprache | Bindung | SDL2 (llvmpipe) | SDL2 (RTX 5080) | raylib (llvmpipe) | raylib (RTX 5080) |
+|---|---|---:|---:|---:|---:|
+| C | direkt | 2.919 | 4.266 | 2.007 | 2.059 |
+| C++ | direkt | 2.903 | 4.389 | 2.031 | **1.912** |
+| Haskell | `sdl2` / `foreign import` | **2.755** | 4.299 | 2.008 | 1.948 |
+| Rust | `sdl2` / `raylib` crate | 3.055 | 4.600 | 2.088 | 1.991 |
+| Python | pygame / cffi | 5.022 | 4.978 | 4.570 | 4.579 |
+| Perl | FFI::Platypus | 118.5 | 119.3 | 78.5 | 78.5 |
+
+**raylib gewinnt überall, und auf der echten GPU deutlicher:** 1.4× auf
+Software, **2.2×** auf der RTX 5080, in jeder kompilierten Sprache. Die Ursache
+ist das Pixelformat, nicht die Bibliothek — raylib nimmt den
 8-Bit-Graustufenpuffer direkt entgegen (`UNCOMPRESSED_GRAYSCALE`), SDL2 braucht
-`ARGB8888` und damit eine Expansionsschleife über eine Million Pixel pro Frame.
+ARGB8888 und damit eine Expansionsschleife über eine Million Pixel pro Frame.
 
-Das überraschende Detail: **SDL2 ist auf der GPU langsamer als auf dem
-Software-Rasterizer**, raylib auf beiden gleich schnell. Beide Pfade sind bei
-1024² also CPU-gebunden — die GPU ist gar nicht der Flaschenhals. SDL2 zahlt
-auf D3D12 zusätzlich für den `SDL_LockTexture`-Pfad durch die
+**Die vier kompilierten Sprachen liegen auf raylib innerhalb von 9 %
+beieinander** (1.91–2.09 ms). Haskell trifft C, Rust liegt 4 % dahinter. Wenn
+das Backend und das Pixelformat feststehen, ist die Sprache in dieser Klasse
+fast egal — was der interessanteste Befund der Tabelle ist, weil er dem
+Klasse-S-Bild widerspricht.
+
+**SDL2 ist auf der echten GPU langsamer als auf dem Software-Rasterizer**, und
+zwar in allen vier kompilierten Sprachen (2.9 → 4.3 ms), während raylib auf
+beiden gleich schnell bleibt. Beide Pfade sind bei 1024² CPU-gebunden; SDL2
+zahlt auf D3D12 zusätzlich für den `SDL_LockTexture`-Pfad durch die
 Übersetzungsschicht. Für eine GPU-limitierte Messung bräuchte es ein deutlich
 größeres Grid.
 
-> **Korrektur:** Eine frühere Fassung dieses Dokuments meldete nur die
-> llvmpipe-Zahlen, ohne zu wissen, dass WSL2 unter Linux standardmäßig keine
-> GPU für OpenGL bereitstellt. Der Vergleich SDL2 vs. raylib war gültig, die
-> absoluten Zahlen waren keine GPU-Zahlen. Beide Messreihen stehen jetzt
-> nebeneinander, und die Binaries drucken ihren Renderer-String.
+### Was die Bindung kostet
+
+**Haskell ist auf SDL2 die schnellste Sprache** (2.755 gegen C's 2.919). Das
+ist kein Haskell-Wunder, sondern eine API-Wahl: das `sdl2`-Paket exponiert
+`SDL_UpdateTexture`, die C- und Rust-Frontends benutzen
+`SDL_LockTexture`/`Unlock`. Innerhalb von SDL2 macht diese Entscheidung so viel
+aus wie die Sprache.
+
+**Python liegt 2.3× zurück, und der Backend-Unterschied verschwindet fast**
+(5.02 gegen 4.57). Der Frame wird von der numpy-Konvertierung dominiert, nicht
+vom Upload. Auffällig ist das p99 von **1090 ms** bei pyray — ein Ausreißer
+pro Lauf, konsistent reproduzierbar, vermutlich die erste Texturübertragung
+plus eine GC-Pause; der Median ist davon unberührt.
+
+**Perl liegt 40–60× zurück, zeigt den Backend-Unterschied aber am
+deutlichsten** (118 gegen 78 ms). Hier hatte ich das Gegenteil erwartet: wenn
+die Konvertierung den Frame dominiert, sollten beide Backends gleich
+herauskommen, wie bei Python. Sie tun es nicht, weil die Konvertierung *selbst*
+der Unterschied ist — raylib will ein Byte pro Pixel (`pack 'C*'`), SDL2 ein
+geschobenes und verodertes 32-Bit-Wort (`pack 'L*'`), und in Perl kostet diese
+Arithmetik mehr als alles andere im Frame zusammen. Dieselbe Ursache wie in C,
+vierhundertmal langsamer.
+
+### Zwei Bindungen, die nicht das Naheliegende sind
+
+Für **Haskell/raylib** und **Perl/raylib** steht nicht das jeweilige
+Ökosystem-Paket im Baum (`h-raylib`, `Raylib::FFI`), sondern
+`foreign import ccall` bzw. `FFI::Platypus` gegen dasselbe
+`/usr/local/lib/libraylib.so`, das C, C++, Rust und Python linken. Grund: beide
+Pakete vendorn raylib und bauen eine eigene Kopie. Damit verglichen man eine
+Sprache gegen einen *anderen Build* der Bibliothek, und Klasse R soll die
+Sprache vergleichen.
+
+Beide stoßen dabei auf dieselbe Grenze: raylib übergibt `Image`, `Texture2D`
+und `Color` **by value**, was weder Haskells FFI noch Platypus kann. Die fünf
+betroffenen Aufrufe gehen deshalb durch
+[`impl/shim/raylib_shim.c`](../impl/shim/raylib_shim.c) — 30 Zeilen C, von
+beiden geteilt. Dass zwei so verschiedene Sprachen an derselben Stelle denselben
+Workaround brauchen, ist selbst ein Datenpunkt über C-ABIs.
+
+Ein Fehler dabei, den ein Segfault in Frame eins gefunden hat: Perls
+`pack 'P'` nimmt die Adresse des Puffers eines Skalars **zum Zeitpunkt des
+Packens**. Der Pixelpuffer wird jeden Frame neu geschrieben, die erste
+Reallokation ließ raylib in freigegebenen Speicher lesen. `scalar_to_buffer`
+mit einer pro Frame frisch geholten Adresse behebt es.
 
 ---
 
-## 8. Footprint
+## 9. Footprint
 
 | Sprache | Binär (gestrippt) | RSS bei 1024² |
 |---|---:|---:|
@@ -525,7 +736,7 @@ Thread-Zahl.
 
 ---
 
-## 9. Was nicht funktioniert hat
+## 10. Was nicht funktioniert hat
 
 Vier Optimierungsversuche, ein brauchbares Ergebnis. Sie stehen hier, weil sie
 dieselbe Arbeit gekostet haben wie die erfolgreichen.
@@ -591,7 +802,7 @@ Barriere macht eine unausgeglichene Phase nicht kürzer.
 
 ---
 
-## 10. Wo ich mich geirrt habe
+## 11. Wo ich mich geirrt habe
 
 Die Spec und der Buildplan sind mehrfach von Messungen widerlegt worden. Das
 gehört dokumentiert, sonst liest sich das Projekt fehlerfreier als es war.
@@ -606,7 +817,12 @@ gehört dokumentiert, sonst liest sich das Projekt fehlerfreier als es war.
 | PGO ist der plausibelste verbleibende Gewinn | Bringt nichts, schadet clang. |
 | `prefix` ist eine serielle O(T²)-Bremse | 0,000 ms Arbeit. War ein Artefakt meiner Instrumentierung, die Arbeit und Barrierenwartezeit summierte. |
 | wgpu/WGSL als portabler GPU-Weg | Unter WSL2 nicht gangbar: die NVIDIA-Vulkan-ICDs zeigen auf Windows-DLLs. |
-| Die Klasse-R-Zahlen sind GPU-Zahlen | Waren Software-Rendering (§7). |
+| Die Klasse-R-Zahlen sind GPU-Zahlen | Waren Software-Rendering (§8). |
+| Idiomatisches Haskell kostet wenig | 3.3× auf dieser Last (§4). |
+| Der Haskell-Port ist so schnell, wie er sein kann | Vier Zeichen (`(!)` → `unsafeAt`) waren Faktor 1.45 (§4). |
+| Perls Threads sind der Weg zu Klasse P | `threads::shared` kostet 7.6× pro Zugriff; `fork` mit gepackten Pipes gewinnt (§5). |
+| In Perl kostet die Konvertierung so viel, dass beide Render-Backends gleich herauskommen | Die Konvertierung *ist* der Unterschied: raylib 1.5× schneller (§8). |
+| Klasse R vergleicht Sprachen | Auf raylib liegen vier kompilierte Sprachen innerhalb von 9 %. Verglichen wird das Pixelformat (§8). |
 
 Ein Muster: **jede Vermutung über Performance, die ich nicht gemessen habe,
 war falsch.** Die Vermutungen über *Korrektheit* — Operationsreihenfolge,
@@ -614,16 +830,25 @@ Trig-Tabelle, PRNG-Wahl — haben dagegen alle gehalten.
 
 ---
 
-## 11. Offene Punkte
+## 12. Offene Punkte
 
-- **Klasse P** fehlt in Rust, Haskell, TypeScript, Python und Perl.
-  TypeScript mit Worker + `SharedArrayBuffer` ist der einzige Datenpunkt,
-  dessen Ausgang ich nicht vorhersagen kann.
-- **Klasse R** fehlt für Rust, Haskell, Python und Perl.
 - **Klasse G aus einer zweiten Sprache** würde die Behauptung „Klasse G misst
   nicht die Sprache" direkt belegen, statt sie nur zu argumentieren.
 - **Ein größeres GPU-Preset.** `medium` lastet die RTX 5080 nicht aus; die
-  echte Obergrenze ist noch unbekannt.
+  echte Obergrenze ist noch unbekannt. Dasselbe gilt für Klasse R: bei 1024²
+  sind beide Render-Pfade CPU-gebunden, eine GPU-limitierte Messung bräuchte
+  ein deutlich größeres Grid.
+- **Klasse P für reines Python.** Mit `multiprocessing` würde es fast linear
+  skalieren — aber bei `medium` wären das Stunden pro Datenpunkt. Ein
+  freithreadiges CPython (3.13t) wäre der interessantere Vergleich und ist auf
+  dieser Maschine nicht installiert.
+- **Die Klasse-S-Tabelle in §2 ist vor der `unsafeAt`-Korrektur gemessen.**
+  Haskell steht dort 1.45× zu schlecht. Wird beim nächsten vollen Matrixlauf
+  ersetzt.
 - **`perf`** ist unter dem WSL2-Kernel nicht verfügbar (kein passendes
   `linux-tools`-Paket). Die Phasen-Timer und `hyperfine` ersetzen es
   teilweise, aber Cache-Miss-Zahlen fehlen.
+- **Alles hier ist WSL2**, nicht natives Linux. Die GL-Zahlen messen dadurch
+  Mesas D3D12-Übersetzung mit; die CPU-Zahlen laufen auf einer Maschine, auf
+  der nebenher Windows arbeitet. Beides ist bei jedem Vergleich innerhalb einer
+  Messreihe unkritisch und bei Absolutwerten zu bedenken.

@@ -348,6 +348,91 @@ def chart_classes() -> None:
                    entries, "ms total (log)", log=True)
 
 
+def chart_haskell_style() -> None:
+    """One language, three ways of writing it -- the style axis."""
+    rows = load("M-haskell-style.jsonl")
+    if not rows:
+        return
+    label = {
+        "C reference (gcc -O3 -native)": "C reference",
+        "haskell lowlevel, (!) lookups": "Haskell low-level, (!)",
+        "haskell lowlevel, unsafeAt": "Haskell low-level, unsafeAt",
+        "haskell idiomatic (vector)": "Haskell idiomatic, vector",
+    }
+    bars = []
+    for r in rows:
+        v = r.get("variant", "")
+        col = PALETTE["c"] if v.startswith("C ") else PALETTE["haskell"]
+        base = next((x["ms_total"] for x in rows if x.get("variant", "").startswith("C ")), None)
+        bars.append(Bar(label.get(v, v), r["ms_total"], col,
+                        note=f"{r['ms_total'] / base:.2f}x" if base else ""))
+    hbar_chart(OUT / "haskell-style.svg",
+               "One language, three ways of writing it",
+               "1024x1024, 262 144 agents, 300 ticks, deferred. All four bit-identical.",
+               bars, "ms total")
+
+
+def chart_scaling_langs() -> None:
+    """Speedup curves for every language that has a class-P port."""
+    sources = [
+        ("C", PALETTE["c"], "E-parallel-scaling.jsonl", "medium", "binned"),
+        ("Rust", PALETTE["rust"], "K-parallel-rust.jsonl", "medium", "binned"),
+        ("TypeScript", PALETTE["ts"], "L-parallel-ts.jsonl", "medium", "binned"),
+        ("Haskell", PALETTE["haskell"], "N-parallel-haskell.jsonl", "medium", "binned"),
+        ("Python", PALETTE["python"], "O-parallel-python.jsonl", "medium", "binned"),
+        ("Perl", PALETTE["perl"], "P-parallel-perl.jsonl", "tiny", None),
+    ]
+    series = []
+    for name, colour, fname, preset, want in sources:
+        rows = load(fname)
+        if not rows:
+            continue
+        rows = [r for r in rows if r.get("preset") == preset]
+        base = next((r["ms_total"] for r in rows if r.get("threads", 1) == 1), None)
+        if not base:
+            continue
+        pts = [(1.0, 1.0)]
+        for r in sorted(rows, key=lambda r: r.get("threads", 1)):
+            t = r.get("threads", 1)
+            if t <= 1:
+                continue
+            v = r.get("variant") or ""
+            if want and want not in v:
+                continue
+            pts.append((float(t), base / r["ms_total"]))
+        if len(pts) > 1:
+            series.append((name, colour, pts))
+    if series:
+        line_chart(OUT / "scaling-langs.svg",
+                   "Class P: the same design in seven languages",
+                   "2048x2048, 100 ticks, deferred, binned. Perl at 512x512 -- "
+                   "medium would be hours. 16 physical cores, 32 logical.",
+                   series, "threads / processes", "speedup vs 1", ideal=True)
+
+
+def chart_render() -> None:
+    """Class R: six languages, two backends, two renderers."""
+    rows = load("Q-render-all.jsonl")
+    if not rows:
+        return
+    order = ["c", "cpp", "haskell", "rust", "python", "perl"]
+    gpu = [r for r in rows if "D3D12" in r.get("renderer", "")]
+    bars = []
+    for impl in order:
+        for be in ("sdl2", "pygame", "raylib"):
+            r = next((x for x in gpu if x["impl"] == impl and x["backend"] == be), None)
+            if not r:
+                continue
+            # Perl is off the scale of everything else; the log axis carries it.
+            label = f"{impl} {be}"
+            bars.append(Bar(label, r["ms_render_median"], PALETTE.get(impl, ACCENT)))
+    if bars:
+        hbar_chart(OUT / "render.svg",
+                   "Class R: the pixel format decides, not the language",
+                   "1024x1024, --freeze-sim, RTX 5080 via Mesa D3D12. Log scale.",
+                   bars, "ms per frame (log)", log=True)
+
+
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     print("charts:")
@@ -355,6 +440,9 @@ def main() -> int:
     chart_compilers()
     chart_scaling()
     chart_classes()
+    chart_haskell_style()
+    chart_scaling_langs()
+    chart_render()
     return 0
 
 
