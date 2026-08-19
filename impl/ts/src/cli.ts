@@ -16,6 +16,7 @@ export interface Parsed {
   dumpGrid: string | null;
   displayMax: number;
   threads: number;
+  reduce: "private" | "binned";
 }
 
 const USAGE = `usage: slimebench-ts [options]
@@ -24,6 +25,7 @@ const USAGE = `usage: slimebench-ts [options]
   --agents N  --ticks N  --warmup N  --seed N
   --update MODE        serial|deferred
   --threads N
+  --deposit-reduce M   private|binned  (SPEC-1 5.6)
   --sensor-dist F  --sensor-steps N  --rot-steps N
   --step F  --deposit F  --decay F
   --headless  --render
@@ -42,6 +44,7 @@ export function parseArgs(argv: string[]): Parsed {
     dumpGrid: null,
     displayMax: 100.0,
     threads: 1,
+    reduce: "binned",
   };
 
   const need = (i: number, flag: string): string => {
@@ -81,6 +84,12 @@ export function parseArgs(argv: string[]): Parsed {
         const m = need(i++, a);
         if (m !== "serial" && m !== "deferred") fail("--update must be serial|deferred");
         p.cfg.update = m as UpdateMode;
+        break;
+      }
+      case "--deposit-reduce": {
+        const m = need(i++, a);
+        if (m !== "private" && m !== "binned") fail("--deposit-reduce must be private|binned");
+        p.reduce = m;
         break;
       }
       case "--headless": p.render = false; break;
@@ -130,6 +139,7 @@ export function resultJson(
     impl, backend, class: cls, preset: p.preset,
     width: sim.cfg.width, height: sim.cfg.height, agents: sim.cfg.agents,
     ticks: n, seed: sim.cfg.seed, update: sim.cfg.update, threads: p.threads,
+    variant: p.threads > 1 ? p.reduce : "scalar",
     grid_hash: hex32(sim.hashGrid()),
     agent_hash: hex32(sim.hashAgents()),
     dirtable_hash: hex32(dirtableHash()),

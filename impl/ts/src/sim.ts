@@ -117,6 +117,21 @@ function fnvStep(h: number, w: number): number {
 
 /* ---- simulation --------------------------------------------------------- */
 
+/**
+ * The buffers a Sim works on. Class P hands in views over one
+ * SharedArrayBuffer so every worker sees the same memory; the single-threaded
+ * path lets the constructor allocate ordinary arrays.
+ */
+export interface SimBuffers {
+  grid: Float32Array;
+  scratch: Float32Array;
+  dep: Float32Array | null;
+  ax: Float32Array;
+  ay: Float32Array;
+  adir: Uint16Array;
+  arng: Uint32Array;
+}
+
 export class Sim {
   readonly cfg: SimConfig;
   readonly log2w: number;
@@ -135,7 +150,13 @@ export class Sim {
   nsAgents = 0;
   nsDiffuse = 0;
 
-  constructor(cfg: SimConfig) {
+  /**
+   * `bufs` supplies pre-allocated storage (class P: views over a
+   * SharedArrayBuffer). `doInit` is false in a worker, which attaches to a
+   * grid the main thread has already seeded -- running SPEC-1 section 3.3
+   * again there would overwrite it.
+   */
+  constructor(cfg: SimConfig, bufs?: SimBuffers, doInit = true) {
     if (cfg.width <= 0 || (cfg.width & (cfg.width - 1)) !== 0) {
       throw new Error("width must be a power of two");
     }
@@ -148,16 +169,16 @@ export class Sim {
     this.ymask = cfg.height - 1;
 
     const cells = cfg.width * cfg.height;
-    this.grid = new Float32Array(cells);
-    this.scratch = new Float32Array(cells);
-    this.dep = cfg.update === "deferred" ? new Float32Array(cells) : null;
+    this.grid = bufs ? bufs.grid : new Float32Array(cells);
+    this.scratch = bufs ? bufs.scratch : new Float32Array(cells);
+    this.dep = bufs ? bufs.dep : (cfg.update === "deferred" ? new Float32Array(cells) : null);
 
-    this.ax = new Float32Array(cfg.agents);
-    this.ay = new Float32Array(cfg.agents);
-    this.adir = new Uint16Array(cfg.agents);
-    this.arng = new Uint32Array(cfg.agents * 4);
+    this.ax = bufs ? bufs.ax : new Float32Array(cfg.agents);
+    this.ay = bufs ? bufs.ay : new Float32Array(cfg.agents);
+    this.adir = bufs ? bufs.adir : new Uint16Array(cfg.agents);
+    this.arng = bufs ? bufs.arng : new Uint32Array(cfg.agents * 4);
 
-    this.init();
+    if (doInit) this.init();
   }
 
   /** SPEC-1 section 3.3. */
@@ -212,6 +233,26 @@ export class Sim {
 
   /** SPEC-1 section 5.3. */
   private agentPass(): void {
+    this.agentRange(0, this.cfg.agents, null);
+  }
+
+  /**
+   * SPEC-1 section 5.3 over agents `[lo, hi)`.
+   *
+   * When `aidx` is non-null the deposit is **not** applied; the target cell is
+   * recorded in `aidx[i]` for a later phase to apply in a chosen order. That
+   * is what class P's `binned` reduction needs, and it is the only difference
+   * between the two callers -- everything above it has to stay identical, or
+   * the threaded run stops being the same simulation.
+   *
+   * ## Why this is one loop with a branch and not a per-agent function
+   *
+   * Extracting the body into `agentStepOne(i)` costs ~15% in V8: the closure
+   * over `this` defeats the load hoisting of `ax`/`ay`/`grid` out of the loop.
+   * The same reason `sense()` is inlined three times below. A single
+   * loop-invariant branch on `aidx === null` is far cheaper than that.
+   */
+  agentRange(lo: number, hi: number, aidx: Int32Array | null): void {
     const c = this.cfg;
     const grid = this.grid;
     const target = this.dep !== null ? this.dep : this.grid;
@@ -223,9 +264,8 @@ export class Sim {
     const deposit = c.deposit;
     const ss = c.sensorSteps | 0;
     const rs = c.rotSteps | 0;
-    const n = c.agents;
 
-    for (let i = 0; i < n; i++) {
+    for (let i = lo; i < hi; i++) {
       let d = adir[i];
       let x = ax[i];
       let y = ay[i];
@@ -278,7 +318,8 @@ export class Sim {
       if (y >= fh) y = f(y - fh);
 
       const idx = (((y | 0) & ymask) << log2w) | ((x | 0) & xmask);
-      target[idx] = f(target[idx] + deposit);
+      if (aidx === null) target[idx] = f(target[idx] + deposit);
+      else aidx[i] = idx;
 
       adir[i] = d;
       ax[i] = x;
@@ -288,12 +329,24 @@ export class Sim {
 
   /** SPEC-1 section 5.4. Summation order is normative -- do not reorder. */
   private diffusePass(): void {
-    const { width: w, height: h, decay } = this.cfg;
+    this.diffuseRows(0, this.cfg.height);
+    const src = this.grid;
+    this.grid = this.scratch;
+    this.scratch = src;
+  }
+
+  /**
+   * SPEC-1 section 5.4 over rows `[y0, y1)`, writing into `scratch` without
+   * swapping. Output cells are independent, so splitting the row range across
+   * threads is unconditionally bit-identical.
+   */
+  diffuseRows(y0: number, y1: number): void {
+    const { width: w, decay } = this.cfg;
     const { xmask, ymask, log2w } = this;
     const src = this.grid;
     const dst = this.scratch;
 
-    for (let y = 0; y < h; y++) {
+    for (let y = y0; y < y1; y++) {
       const rowm = ((y - 1) & ymask) << log2w;
       const row0 = y << log2w;
       const rowp = ((y + 1) & ymask) << log2w;
@@ -315,8 +368,24 @@ export class Sim {
         dst[row0 | x] = f(f(acc / 12.0) * decay);
       }
     }
+  }
 
-    this.grid = dst;
+  /** Fold `dep` into `grid` over rows `[y0, y1)` and clear it. */
+  mergeRows(y0: number, y1: number): void {
+    const dep = this.dep;
+    if (dep === null) return;
+    const g = this.grid;
+    const lo = y0 << this.log2w;
+    const hi = y1 << this.log2w;
+    for (let i = lo; i < hi; i++) {
+      g[i] = f(g[i] + dep[i]);
+      dep[i] = 0.0;
+    }
+  }
+
+  swapBuffers(): void {
+    const src = this.grid;
+    this.grid = this.scratch;
     this.scratch = src;
   }
 

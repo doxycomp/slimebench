@@ -404,3 +404,35 @@ tier     = "B"
 # without them it silently runs on the software rasteriser, which is why the
 # binary prints its renderer string.
 skip_conformance = true
+
+[[target]]
+# Node worker_threads over one SharedArrayBuffer. The main thread is thread 0
+# rather than an idle coordinator; see impl/ts/src/pool-node.ts.
+id       = "ts-par-binned"
+lang     = "TypeScript"
+backend  = "worker/binned"
+class    = "P"
+dir      = "impl/ts"
+build    = ""
+binary   = "src/main-node.ts"
+run      = ["node", "--experimental-strip-types", "--no-warnings", "{binary}"]
+compilers = ["node"]
+profiles  = ["default"]
+updates  = ["deferred"]
+extra_args = ["--deposit-reduce", "binned"]
+skip_conformance = true
+
+[[target]]
+id       = "ts-par-private"
+lang     = "TypeScript"
+backend  = "worker/private"
+class    = "P"
+dir      = "impl/ts"
+build    = ""
+binary   = "src/main-node.ts"
+run      = ["node", "--experimental-strip-types", "--no-warnings", "{binary}"]
+compilers = ["node"]
+profiles  = ["default"]
+updates  = ["deferred"]
+extra_args = ["--deposit-reduce", "private"]
+skip_conformance = true
