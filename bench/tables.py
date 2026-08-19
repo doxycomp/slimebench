@@ -45,40 +45,86 @@ def fnum(v: float, digits: int = 0) -> str:
 # --------------------------------------------------------------------------- #
 
 
+def label_of(r: dict) -> str:
+    """One row per implementation, not per compiler profile."""
+    name = r["lang"]
+    v = r.get("variant") or ""
+    if v and v not in ("scalar", "default"):
+        return f"{name} ({v})"
+    if r["cc"] not in ("node", "perl", "python3", "cargo", "ghc"):
+        return f"{name} ({r['cc']})"
+    return name
+
+
 def sec_crosslang(d: pathlib.Path) -> str:
     out = []
     for upd in ("serial", "deferred"):
-        rows = [r for r in load(d, f"A-crosslang-{upd}.jsonl") if r.get("status") == "ok"]
+        # Class S only: the same run also times the SIMD targets, and a
+        # vectorised diffusion pass in a scalar table would make class V look
+        # like a language result.
+        rows = [r for r in load(d, f"A-crosslang-{upd}.jsonl")
+                if r.get("status") == "ok" and r.get("class") == "S"]
         if not rows:
             continue
-        rows.sort(key=lambda r: r["ms_per_tick_median"])
-        best = rows[0]["ms_per_tick_median"]
+        # The class S table compares implementations; the compiler axis has its
+        # own section, so each implementation appears once, at its best profile.
+        best_of: dict[str, dict] = {}
+        for r in rows:
+            k = label_of(r)
+            if k not in best_of or r["ms_per_tick_median"] < best_of[k]["ms_per_tick_median"]:
+                best_of[k] = r
+        ranked = sorted(best_of.items(), key=lambda kv: kv[1]["ms_per_tick_median"])
+        fastest = ranked[0][1]["ms_per_tick_median"]
         body = []
-        for i, r in enumerate(rows, 1):
-            name = r["lang"]
-            qual = []
-            if r.get("variant") and r["variant"] not in ("scalar", "default"):
-                qual.append(r["variant"])
-            if r["cc"] not in ("node", "cargo", "perl", "python3", "ghc"):
-                qual.append(r["cc"])
-            if r.get("profile") and r["profile"] != "default":
-                qual.append(r["profile"])
+        for i, (name, r) in enumerate(ranked, 1):
             body.append([
-                str(i), name, " ".join(qual) or "—",
+                str(i), name, r.get("profile", "—"),
                 r.get("conformance_class", "?"),
                 f"{r['ms_per_tick_median']:.3f}",
-                f"{r['ms_per_tick_median'] / best:.2f}×",
-                str(r.get("rss_kib", 0) // 1024) if r.get("rss_kib") else "—",
+                f"{r['ms_per_tick_median'] / fastest:.2f}×",
+                str(round(r["max_rss_kb"] / 1024)) if r.get("max_rss_kb") else "—",
             ])
         out.append(f"### §2 class S, `--update {upd}`\n")
-        out.append(table(["#", "Sprache", "Variante", "Konf.", "ms/Tick", "rel.", "RSS MiB"],
-                         body, "rrlcrrr"))
+        out.append(table(["#", "Sprache", "Profil", "Konf.", "ms/Tick", "rel.", "RSS MiB"],
+                         body, "rlrcrrr"))
         hashes = {(r["grid_hash"], r["agent_hash"])
                   for r in rows if r.get("conformance_class") == "A"}
-        out.append(f"\nStufe-A-Hashes: {len(hashes)} verschiedene "
-                   f"{'✓ (alle gleich)' if len(hashes) == 1 else '✗'} "
-                   f"{sorted(hashes)[0] if hashes else ''}\n\n")
+        n_a = sum(1 for r in rows if r.get("conformance_class") == "A")
+        if len(hashes) == 1:
+            g, a = hashes.pop()
+            out.append(f"\n{n_a}/{n_a} Stufe-A-Läufe: `{g} / {a}` ✓\n\n")
+        else:
+            out.append(f"\n**{len(hashes)} verschiedene Stufe-A-Hashes** ✗ "
+                       f"{sorted(hashes)}\n\n")
     return "".join(out)
+
+
+def sec_footprint(d: pathlib.Path) -> str:
+    rows = [r for r in load(d, "C-compiler-matrix.jsonl") if r.get("status") == "ok"]
+    rows += [r for r in load(d, "A-crosslang-serial.jsonl")
+             if r.get("status") == "ok" and r.get("class") == "S"]
+    if not rows:
+        return ""
+    by: dict[str, dict] = {}
+    for r in rows:
+        k = label_of(r)
+        cur = by.get(k)
+        sz = r.get("stripped_bytes") or r.get("binary_bytes") or 0
+        if sz and (cur is None or sz < (cur.get("stripped_bytes")
+                                        or cur.get("binary_bytes") or 1 << 62)):
+            by[k] = r
+        by.setdefault(k, r)
+    body = []
+    for name, r in sorted(by.items(),
+                          key=lambda kv: kv[1].get("stripped_bytes")
+                          or kv[1].get("binary_bytes") or 0):
+        sz = r.get("stripped_bytes") or r.get("binary_bytes")
+        body.append([name,
+                     fnum(sz / 1024) if sz else "— (interpretiert)",
+                     str(round(r["max_rss_kb"] / 1024)) if r.get("max_rss_kb") else "—",
+                     f"{r.get('build_seconds', 0):.1f}" if r.get("build_seconds") else "—"])
+    return ("### §9 Footprint\n"
+            + table(["Sprache", "Binär KiB (gestrippt)", "RSS MiB", "Build s"], body) + "\n")
 
 
 def sec_compilers(d: pathlib.Path) -> str:
@@ -89,7 +135,8 @@ def sec_compilers(d: pathlib.Path) -> str:
     best = rows[0]["ms_total_best"]
     body = [[r["lang"], r["cc"], r["profile"], r.get("conformance_class", "?"),
              fnum(r["ms_total_best"]), f"{r['ms_total_best'] / best:.2f}×",
-             fnum(r.get("binary_bytes", 0) / 1024, 0) if r.get("binary_bytes") else "—"]
+             fnum((r.get("stripped_bytes") or r.get("binary_bytes") or 0) / 1024, 0)
+             if (r.get("stripped_bytes") or r.get("binary_bytes")) else "—"]
             for r in rows]
     return ("### §3 compiler matrix, 1024×1024, 300 Ticks\n"
             + table(["Sprache", "Compiler", "Profil", "Konf.", "ms", "rel.", "Binär KiB"],
@@ -193,7 +240,8 @@ def main() -> int:
     if env.exists():
         print("```\n" + env.read_text(encoding="utf-8").rstrip() + "\n```\n")
 
-    for fn in (sec_crosslang, sec_compilers, sec_parallel, sec_gpu, sec_render):
+    for fn in (sec_crosslang, sec_compilers, sec_parallel, sec_gpu,
+               sec_render, sec_footprint):
         s = fn(d)
         if s:
             print(s)
