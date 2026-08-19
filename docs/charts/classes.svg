@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 206" width="760" height="206" role="img" aria-label="How far the same simulation goes">
+
+  <style>
+    .bg    { fill: none; }
+    .lbl   { fill: #24292f; font: 12px ui-monospace, "SF Mono", Menlo, monospace; }
+    .lbl-s { fill: #57606a; font: 10px ui-monospace, "SF Mono", Menlo, monospace; }
+    .ttl   { fill: #24292f; font: 600 14px -apple-system, "Segoe UI", sans-serif; }
+    .sub   { fill: #57606a; font: 11px -apple-system, "Segoe UI", sans-serif; }
+    .axis  { stroke: #d0d7de; stroke-width: 1; }
+    .grid  { stroke: #d0d7de; stroke-width: 1; stroke-dasharray: 2 3; opacity: .7; }
+    @media (prefers-color-scheme: dark) {
+      .lbl   { fill: #e6edf3; }
+      .lbl-s { fill: #9198a1; }
+      .ttl   { fill: #e6edf3; }
+      .sub   { fill: #9198a1; }
+      .axis  { stroke: #3d444d; }
+      .grid  { stroke: #3d444d; }
+    }
+  </style>
+
+<text x="16" y="22" class="ttl">How far the same simulation goes</text>
+<text x="16" y="39" class="sub">2048x2048, 1 048 576 agents, 100 ticks, deferred. Log scale.</text>
+<line x1="232.9" y1="44" x2="232.9" y2="176" class="grid"/>
+<text x="232.9" y="190" class="lbl-s" text-anchor="middle">50</text>
+<line x1="296.8" y1="44" x2="296.8" y2="176" class="grid"/>
+<text x="296.8" y="190" class="lbl-s" text-anchor="middle">100</text>
+<line x1="360.7" y1="44" x2="360.7" y2="176" class="grid"/>
+<text x="360.7" y="190" class="lbl-s" text-anchor="middle">200</text>
+<line x1="445.2" y1="44" x2="445.2" y2="176" class="grid"/>
+<text x="445.2" y="190" class="lbl-s" text-anchor="middle">500</text>
+<line x1="509.1" y1="44" x2="509.1" y2="176" class="grid"/>
+<text x="509.1" y="190" class="lbl-s" text-anchor="middle">1000</text>
+<line x1="573.0" y1="44" x2="573.0" y2="176" class="grid"/>
+<text x="573.0" y="190" class="lbl-s" text-anchor="middle">2000</text>
+<line x1="657.5" y1="44" x2="657.5" y2="176" class="grid"/>
+<text x="657.5" y="190" class="lbl-s" text-anchor="middle">5000</text>
+<text x="430" y="202" class="lbl-s" text-anchor="middle">ms total (log)</text>
+<text x="180" y="69" class="lbl" text-anchor="end">C, 1 thread (class S)</text>
+<rect x="190" y="52" width="467.1" height="24" rx="2" fill="#4c78a8"/>
+<text x="665.1" y="69" class="lbl-s">4,978  1x</text>
+<text x="180" y="99" class="lbl" text-anchor="end">C, 16 threads (class P)</text>
+<rect x="190" y="82" width="281.0" height="24" rx="2" fill="#54a24b"/>
+<text x="479.0" y="99" class="lbl-s">662  8x</text>
+<text x="180" y="129" class="lbl" text-anchor="end">GL compute (class G)</text>
+<rect x="190" y="112" width="343.2" height="24" rx="2" fill="#bab0ac"/>
+<text x="541.2" y="129" class="lbl-s">1,298  4x</text>
+<text x="180" y="159" class="lbl" text-anchor="end">CUDA (class G)</text>
+<rect x="190" y="142" width="43.3" height="24" rx="2" fill="#9d755d"/>
+<text x="241.3" y="159" class="lbl-s">50  99x</text>
+<line x1="190" y1="44" x2="190" y2="176" class="axis"/>
+</svg>

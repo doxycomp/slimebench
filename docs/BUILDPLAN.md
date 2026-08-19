@@ -79,13 +79,19 @@ Bildschirm gemessen wird.
 | Python | ⬜ `pygame` | ⬜ `raylib-python-cffi` |
 | Perl | ⬜ `SDL2::FFI` | ⬜ `Raylib::FFI` |
 
-**Ergebnis** (1024², 300 Frames, eingefrorene Simulation): raylib ist
-konsistent rund 29 % schneller, C und C++ praktisch identisch. Die Erwartung
-hat sich bestätigt: es liegt am Pixelformat, nicht an der Bibliothek. raylib
-nimmt den 8-Bit-Graustufenpuffer direkt entgegen
-(`UNCOMPRESSED_GRAYSCALE`), SDL2 braucht ARGB8888 und damit eine
-Expansionsschleife über eine Million Pixel pro Frame. Zahlen in
-[RESULTS.md](RESULTS.md).
+**Ergebnis** (1024², 300 Frames, eingefrorene Simulation): raylib ist auf der
+RTX 5080 **2.1× schneller** als SDL2, auf dem Software-Rasterizer 1.4×. C und
+C++ sind ununterscheidbar. Die Erwartung hat sich bestätigt: es liegt am
+Pixelformat, nicht an der Bibliothek. raylib nimmt den 8-Bit-Graustufenpuffer
+direkt entgegen (`UNCOMPRESSED_GRAYSCALE`), SDL2 braucht ARGB8888 und damit
+eine Expansionsschleife über eine Million Pixel pro Frame.
+
+Die erste Messung lief unbemerkt auf llvmpipe — WSL2 stellt unter Linux
+standardmäßig keine GPU für OpenGL bereit. Beide Reihen stehen jetzt
+nebeneinander in [RESULTS.md §7](RESULTS.md#7-rendering-klasse-r), und die
+Binaries drucken ihren Renderer-String. Überraschend dabei: SDL2 ist auf der
+echten GPU *langsamer* als auf Software — beide Pfade sind bei 1024²
+CPU-gebunden.
 
 ---
 
@@ -120,7 +126,7 @@ ersatzweise über `hyperfine` und die Phasen-Timer).
 Vier-Wege-Verzweigung auf die Sensorwerte ist datenabhängig und nahezu
 gleichverteilt; PGO kann nur *vorhersagbare* Verzweigungen verbessern. Die
 Vermutung an dieser Stelle war falsch. Details in
-[RESULTS.md §9](RESULTS.md).
+[RESULTS.md §9](RESULTS.md#9-was-nicht-funktioniert-hat).
 
 ---
 
@@ -150,7 +156,7 @@ Threads** und ist für jede Thread-Zahl bit-identisch zum seriellen Lauf.
 `private` erreicht nur 3.5× und **fällt bei 32 Threads unter die serielle
 Laufzeit** — die Reduktion liest dort 512 MiB pro Tick. C und C++ sind bis
 acht Threads ununterscheidbar. Zahlen und Begründung in
-[RESULTS.md](RESULTS.md#7-parallelisierung-klasse-p).
+[RESULTS.md §4](RESULTS.md#4-parallelität-klasse-p).
 
 Codeumfang für dieselbe Garantie: **C 326 Zeilen, C++ 264**. Der Unterschied
 steckt fast vollständig im Lebenszyklus — `std::jthread` joint beim Zerstören,
@@ -218,7 +224,7 @@ Gangbar sind stattdessen zwei Wege, beide implementiert:
 **Die Annahme „Klasse G ist zwangsläufig Stufe C" war falsch** — jedenfalls für
 CUDA. Nötig sind `-fmad=false`, korrekt gerundete Division und ganzzahlige
 Deposit-Atomics statt `atomicAdd(float*)`. Details in SPEC §8.2 und
-[RESULTS.md §10](RESULTS.md).
+[RESULTS.md §6](RESULTS.md#6-gpu-klasse-g).
 
 Offen: ein Host in einer zweiten Sprache (der GL-Weg macht das billig), eine
 Determinismus-Analyse für weitere Treiber, und eine Wiederholung auf nativem
@@ -226,13 +232,28 @@ Linux-GL statt über die D3D12-Übersetzung.
 
 ---
 
-## Phase 9 — Auswertung ⬜
+## Phase 9 — Auswertung ✅
 
-- `docs/RESULTS.md` — automatisch generiert aus `results/*.jsonl`
-- Diagramme: MAUPS pro Sprache (Klasse S), Compiler-Matrix als Heatmap,
-  Agenten- vs. Diffusionsanteil gestapelt, Skalierung über die Presets
-- **Footprint-Tabelle:** RSS, gestrippte Binärgröße, Buildzeit, Zeilen Code
-- Kurzes Fazit pro Sprache: erreichte Performance vs. Aufwand, den sie gekostet hat
+[`docs/RESULTS.md`](RESULTS.md) ist von chronologisch auf thematisch umgebaut:
+eine Gesamttabelle über alle Klassen vorn, danach je ein Abschnitt pro Klasse,
+Footprint, negative Ergebnisse und eine Liste der Stellen, an denen Spec oder
+Buildplan von Messungen widerlegt wurden.
+
+`bench/charts.py` erzeugt vier SVGs nach `docs/charts/` — Sprachvergleich,
+Compiler-Matrix, Skalierung, Klassenübersicht. Handgeschriebenes SVG statt
+matplotlib: der Rest des Repos baut mit nichts außer den getesteten
+Toolchains, und ein Diagrammgenerator ist ein schlechter Grund für die erste
+Python-Abhängigkeit. Nebeneffekt: die Ausgabe ist diffbar, was zählt, wenn die
+Diagramme eingecheckt sind.
+
+```bash
+python3 bench/charts.py
+```
+
+Offen geblieben: die Heatmap-Darstellung der Compiler-Matrix (die sortierte
+Balkenliste liest sich besser, weil die interessanten Paare nicht benachbart
+sind) und „Zeilen Code pro Sprache" als eigene Metrik — der Vergleich steht
+nur dort, wo er etwas aussagt (C vs. C++ in Klasse P).
 
 ---
 
