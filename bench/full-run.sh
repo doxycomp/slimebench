@@ -8,8 +8,13 @@
 # misleading for anything drawn across two. This produces one series: every
 # class, every language, one machine state, one timestamp.
 #
-# Run it from the Linux filesystem (scripts/stage-wsl.sh) -- on the 9p bridge
-# the build times and binary sizes measure the bridge.
+# Run bench/preflight.sh first on a machine this has not seen: it reports what
+# is present and which phases will be skipped, rather than letting the run
+# discover it ninety minutes in.
+#
+# On WSL, run it from the Linux filesystem (scripts/stage-wsl.sh) -- on the 9p
+# bridge the build times and binary sizes measure the bridge. On native Linux
+# staging is unnecessary.
 #
 # Roughly 90 minutes. Each phase writes its own .jsonl as it finishes, so an
 # interrupted run still leaves usable output.
@@ -23,11 +28,34 @@ OUT=${1:-results/run-$(date +%Y%m%d-%H%M)}
 mkdir -p "$OUT"
 echo "==> writing to $OUT"
 
-export LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH:-}
-export PERL5LIB="$HOME/perl5/lib/perl5:${PERL5LIB:-}"
-export PATH=/usr/local/cuda/bin:$PATH
+# Paths that exist on the machine this was written on, added only if they are
+# there. A missing one is not an error: the tool is either elsewhere on PATH or
+# not installed, and preflight.sh already said which.
+[ -d /usr/local/lib ]     && export LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH:-}
+[ -d "$HOME/perl5" ]      && export PERL5LIB="$HOME/perl5/lib/perl5:${PERL5LIB:-}"
+[ -d /usr/local/cuda/bin ] && export PATH=/usr/local/cuda/bin:$PATH
 [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
 [ -f "$HOME/.ghcup/env" ] && . "$HOME/.ghcup/env"
+
+# WSL reaches the discrete GPU only through Mesa's D3D12 backend; setting these
+# on a native driver would replace a working GL stack with a broken one. The
+# label goes into every GPU and render row so a run is attributable to a
+# renderer and not just to a machine.
+if grep -qi microsoft /proc/version 2>/dev/null; then
+  IS_WSL=1
+  gpu_env_on()  { export GALLIUM_DRIVER=d3d12 MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA; }
+  gpu_env_off() { unset GALLIUM_DRIVER MESA_D3D12_DEFAULT_ADAPTER_NAME; }
+  GPU_LABEL="D3D12 (WSL)"
+else
+  IS_WSL=0
+  gpu_env_on()  { :; }
+  gpu_env_off() { :; }
+  GPU_LABEL="native GL"
+fi
+
+# Class R needs a window. Everything else is content headless.
+HAVE_DISPLAY=0
+[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && HAVE_DISPLAY=1
 
 # Machine and toolchain state, recorded once so the numbers stay attributable.
 {
@@ -44,6 +72,8 @@ export PATH=/usr/local/cuda/bin:$PATH
   echo "python      $(python3 -V 2>&1 | awk '{print $2}')"
   echo "perl        $(perl -e 'print $^V' 2>/dev/null)"
   echo "nvcc        $(nvcc --version 2>/dev/null | awk '/release/{print $6}')"
+  echo "gl          $GPU_LABEL"
+  echo "display     $([ $HAVE_DISPLAY = 1 ] && echo yes || echo none)"
   # SLIMEBENCH_COMMIT lets the launcher pass it in: the staged copy has no
   # .git, and a run whose numbers cannot be tied to a revision is a
   # transcript rather than a measurement.
@@ -131,11 +161,15 @@ print(json.dumps(d))" >> "$OUT/H-gpu.jsonl"
       "$(echo "$j" | python3 -c 'import sys,json; print(json.load(sys.stdin)["mcups"])')"
   done
 }
-export GALLIUM_DRIVER=d3d12 MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA
+gpu_env_on
 gpu "cuda"        impl/cuda/build/default/slimebench-cuda
-gpu "gl43 C"      impl/glcompute/build/default/slimebench-gl
-gpu "gl43 Python" python3 impl/pygl/slimebench_pygl.py
-unset GALLIUM_DRIVER MESA_D3D12_DEFAULT_ADAPTER_NAME
+if [ "$HAVE_DISPLAY" = 1 ]; then
+  gpu "gl43 C"      impl/glcompute/build/default/slimebench-gl
+  gpu "gl43 Python" python3 impl/pygl/slimebench_pygl.py
+else
+  echo "  (GL hosts skipped: no display, and a GL context needs one)"
+fi
+gpu_env_off
 
 # ---- 6. class R ----------------------------------------------------------
 phase "class R, both backends, both renderers"
@@ -170,13 +204,27 @@ render_all() {
   render perl    pl-sdl2     perl impl/perl/slimebench-render.pl --backend sdl2
   render perl    pl-raylib   perl impl/perl/slimebench-render.pl --backend raylib
 }
-echo "  -- llvmpipe --"
-unset GALLIUM_DRIVER MESA_D3D12_DEFAULT_ADAPTER_NAME
-RLABEL="llvmpipe" render_all
-echo "  -- RTX 5080 via D3D12 --"
-export GALLIUM_DRIVER=d3d12 MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA
-RLABEL="D3D12 NVIDIA RTX 5080" render_all
-unset GALLIUM_DRIVER MESA_D3D12_DEFAULT_ADAPTER_NAME
+if [ "$HAVE_DISPLAY" != 1 ]; then
+  echo "  (skipped: class R needs a window and there is no display)"
+elif [ "$IS_WSL" = 1 ]; then
+  # Two renderers are worth measuring here only because WSL's default is a
+  # software rasteriser -- which is exactly how the first published class R
+  # numbers came to be software numbers without anyone noticing.
+  echo "  -- llvmpipe (software) --"
+  gpu_env_off
+  RLABEL="llvmpipe" render_all
+  echo "  -- discrete GPU via Mesa D3D12 --"
+  gpu_env_on
+  RLABEL="D3D12 NVIDIA" render_all
+  gpu_env_off
+else
+  echo "  -- $GPU_LABEL --"
+  RLABEL="$GPU_LABEL" render_all
+  # The software comparison is still informative; LIBGL_ALWAYS_SOFTWARE gets
+  # it without the WSL detour.
+  echo "  -- llvmpipe (software) --"
+  LIBGL_ALWAYS_SOFTWARE=1 RLABEL="llvmpipe" render_all
+fi
 
 echo
 echo "==> done. $(cat "$OUT"/*.jsonl 2>/dev/null | wc -l) rows in $OUT"

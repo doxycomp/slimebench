@@ -47,11 +47,24 @@ Lauf:
 
 ![Skalierung über Sprachen](docs/charts/scaling-langs.svg)
 
-Alle Zahlen aus **einem** Lauf über die ganze Matrix:
+Alle Zahlen aus **einem** Lauf über die ganze Matrix. Erst prüfen, was die
+Maschine hergibt:
 
 ```bash
-scripts/stage-wsl.sh && bench/full-run.sh
+bench/preflight.sh
 ```
+
+Dann messen — unter WSL2 mit vorherigem Staging aufs Linux-Dateisystem, nativ
+direkt:
+
+```bash
+scripts/stage-wsl.sh && bench/full-run.sh    # WSL2
+bench/full-run.sh                            # natives Linux
+```
+
+Der Lauf erkennt WSL gegen natives Linux selbst und setzt die
+D3D12-Umgebungsvariablen nur dort, wo sie hingehören; ohne Display überspringt
+er Klasse R, statt eine Zahl zu erfinden.
 
 ## Schnellstart
 
