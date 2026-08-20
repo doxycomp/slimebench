@@ -1,119 +1,118 @@
-# Ergebnisse
+# Results
 
-Alle Zahlen in diesem Dokument stammen aus **einem** Lauf,
-[`results/run-20260820-0330/`](../results/run-20260820-0330/), Commit
-`41bdcc0`, erzeugt mit einem einzigen Aufruf von:
+Every number in this document comes from **one** run,
+[`results/run-20260820-0330/`](../results/run-20260820-0330/), commit
+`41bdcc0`, produced by a single invocation of:
 
 ```bash
 bench/full-run.sh
 ```
 
-Das Ein-Lauf-Prinzip ist die Antwort auf einen Fehler früherer Fassungen: die
-Zahlen waren über ein Dutzend Sitzungen an verschiedenen Tagen entstanden.
-Innerhalb einer Reihe ist das unkritisch, über Reihen hinweg still irreführend.
-Die Tabellen werden mit `bench/tables.py` aus dem Ergebnisverzeichnis erzeugt,
-die Diagramme mit `bench/charts.py` aus demselben — abgetippt wird nichts.
+The one-run rule is the answer to a mistake in earlier versions of this file:
+the numbers had accumulated over a dozen sessions on different days. Inside one
+series that is harmless; across series it is quietly misleading. The tables are
+generated from the result directory with `bench/tables.py` and the charts from
+the same directory with `bench/charts.py` — nothing here is typed by hand.
 
 ```
 cpu     AMD Ryzen 9 9950X3D  (16C/32T, Zen 5, 128 MB L3)
-gpu     NVIDIA RTX 5080 (84 SMs), über Mesa D3D12
-os      Ubuntu 24.04 unter WSL2, 46 GiB
+gpu     NVIDIA RTX 5080 (84 SMs), via Mesa D3D12
+os      Ubuntu 24.04 under WSL2, 46 GiB
 gcc 13.3 · clang 18.1.3 · rustc 1.97.1 · GHC 9.10.3 · Node 25.5
 go 1.25 · swift 6.3.3 · python 3.12.3 (+ 3.14t) · perl 5.38.2 · CUDA 12.0
 ```
 
-> Zwei Einschränkungen vorweg. Der Lauf fand auf dem Windows-Dateisystem über
-> die 9p-Brücke statt, nicht nach `scripts/stage-wsl.sh`; das verfälscht
-> Build-Zeiten und I/O, von denen keine in diesem Dokument steht — die
-> Simulation ist CPU-gebunden, Binärgrößen und RSS sind es ohnehin.
+> Two caveats up front. The run happened on the Windows filesystem across the
+> 9p bridge, not after `scripts/stage-wsl.sh`; that distorts build times and
+> I/O, neither of which appears in this document — the simulation is CPU-bound,
+> and binary sizes and RSS are unaffected either way.
 >
-> Und: **Unterschiede unter etwa 5 % sind in diesen Tabellen nicht aufgelöst.**
-> Drei Wiederholungen reichen dafür nicht, und zwei Reihen dreißig Minuten
-> auseinander widersprechen sich bei kleinen Effekten bis hin zum Vorzeichen.
-> Wo das eine Aussage betrifft, steht es dabei.
+> And: **differences below roughly 5 % are not resolved by these tables.**
+> Three repetitions are not enough for that, and two series thirty minutes
+> apart disagree on small effects right down to the sign. Where that affects a
+> claim, it is said next to the claim.
 
 ---
 
-## Inhalt
+## Contents
 
-1. [Die kurze Fassung](#1-die-kurze-fassung)
-2. [Sprachvergleich (Klasse S)](#2-sprachvergleich-klasse-s)
-3. [Compiler](#3-compiler)
-4. [Wie sehr der Programmierstil zählt (Haskell)](#4-wie-sehr-der-programmierstil-zählt-haskell)
-5. [Parallelität (Klasse P)](#5-parallelität-klasse-p)
-6. [Was der GIL kostet (CPython 3.14t)](#6-was-der-gil-kostet-cpython-314t)
-7. [SIMD und Handassembler (Klasse V)](#7-simd-und-handassembler-klasse-v)
-8. [GPU (Klasse G)](#8-gpu-klasse-g)
-9. [Rendering (Klasse R)](#9-rendering-klasse-r)
+1. [The short version](#1-the-short-version)
+2. [Language comparison (class S)](#2-language-comparison-class-s)
+3. [Compilers](#3-compilers)
+4. [How much programming style matters (Haskell)](#4-how-much-programming-style-matters-haskell)
+5. [Parallelism (class P)](#5-parallelism-class-p)
+6. [What the GIL costs (CPython 3.14t)](#6-what-the-gil-costs-cpython-314t)
+7. [SIMD and hand-written assembly (class V)](#7-simd-and-hand-written-assembly-class-v)
+8. [GPU (class G)](#8-gpu-class-g)
+9. [Rendering (class R)](#9-rendering-class-r)
 10. [Footprint](#10-footprint)
-11. [Was nicht funktioniert hat](#11-was-nicht-funktioniert-hat)
-12. [Wo ich mich geirrt habe](#12-wo-ich-mich-geirrt-habe)
-13. [Offene Punkte](#13-offene-punkte)
+11. [What did not work](#11-what-did-not-work)
+12. [Where I was wrong](#12-where-i-was-wrong)
+13. [Open questions](#13-open-questions)
 
 ---
 
-## 1. Die kurze Fassung
+## 1. The short version
 
-Dieselbe Simulation, dreizehn Implementierungen in neun Sprachen, von einem
-Perl-Interpreter bis zu 84 Streaming-Multiprozessoren.
+The same simulation, thirteen implementations in nine languages, from a Perl
+interpreter to 84 streaming multiprocessors.
 
-![Klassenübersicht](charts/classes.svg)
+![Class overview](charts/classes.svg)
 
-| Klasse | beste Konfiguration | `medium`, 100 Ticks | vs. 1 CPU-Kern |
+| Class | best configuration | `medium`, 100 ticks | vs. 1 CPU core |
 |---|---|---:|---:|
-| S — ein Thread | C, gcc `-O3 -march=native` | 4391 ms | 1× |
-| P — 32 Threads | **Go**, `binned` | 516 ms | **8.5×** |
+| S — one thread | C, gcc `-O3 -march=native` | 4391 ms | 1× |
+| P — 32 threads | **Go**, `binned` | 516 ms | **8.5×** |
 | G — GPU | CUDA, RTX 5080 | **44 ms** | **100×** |
 
-Zwei Dinge, die in dieser Tabelle nicht stehen und die interessantesten
-Ergebnisse dieser Reihe sind:
+Two things that are not in that table and are the most interesting results of
+this series:
 
-**Klasse P gewinnt Go**, nicht C und nicht C++ — 516 ms gegen 550 und 551, bei
-einem Einzelthread-Rückstand von 12 %. Der Grund steht in §5.
+**Go wins class P**, not C and not C++ — 516 ms against 550 and 551, from a
+12 % single-thread deficit. The reasoning is in §5.
 
-**Handgeschriebener AVX-512-Assembler schlägt die Intrinsics um rund 12 %**,
-und zwar nicht mit besseren Befehlen, sondern mit einem Drittel der
-Ladeoperationen; §7.
+**Hand-written AVX-512 assembly beats the intrinsics by about 11 %**, and not
+with better instructions but with a third of the loads; §7.
 
-Klasse V steht nicht in der Tabelle, weil sie bei `small` gemessen wird — dort
-bringt AVX-512 **1.25×** (1085 → 871 ms). Der Diffusionspass allein wird
-4.5-mal schneller, macht aber nur ein Viertel der Laufzeit aus; §7.
+Class V is not in the table because it is measured at `small` — there AVX-512
+buys **1.25×** (1085 → 871 ms). The diffusion pass alone gets 4.5× faster, but
+it is only a quarter of the runtime; §7.
 
-Fünf Ergebnisse, die ich vorher nicht erwartet hätte:
+Five results I would not have predicted:
 
-- **Bit-Exaktheit hält durch alles hindurch.** 35 von 35 Stufe-A-Läufen im
-  `serial`-Modus liefern `0x9E8B1688 / 0x0E6A2341`, 38 von 38 im
-  `deferred`-Modus `0xAAB0115C / 0x328E3716`. Dazu Klasse P in allen neun
-  Sprachen für jede Thread-Zahl, SIMD, Handassembler, CUDA bei jedem Preset,
-  und alle 34 Zellen der CPython-Matrix. Die Spec hatte für SIMD und GPU
-  jeweils das Gegenteil angenommen.
-- **Eine Sprachrangliste aus einer Klasse überträgt sich nicht auf die
-  nächste.** Go liegt in Klasse S auf Platz 8 von 14 und gewinnt Klasse P.
-  TypeScript ist in Klasse S 3.6× langsamer als C und skaliert von allen am
-  besten (9.8×). Haskell liegt in Klasse S bei 1.19× und trifft in Klasse R C.
-- **Klasse R vergleicht nicht die Sprache.** Auf raylib liegen vier
-  kompilierte Sprachen innerhalb von **10 %**. Was zählt, ist das Pixelformat.
-- **Der GIL kostet nicht Skalierung, sondern Laufzeit.** CPython 3.12 mit
-  16 Threads braucht das **7.3-fache** des Ein-Thread-Laufs, nicht dasselbe.
+- **Bit-exactness survives everything.** 35 of 35 tier-A runs in `serial` mode
+  produce `0x9E8B1688 / 0x0E6A2341`, and 38 of 38 in `deferred` mode produce
+  `0xAAB0115C / 0x328E3716`. On top of that: class P in all nine languages at
+  every thread count, SIMD, hand-written assembly, CUDA at every preset, and
+  all 34 cells of the CPython matrix. The spec had assumed the opposite for
+  both SIMD and GPU.
+- **A language ranking from one class does not carry to the next.** Go sits at
+  rank 8 of 14 in class S and wins class P. TypeScript is 3.6× slower than C in
+  class S and scales better than anything else (9.8×). Haskell is at 1.19× in
+  class S and matches C in class R.
+- **Class R does not compare languages.** On raylib, four compiled languages
+  land within **10 %** of each other. What matters is the pixel format.
+- **The GIL does not cost scaling, it costs runtime.** CPython 3.12 with 16
+  threads takes **7.3× as long** as the single-thread run, not the same time.
   Details in §6.
-- **Fast jede „offensichtliche" Optimierung hat verloren.** PGO, die parallele
-  Präfixsumme, der Lastausgleich, die reine Spin-Barriere — vier Versuche, ein
-  brauchbares Ergebnis. Details in §11.
+- **Almost every "obvious" optimisation lost.** PGO, the parallel prefix sum,
+  the load balancer, the pure spin barrier — four attempts, one usable result.
+  Details in §11.
 
 ---
 
-## 2. Sprachvergleich (Klasse S)
+## 2. Language comparison (class S)
 
-Ein Thread, skalar. 256×256 mit 16 384 Agenten und 100 Ticks — diese Größe ist
-so gewählt, dass **auch Perl und reines Python sie in Sekunden schaffen**, denn
-nur so passen alle Sprachen in eine Tabelle. Jede Implementierung steht einmal,
-mit ihrem besten Profil; die Compiler-Achse hat ihren eigenen Abschnitt.
+One thread, scalar. 256×256 with 16 384 agents and 100 ticks — a size chosen so
+that **Perl and pure Python finish it in seconds**, because that is the only
+way all the languages fit in one table. Each implementation appears once, with
+its best profile; the compiler axis has its own section.
 
-![Sprachvergleich](charts/languages.svg)
+![Language comparison](charts/languages.svg)
 
 ### `--update serial`
 
-| # | Sprache | Profil | Konf. | ms/Tick | rel. | RSS MiB |
+| # | Language | Profile | Tier | ms/tick | rel. | RSS MiB |
 |---:|---|---:|:-:|---:|---:|---:|
 | 1 | C (clang) | o3-native-lto | A | 0.179 | 1.00× | 18 |
 | 2 | C++ (clang++) | o3-native | A | 0.200 | 1.12× | 18 |
@@ -126,17 +125,17 @@ mit ihrem besten Profil; die Compiler-Achse hat ihren eigenen Abschnitt.
 | 9 | Rust (safe) | release-native | A | 0.277 | 1.55× | 18 |
 | 10 | TypeScript | node | A | 0.636 | 3.56× | 80 |
 | 11 | Perl | — | B | 35.39 | 198× | 22 |
-| 12 | Python (pur) | — | B | 36.16 | 202× | 18 |
+| 12 | Python (pure) | — | B | 36.16 | 202× | 18 |
 | 13 | Python (`--strict-f32`) | — | A | 80.80 | 452× | 18 |
 | 14 | Perl (`--strict-f32`) | — | A | 116.08 | 649× | 22 |
 
-**35 von 35 Stufe-A-Läufen: `0x9E8B1688 / 0x0E6A2341`.**
+**35 of 35 tier-A runs: `0x9E8B1688 / 0x0E6A2341`.**
 
 ### `--update deferred`
 
-Hier können auch numpy und die idiomatische Haskell-Fassung antreten.
+Here numpy and the idiomatic Haskell version can compete as well.
 
-| # | Sprache | Konf. | ms/Tick | rel. |
+| # | Language | Tier | ms/tick | rel. |
 |---:|---|:-:|---:|---:|
 | 1 | C (clang, o3-native) | A | 0.181 | 1.00× |
 | 2 | C++ (clang++, o3-native) | A | 0.195 | 1.08× |
@@ -147,65 +146,67 @@ Hier können auch numpy und die idiomatische Haskell-Fassung antreten.
 | 7 | Swift (unchecked) | A | 0.266 | 1.47× |
 | 8 | Rust (safe) | A | 0.271 | 1.50× |
 | 9 | Go (nobounds) | A | 0.277 | 1.53× |
-| 10 | Haskell (idiomatisch, `vector`) | A | 0.459 | 2.54× |
+| 10 | Haskell (idiomatic, `vector`) | A | 0.459 | 2.54× |
 | 11 | TypeScript | A | 0.671 | 3.71× |
 | 12 | Python (numpy) | A | 1.039 | 5.74× |
 
-**38 von 38 Stufe-A-Läufen: `0xAAB0115C / 0x328E3716`.**
+**38 of 38 tier-A runs: `0xAAB0115C / 0x328E3716`.**
 
-Bemerkenswert:
+Worth noting:
 
-- **Haskell ist auf Platz 5, vor Swift, Go und Rust.** Der Grund steht in §4:
-  eine einzige Änderung (`Data.Array.Unboxed.(!)` → `unsafeAt`) war Faktor 1.5.
-  Eine frühere Fassung dieses Dokuments hatte Haskell bei 2.16×.
-- **Swift liegt vor Rust und Go**, bei 1.26× und mit 19 MiB RSS und 96 KiB
-  Binärgröße. Von den drei jüngeren Systemsprachen im Feld ist es hier die
-  schnellste — und die einzige, die dafür kein Flag braucht, das
-  Bereichsprüfungen abschaltet: `-Ounchecked` bringt gegenüber `release` nur
-  6 %, wo Rust 11 % verliert.
-- **Go liegt im `serial`-Modus knapp vor Rust-safe, im `deferred`-Modus knapp
-  dahinter.** Der Abstand zwischen Platz 6 und Platz 9 beträgt 12 %; die
-  Reihenfolge dort ist nicht belastbar (siehe die Vorbemerkung).
-- **Perl und reines Python liegen 2 % auseinander** (35.4 vs. 36.2 ms/Tick),
-  und in dieser Reihe ist Perl das schnellere von beiden. Der
-  Interpreter-Dispatch dominiert so vollständig, dass der Sprachunterschied
-  verschwindet — welches der beiden vorne liegt, wechselt zwischen Reihen.
-- **TypeScript mit Faktor 3.5** ist zwei Größenordnungen näher an C als an den
-  anderen Skriptsprachen — und dabei in Konformitätsstufe A, weil `Math.fround`
-  um jede Operation beweisbar dasselbe liefert wie f32-Arithmetik
-  (`53 ≥ 2·24+2`).
-- **numpy liegt bei 5.7×**, nicht bei 3.1× wie in einer alten Reihe. Der
-  Unterschied ist der Refactor auf bereichsweise Pässe für Klasse P: die
-  Diffusion sammelt ihre Zeilen jetzt per Indexarray statt per `np.roll` über
-  das ganze Grid, was bei 256² relativ mehr kostet als bei 1024².
-- **RSS ist fast überall 18 MiB**, weil das Grid ihn dominiert. Auffällig sind
-  nur die Laufzeitumgebungen: Node mit 81 MiB, numpy mit 39.
+- **Haskell is in fifth place, ahead of Swift, Go and Rust.** The reason is in
+  §4: a single change (`Data.Array.Unboxed.(!)` → `unsafeAt`) was worth 1.5×.
+  An earlier version of this document had Haskell at 2.16×.
+- **Swift is ahead of Rust and Go**, at 1.26×, with 19 MiB RSS and a 96 KiB
+  binary. Of the three younger systems languages in the field it is the fastest
+  here — and the only one that does not need a flag disabling bounds checks to
+  get there: `-Ounchecked` buys 6 % over `release`, where Rust loses 11 %.
+- **Go is just ahead of safe Rust in `serial` mode and just behind it in
+  `deferred`.** The gap between rank 6 and rank 9 is 12 %; the ordering inside
+  that band is not dependable (see the caveat at the top).
+- **Perl and pure Python are 2 % apart** (35.4 vs 36.2 ms/tick), and in this
+  series Perl is the faster of the two. Interpreter dispatch dominates so
+  completely that the language difference disappears — which of them comes out
+  ahead changes between series.
+- **TypeScript at 3.5×** is two orders of magnitude closer to C than to the
+  other scripting languages — and it is in conformance tier A, because
+  `Math.fround` around every operation provably yields the same result as f32
+  arithmetic (`53 ≥ 2·24+2`).
+- **numpy sits at 5.7×**, not the 3.1× of an older series. The difference is
+  the refactor to range-wise passes for class P: diffusion now gathers its rows
+  through an index array instead of `np.roll` over the whole grid, which costs
+  relatively more at 256² than at 1024².
+- **RSS is 18 MiB almost everywhere**, because the grid dominates it. The only
+  outliers are the runtimes: Node at 80 MiB, numpy at 39.
 
-### Was Bit-Exaktheit in den Skriptsprachen kostet
+### What bit-exactness costs in the scripting languages
 
-| Sprache | Stufe B | Stufe A | Aufschlag |
+`256²`, 100 ticks, milliseconds per tick:
+
+| Language | tier B (ms/tick) | tier A (ms/tick) | surcharge |
 |---|---:|---:|---:|
-| Python (pur) | 36.16 | 80.80 | 2.2× |
+| Python (pure) | 36.16 | 80.80 | 2.2× |
 | Perl | 35.39 | 116.08 | 3.3× |
 
-Deutlich billiger als erwartet, und das ist selbst der Befund: in einer Sprache,
-die pro Operation ohnehin einen Interpreter-Dispatch zahlt, verschwinden neun
-zusätzliche C-Level-Aufrufe pro Zelle weitgehend im vorhandenen Overhead.
+Considerably cheaper than expected, and that is itself the finding: in a
+language that already pays an interpreter dispatch per operation, nine extra
+C-level calls per cell largely disappear into the overhead that was there
+anyway.
 
-Perl zahlt mehr als Python, weil ein Perl-Array volle Doubles speichert und
-damit *jede* Operation gerundet werden muss, während Pythons `array('f')` beim
-Store ohnehin auf f32 rundet.
+Perl pays more than Python because a Perl array stores full doubles, so *every*
+operation has to be rounded, whereas Python's `array('f')` rounds to f32 on
+store in any case.
 
 ---
 
-## 3. Compiler
+## 3. Compilers
 
-1024×1024, 262 144 Agenten, 300 Ticks, bester von drei Läufen. Neun Compiler
-bzw. Toolchains, jede mit ihrer eigenen Profilachse.
+1024×1024, 262 144 agents, 300 ticks, best of three runs. Nine compilers and
+toolchains, each with its own profile axis.
 
-![Compiler-Matrix](charts/compilers.svg)
+![Compiler matrix](charts/compilers.svg)
 
-| Sprache | Compiler | Profil | Konf. | ms | rel. | Binär KiB |
+| Language | Compiler | Profile | Tier | ms | rel. | Binary KiB |
 |---|---|---:|:-:|---:|---:|---:|
 | C | clang | o3-native | A | **1085** | 1.00× | 54 |
 | C++ | g++ | ofast-native | **C** | 1132 | 1.04× | 74 |
@@ -244,160 +245,152 @@ bzw. Toolchains, jede mit ihrer eigenen Profilachse.
 | C++ | clang++ | o0 | A | 4413 | 4.07× | 155 |
 | C++ | g++ | o0 | A | 4837 | 4.46× | 166 |
 
-**Alle Stufe-A-Läufe stimmen überein.** Die vier fast-math-Builds weichen ab,
-und zwar *pro Compiler unterschiedlich* — genau deshalb ist fast-math eine
-eigene Konformitätsstufe.
+**Every tier-A run agrees.** The four fast-math builds diverge, and they
+diverge *differently per compiler* — which is exactly why fast-math is a
+conformance tier of its own.
 
-### `-Ofast` kostet clang die Hälfte und gcc nichts
+### `-Ofast` costs clang half its speed and gcc nothing
 
 | | `-O3 -march=native` | `-Ofast -march=native` | Δ |
 |---|---:|---:|---:|
-| C, clang | 1085 | 1643 | **+51 %** |
-| C++, clang++ | 1206 | 1612 | **+34 %** |
-| C, gcc | 1274 | 1248 | −2 % |
-| C++, g++ | 1216 | 1132 | −7 % |
+| C, clang | 1085 ms | 1643 ms | **+51 %** |
+| C++, clang++ | 1206 ms | 1612 ms | **+34 %** |
+| C, gcc | 1274 ms | 1248 ms | −2 % |
+| C++, g++ | 1216 ms | 1132 ms | −7 % |
 
-Bei clang ist der Effekt groß, reproduzierbar und geht in die falsche Richtung:
-die Reassoziationsfreiheit lässt es den 9-Punkt-Stencil in etwas Schlechteres
-umordnen. Der Diffusionspass allein steigt von 270 auf 815 ms.
+On clang the effect is large, reproducible and points the wrong way: freedom to
+reassociate lets it reorder the nine-point stencil into something worse. The
+diffusion pass alone rises from 270 to 815 ms.
 
-**Bei gcc ist er es nicht.** Eine frühere Reihe maß hier +3 %, diese −2 %. Ein
-Effekt, der zwischen zwei Messungen das Vorzeichen wechselt, ist kein Effekt.
-Was bleibt: man bezahlt Determinismus und bekommt bei gcc nichts messbares und
-bei clang einen Verlust.
+**On gcc it is not an effect at all.** An earlier series measured +3 % here,
+this one −2 %. Something that changes sign between two measurements is not an
+effect. What remains: you pay for determinism and get nothing measurable on
+gcc, and a loss on clang.
 
-### clang gewinnt — aber nur mit `-march=native`
+### clang wins — but only with `-march=native`
 
-`-O2`: gcc 1148, clang 1292. `-O3 -march=native`: gcc 1274, clang 1085.
-Wer nur `-O2` vergleicht, schließt „gcc ist 11 % schneller"; wer
-`-march=native` dazunimmt, „clang ist 15 % schneller". Derselbe Quelltext.
-Dieser Befund hat inzwischen drei Reihen überlebt.
+`-O2`: gcc 1148 ms, clang 1292 ms. `-O3 -march=native`: gcc 1274 ms, clang
+1085 ms. Compare only `-O2` and you conclude "gcc is 11 % faster"; add
+`-march=native` and you conclude "clang is 15 % faster". Same source. This
+finding has now survived three series.
 
-### LTO ist Rauschen
+### LTO is noise
 
-clang 1085 → 1158 mit LTO, gcc 1274 → 1288, g++ 1216 → 1368, clang++ 1206 →
-1217. In dieser Reihe kostet LTO also überall zwischen 1 und 13 %; in der
-vorherigen brachte es bei clang 3 % und kostete bei gcc 1 %. Bei Rust ist es
-mit 1481 → 1460 ebenfalls im Rauschen. Die einzige belastbare Aussage ist,
-dass LTO auf diesem Programm nichts tut, was man messen könnte — es ist eine
-einzige Übersetzungseinheit mit vier Dateien.
+clang 1085 → 1158 ms with LTO, gcc 1274 → 1288, g++ 1216 → 1368, clang++
+1206 → 1217. So in this series LTO costs between 1 and 13 % everywhere; in the
+previous one it gained 3 % on clang and cost 1 % on gcc. On Rust it is likewise
+in the noise at 1481 → 1460. The only dependable statement is that LTO does
+nothing measurable to this program — it is one translation unit's worth of
+work spread over four files.
 
-### Bereichsprüfungen: Rust 11 %, Go 4 %, Swift 6 %
+### Bounds checks: Rust 11 %, Go 4 %, Swift 6 %
 
-| Sprache | mit Prüfung | ohne | Kosten |
+| Language | with checks | without | cost |
 |---|---:|---:|---:|
-| Rust | 1648 (`release-native`) | 1481 (`-unchecked`) | **11 %** |
-| Swift | 1434 (`release`) | 1350 (`-Ounchecked`) | 6 % |
-| Go | 1460 (default) | 1399 (`-gcflags=all=-B`) | 4 % |
+| Rust | 1648 ms (`release-native`) | 1481 ms (`-unchecked`) | **11 %** |
+| Swift | 1434 ms (`release`) | 1350 ms (`-Ounchecked`) | 6 % |
+| Go | 1460 ms (default) | 1399 ms (`-gcflags=all=-B`) | 4 % |
 
-Eine frühere Reihe hat den Rust-Wert aufgeschlüsselt: 28–35 % im
-Diffusionspass, nichts messbares im Agenten-Pass. Die Prüfungen stehen der
-Vektorisierung des Stencils im Weg; im Agenten-Pass wartet die CPU ohnehin auf
-Cache-Misses. „Bounds-Checking kostet nichts" und das Gegenteil sind beide
-falsch — es hängt am Zugriffsmuster, und dieser Benchmark hat zufällig beide
-Sorten in einem Programm.
+An earlier series broke the Rust figure down: 28–35 % in the diffusion pass,
+nothing measurable in the agent pass. The checks get in the way of vectorising
+the stencil; in the agent pass the CPU is waiting on cache misses anyway.
+"Bounds checking costs nothing" and its opposite are both wrong — it depends on
+the access pattern, and this benchmark happens to have both kinds in one
+program.
 
-Dass Go und Swift weniger zahlen als Rust, liegt nicht an besseren Prüfungen,
-sondern daran, dass ihre Diffusionsschleifen ohnehin nicht so weit
-vektorisiert werden wie die von LLVM für Rust — es ist weniger zu verlieren.
+Go and Swift paying less than Rust is not down to better checks. Their
+diffusion loops are not vectorised as far as LLVM takes Rust's in the first
+place, so there is less to lose.
 
-### GHC: das LLVM-Backend lohnt sich
+### GHC: the LLVM backend is worth it
 
-`-O1` 2881, `-O2` 1640, `-O2 -fllvm` **1304**. Das LLVM-Backend bringt **20 %**
-gegenüber dem nativen Codegenerator, für 1 % mehr Binärgröße. Alle drei
-bit-exakt. GHC 9.10 warnt, dass LLVM 18 außerhalb des unterstützten Bereichs
-liegt, und macht trotzdem korrekt weiter — geprüft gegen die
-Konformitätsvektoren, nicht geglaubt.
+`-O1` 2881 ms, `-O2` 1640 ms, `-O2 -fllvm` **1304 ms**. The LLVM backend buys
+**20 %** over the native code generator, for 1 % more binary size. All three
+bit-exact. GHC 9.10 warns that LLVM 18 is outside the supported range and
+proceeds correctly anyway — verified against the conformance vectors rather
+than taken on trust.
 
 ---
 
-## 4. Wie sehr der Programmierstil zählt (Haskell)
+## 4. How much programming style matters (Haskell)
 
-Ein Haskell-Programmierer, der den Port gelesen hat, hat ihn so beschrieben:
-*„it looks just like if you took the C and tried to just line by line re-create
-it in Haskell — this is not how you write Haskell code."* Das trifft zu.
-`impl/haskell/src/Sim.hs` ist `IOUArray` in `IO` mit handgeschriebener
-Endrekursion und expliziter Indexarithmetik, und so schreibt das niemand, der
-nicht gerade eine C-Referenz Anweisung für Anweisung nachbaut.
+`impl/haskell/src/Sim.hs` is `IOUArray` in `IO` with hand-written tail
+recursion and explicit index arithmetic. That is structurally the C reference
+rebuilt statement by statement, and nobody writes Haskell that way unless they
+are doing exactly that.
 
-Derselbe Programmierer nannte zwei Dinge, die sich hier gegenseitig
-widersprechen: dass man in Haskell üblicherweise *hochlevel* schreibt und GHC
-machen lässt — und dass man mit sorgfältigem Low-Level-Code *nahe an C*
-herankommt. Beides ist messbar.
+Two claims about Haskell pull in opposite directions here: that you normally
+write *high-level* code and let GHC do the work, and that careful *low-level*
+code gets you *close to C*. Both are measurable, so this section measures them.
 
-![Haskell-Stile](charts/haskell-style.svg)
+![Haskell styles](charts/haskell-style.svg)
 
-`small`/300 `deferred`, alle vier bit-identisch (`0x7A67A29B`):
+`small`/300 `deferred`, all four bit-identical (`0x7A67A29B`):
 
-| Variante | ms | vs. C |
+| Variant | ms | vs. C |
 |---|---:|---:|
-| C-Referenz, clang `-O3 -march=native` | 1138 | 1.00× |
+| C reference, clang `-O3 -march=native` | 1138 | 1.00× |
 | **Haskell low-level, `unsafeAt`** | **1420** | **1.25×** |
 | Haskell low-level, `Data.Array.Unboxed.(!)` | 2077 | 1.83× |
-| Haskell idiomatisch, `Data.Vector.Unboxed` | 5287 | 4.65× |
+| Haskell idiomatic, `Data.Vector.Unboxed` | 5287 | 4.65× |
 
-Alle vier Zeilen kommen aus derselben Messreihe wie der Rest dieses Dokuments.
-Das war nicht immer so: die langsame `(!)`-Fassung wurde repariert, als sie
-gefunden wurde, und ein Vergleich gegen eine Variante, die nicht mehr
-kompiliert, ist keine Messung, sondern eine Erinnerung. Sie ist jetzt ein
-Build-Profil (`o2-llvm-safetrig`, ein CPP-Schalter um vier
-Tabellenzugriffe), damit sie sich mit allem anderen zusammen neu erzeugen
-lässt.
+All four rows come from the same series as the rest of this document. That was
+not always true: the slow `(!)` version was fixed the moment it was found, and
+a comparison against a variant that no longer compiles is a memory, not a
+measurement. It is a build profile now (`o2-llvm-safetrig`, a CPP switch around
+four table lookups) so it can be regenerated along with everything else.
 
-Drei Befunde:
+Three findings:
 
-**„Nahe an C" stimmt — und hing an vier Zeichen.** Die Trigonometrie-Tabelle
-wird viermal pro Agent gelesen. `Data.Array.Unboxed.(!)` ist die naheliegende
-Schreibweise, geht aber über die `Ix`-Klasse, rechnet den Offset aus und prüft
-die Grenzen — und GHC eliminiert beides nicht, obwohl die Grenzen
-Compile-Time-Konstanten sind. Ersetzt durch `unsafeAt`: **1.46×** auf die
-Gesamtzeit, und der Index war schon vorher mod NDIR reduziert, die Prüfung
-konnte also nie auslösen.
+**"Close to C" holds — and it hung on four characters.** The trig table is read
+four times per agent. `Data.Array.Unboxed.(!)` is the obvious way to write
+that, but it goes through the `Ix` class, computes the offset and range-checks
+it, and GHC eliminates neither even though the bounds are compile-time
+constants. Replaced by `unsafeAt`: **1.46×** on total runtime — and the index
+had already been reduced mod NDIR, so the check could never have fired.
 
-**Hochlevel kostet hier 3.7× gegen den Low-Level-Port.** Die idiomatische
-Fassung ist ehrlich idiomatisch: reine Funktionen über unveränderliche
-`U.Vector`, kein `IO` im Kern, der Diffusionspass ist ein `U.generate`, der
-Deposit-Scatter ein `U.accumulate`. Der Stencil ist als reine Abbildung genau
-der Fall, in dem Fusion funktioniert. Der Agenten-Pass ist es nicht: jeder Tick
-baut fünf neue Vektoren auf, wo die mutable Fassung in bestehende Puffer
-schreibt.
+**High-level costs 3.7× against the low-level port here.** The idiomatic
+version is honestly idiomatic: pure functions over immutable `U.Vector`, no
+`IO` in the core, the diffusion pass a `U.generate`, the deposit scatter a
+`U.accumulate`. As a pure mapping, the stencil is precisely the case where
+fusion works. The agent pass is not: every tick builds five new vectors where
+the mutable version writes into existing buffers.
 
-**Der idiomatische Stil scheitert an derselben Stelle wie numpy.**
-`--update serial` verlangt, dass ein Agent die Deposits seiner Vorgänger
-*innerhalb desselben Ticks* sieht. Über unveränderliche Vektoren hieße das, das
-Grid einmal pro Agent neu zu bauen. Die Implementierung lehnt den Modus mit
-Exit-Code 3 ab — dieselbe Wand wie in
-[`slimebench_numpy.py`](../impl/python/slimebench_numpy.py), aus demselben
-Grund.
+**The idiomatic style hits the same wall as numpy.** `--update serial` requires
+an agent to see its predecessors' deposits *within the same tick*. Over
+immutable vectors that would mean rebuilding the grid once per agent. The
+implementation refuses the mode with exit code 3 — the same wall as
+[`slimebench_numpy.py`](../impl/python/slimebench_numpy.py), for the same
+reason.
 
-Und ein Fehler, den die getrennten Prüfsummen gefangen haben: die erste Fassung
-akkumulierte die Deposits per `U.accumulate` direkt ins Grid. Zwei Deposits auf
-dieselbe Zelle ergeben dann `(g + d₁) + d₂` statt der vorgeschriebenen
-`g + (d₁ + d₂)` — 1 ULP, sobald `g` groß genug ist. Der *Grid*-Hash wich ab,
-der *Agenten*-Hash nicht, und damit war der Fehler ohne Suche lokalisiert.
-Genau dafür trennt [SPEC §6.3](../spec/SPEC.md) die beiden.
+And one bug the separated checksums caught: the first version accumulated
+deposits with `U.accumulate` straight into the grid. Two deposits into the same
+cell then give `(g + d₁) + d₂` instead of the prescribed `g + (d₁ + d₂)` — 1
+ULP, as soon as `g` is large enough. The *grid* hash diverged and the *agent*
+hash did not, which located the bug without a search. That is exactly why
+[SPEC §6.3](../spec/SPEC.md) keeps the two apart.
 
-> Was das *nicht* zeigt: dass idiomatisches Haskell langsam ist. Es zeigt, dass
-> es auf **dieser** Last langsam ist — ein mutables Gitter, das eine Million
-> Mal pro Tick punktuell verändert wird. Das ist der ungünstigste denkbare Fall
-> für persistente Datenstrukturen, und die Spec schreibt ihn vor.
+> What this does *not* show is that idiomatic Haskell is slow. It shows that it
+> is slow on **this** workload — a mutable grid modified pointwise a million
+> times per tick. That is the worst imaginable case for persistent data
+> structures, and the spec mandates it.
 
 ---
 
-## 5. Parallelität (Klasse P)
+## 5. Parallelism (class P)
 
-Nur im `deferred`-Modus — `serial` lässt Agenten die Deposits ihrer Vorgänger
-im selben Tick sehen und ist damit prinzipiell nicht deterministisch
-parallelisierbar.
+`deferred` mode only — `serial` lets agents see their predecessors' deposits
+within the same tick and is therefore not deterministically parallelisable
+even in principle.
 
-![Skalierung über Sprachen](charts/scaling-langs.svg)
+![Scaling across languages](charts/scaling-langs.svg)
 
-`medium` (2048², 1 048 576 Agenten), 100 Ticks. Perl steht bei `tiny`, weil
-`medium` dort Stunden dauern würde.
+`medium` (2048², 1 048 576 agents), 100 ticks, milliseconds. Perl runs at
+`tiny`, because `medium` there would take hours.
 
-### `binned` — bit-identisch zum seriellen Lauf
+### `binned` — bit-identical to the serial run
 
-| Sprache | T=1 | T=2 | T=4 | T=8 | T=16 | T=32 | Speedup |
+| Language | T=1 | T=2 | T=4 | T=8 | T=16 | T=32 | Speedup |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | **Go** | 4916 | 2115 | 1442 | 814 | 578 | **516** | **9.5×** |
 | C | 4391 | 2101 | 1112 | 873 | 627 | **550** | 8.0× |
@@ -409,11 +402,11 @@ parallelisierbar.
 | Python | 7532 | 5478 | 3041 | 1932 | **1712** | 2085 | 4.4× |
 | Perl ¹ | 4018 | 2288 | 1647 | **1469** | 1672 | 2485 | 2.7× |
 
-¹ `tiny`, replizierte Reduktion — siehe unten.
+¹ `tiny`, replicated reduction — see below.
 
-### `private` — nur je Thread-Zahl reproduzierbar
+### `private` — reproducible per thread count only
 
-| Sprache | T=2 | T=4 | T=8 | T=16 | T=32 |
+| Language | T=2 | T=4 | T=8 | T=16 | T=32 |
 |---|---:|---:|---:|---:|---:|
 | C | 2472 | 1458 | **1173** | 2500 | 5747 |
 | C++ | 2319 | 1414 | **1139** | 2463 | 5595 |
@@ -424,110 +417,107 @@ parallelisierbar.
 | TypeScript | 6230 | 3594 | **2495** | 2828 | 5803 |
 | Python | 4689 | 2780 | **2056** | 2196 | 3038 |
 
-**`private` fällt bei 32 Threads unter die serielle Laufzeit** — in C auf
-5747 ms gegen 4391. Die Reduktion liest `T` vollständige Grids: bei `medium`
-und 32 Threads sind das 512 MiB Speicherverkehr pro Tick, nur um Deposits
-zusammenzuzählen. `binned` braucht dafür 8 MiB, unabhängig von der Thread-Zahl.
-Die Strategie, die man naiv zuerst schreibt, ist also nicht nur die schwächere
-Garantie, sondern ab acht Threads auch die langsamere.
+**At 32 threads `private` drops below the serial runtime** — in C to 5747 ms
+against 4391. The reduction reads `T` complete grids: at `medium` with 32
+threads that is 512 MiB of memory traffic per tick, purely to add deposits
+together. `binned` needs 8 MiB for the same job, independent of thread count.
+So the strategy you naively write first is not only the weaker guarantee, it is
+also the slower one from eight threads on.
 
-### Go gewinnt Klasse P
+### Go wins class P
 
-Bei 32 Threads ist Go mit **516 ms** die schnellste Implementierung im Feld,
-vor C++ (551) und C (550) — bei einem Einzelthread-Rückstand von 12 % gegenüber
-C. Es ist auch die einzige Sprache, deren `binned`-Kurve bis 32 Threads
-monoton fällt; C, C++, Haskell, Rust und Swift haben ihr Minimum bei 16 oder
-biegen danach wieder hoch.
+At 32 threads Go is the fastest implementation in the field at **516 ms**,
+ahead of C++ (551) and C (550) — from a 12 % single-thread deficit against C.
+It is also the only language whose `binned` curve still falls at 32 threads;
+C, C++, Haskell, Rust and Swift bottom out at 16 or turn back up after it.
 
-Die Form der Kurve sagt, wo es herkommt: bei T=4 liegt Go mit 1442 ms
-*deutlich hinter* C (1112), bei T=32 vorn. Der Vorteil wächst also mit der
-Zahl der Teilnehmer, was auf die Synchronisation zeigt und nicht auf den
-Rechenkern — sechs Barrieren pro Tick mal 32 Worker sind 192 Weckvorgänge, und
-Gos Barriere ist ein `sync.Cond` über einem Mutex, der wartende Goroutinen im
-Runtime-Scheduler parkt, wo C `futex` und C++ `std::condition_variable`
-benutzen.
+The shape of the curve says where it comes from: at T=4 Go is *well behind* C
+(1442 against 1112 ms), and at T=32 it is ahead. The advantage therefore grows
+with the number of participants, which points at synchronisation rather than
+the compute kernel — six barriers per tick times 32 workers is 192 wakeups, and
+Go's barrier is a `sync.Cond` over a mutex, parking waiting goroutines in the
+runtime scheduler where C uses `futex` and C++ `std::condition_variable`.
 
-> Das ist die plausible Erklärung, nicht die gemessene. Sie zu belegen hieße,
-> die Barrieren gegeneinander zu tauschen oder die Wartezeit pro Phase zu
-> instrumentieren; beides ist offen. Nach §12 dieses Dokuments sind
-> ungemessene Performance-Erklärungen die Kategorie, in der ich bisher
-> zuverlässig danebenlag.
+> That is the plausible explanation, not the measured one. Establishing it
+> would mean swapping the barriers between implementations, or instrumenting
+> the wait time per phase; both are open. Per §12 of this document, unmeasured
+> performance explanations are the category in which I have been reliably
+> wrong.
 
-### Determinismus
+### Determinism
 
-| `deposit` | Strategie | T=1 | T=4 | T=32 |
+| `deposit` | Strategy | T=1 | T=4 | T=32 |
 |---|---|---|---|---|
-| 10.0 (Default) | `binned` | `0xC5C53969` | ✓ | ✓ |
+| 10.0 (default) | `binned` | `0xC5C53969` | ✓ | ✓ |
 | 10.0 | `private` | `0xC5C53969` | ✓ | ✓ |
 | **0.1** | `binned` | `0x95EEB32D` | ✓ | ✓ |
 | **0.1** | `private` | `0x95EEB32D` | `0xE82B2012` ✗ | ✗ |
 
-`binned` ist bit-identisch zu T=1 für **jede** Thread-Zahl, geprüft für
-T ∈ {2,3,4,7,8,16,32}, also auch für Zahlen, die kein Teiler der Höhe sind.
+`binned` is bit-identical to T=1 for **any** thread count, checked for
+T ∈ {2,3,4,7,8,16,32} — including counts that do not divide the height.
 
-`private` stimmt mit den Default-Parametern *zufällig* auch: bei
-`deposit = 10.0` bleibt jede Teilsumme `k · 10` unter 2²⁴ und ist in f32 exakt.
-Mit `--deposit 0.1` bricht das sofort — und **fünf Sprachen liefern bei T=4
-denselben falschen Hash `0xE82B2012`**. Dieselbe Klammerung, derselbe Fehler.
-Das ist ein besserer Beleg dafür, dass die Ports dieselbe Rechnung machen, als
-es die richtigen Ergebnisse allein wären.
+`private` also agrees under the default parameters, but only *by accident*: at
+`deposit = 10.0` every partial sum `k · 10` stays below 2²⁴ and is exact in
+f32. With `--deposit 0.1` that breaks immediately — and **five languages
+produce the same wrong hash `0xE82B2012` at T=4**. Same grouping, same error.
+That is better evidence that the ports compute the same thing than agreement on
+the correct answers would be.
 
-### Was die einzelnen Sprachen kostet
+### What the individual languages pay
 
-**TypeScript skaliert am besten unter den Nicht-Systemsprachen, obwohl es in
-Klasse S 3.6× zurückliegt.** Der Abstand zu C schrumpft von 3.6× auf 2.3×. Und `binned` ist dort bei *zwei*
-Threads schon 3.1× schneller als ein Thread — das ist nicht die Parallelität,
-sondern die Lokalität: bei gleicher Thread-Zahl schlägt `binned` die
-`private`-Strategie um 1.63×, in C nur um 1.10×. Die Zielzellen sequenziell in
-`aidx` zu schreiben und sie danach zeilenblockweise anzuwenden ersetzt ein
-gestreutes Read-Modify-Write über 16 MiB durch einen sequenziellen Write plus
-einen sortierten. In V8 ist das viel mehr wert als in C.
+**TypeScript scales best among the non-systems languages, despite being 3.6×
+behind in class S.** The gap to C shrinks from 3.6× to 2.3×. And there `binned`
+is already 3.1× faster than one thread at *two* threads — which is not
+parallelism but locality: at equal thread count `binned` beats `private` by
+1.63× there, and by only 1.10× in C. Writing the target cells sequentially into
+`aidx` and applying them row-block by row-block afterwards replaces a scattered
+read-modify-write over 16 MiB with one sequential write plus one sorted write.
+In V8 that is worth far more than in C.
 
-**Haskells Barriere ist `MVar`-basiert, nicht STM.** Die STM-Variante liest
-sich schöner (`retry` blockiert, bis der Generationszähler sich ändert), aber
-jeder Wartende validiert seine Transaktion bei jedem Aufwachen neu, und bei
-sechs Barrieren pro Tick ist das ein Retry-Sturm.
+**Haskell's barrier is `MVar`-based, not STM.** The STM version reads better
+(`retry` blocks until the generation counter changes), but every waiter
+revalidates its transaction on each wakeup, and at six barriers per tick that
+is a retry storm.
 
-**Python zahlt für den GIL mit Prozessen.** `threading` würde genau die
-Schleifen serialisieren, um die es geht — numpy gibt den GIL in großen
-ufunc-Aufrufen frei, aber der Agenten-Pass ist eine Kette von Dutzenden
-kleiner, mit Python-Code dazwischen, und der hält das Lock. Also
-`multiprocessing` über einen `shared_memory`-Block, jedes Array von Hand
-platziert. Was das kostet, und was ein freithreadiges CPython daran ändert,
-steht in §6 — es ist ein eigener Abschnitt geworden, weil sich beide Backends
-gegeneinander messen lassen. Nebeneffekt: die Barriere ist ein OS-Objekt und kostet
-Zehner-Mikrosekunden statt Hunderter-Nanosekunden — in C wäre das der
-Flaschenhals, hier verschwindet es in einem Tick von 23 ms. Die langsamste
-Implementierung kann sich die teuerste Barriere leisten.
+**Python pays for the GIL with processes.** `threading` would serialise
+precisely the loops this is about — numpy releases the GIL inside large ufunc
+calls, but the agent pass is a chain of dozens of small ones with Python-level
+glue between them, and that glue holds the lock. So `multiprocessing` over one
+`shared_memory` block, every array placed by hand. What that costs, and what a
+free-threaded CPython changes about it, is §6 — it became its own section
+because both backends can now be measured against each other. Side effect: the
+barrier is an OS object costing tens of microseconds rather than hundreds of
+nanoseconds — in C that would be the bottleneck, here it disappears into a
+23 ms tick. The slowest implementation can afford the most expensive barrier.
 
-**Perl hat Threads, und sie sind hier das falsche Werkzeug.** Gemessen, für
-262 144 Elemente:
+**Perl has threads, and they are the wrong tool here.** Measured, for 262 144
+elements:
 
-| Operation | einfaches Array | `threads::shared` | Faktor |
+| Operation | plain array | `threads::shared` | factor |
 |---|---:|---:|---:|
-| sequenzielles Read-Modify-Write | 4.5 ms | 78.2 ms | 17× |
-| zufälliges Read-Modify-Write | 13.9 ms | 105.7 ms | **7.6×** |
-| `pack`+`unpack` derselben Werte | 12.0 ms | – | – |
+| sequential read-modify-write | 4.5 ms | 78.2 ms | 17× |
+| random read-modify-write | 13.9 ms | 105.7 ms | **7.6×** |
+| `pack`+`unpack` of the same values | 12.0 ms | – | – |
 
-Der Diffusionsstencil liest neun Zellen pro Ausgabezelle. Ein geteiltes Grid
-müsste also erst Faktor 7.6 aufholen, bevor der erste Thread etwas beiträgt.
-Ein ganzer Block durch `pack`/`unpack` kostet dagegen etwa so viel wie *ein*
-Durchlauf über ein normales Array. Also `fork` mit privaten Grids, und über die
-Pipes läuft nur gepacktes Binär.
+The diffusion stencil reads nine cells per output cell. A shared grid would
+have to make up a factor of 7.6 before the first thread contributes anything.
+Pushing a whole block through `pack`/`unpack`, by contrast, costs about as much
+as *one* traversal of a normal array. So: `fork` with private grids, and only
+packed binary over the pipes.
 
-Das erzwingt eine dritte Reduktionsstrategie, die
-[SPEC §5.6](../spec/SPEC.md) nicht kennt: **repliziert**. Jeder Prozess wendet
-*jeden* Deposit an, in aufsteigendem Agentenindex — also exakt die serielle
-Kette, bit-identisch für jede Prozesszahl, ohne den `binned`-Sort. Der Preis
-ist, dass Deposit- und Merge-Pass N-mal statt einmal laufen, und genau das
-deckelt den Speedup bei 2.8×: parallel ist nur der Agenten-Pass.
+That forces a third reduction strategy, one [SPEC §5.6](../spec/SPEC.md) does
+not define: **replicated**. Every process applies *every* deposit, in ascending
+agent index — exactly the serial chain, bit-identical for any process count,
+without the `binned` sort. The price is that the deposit and merge passes run N
+times instead of once, and that is what caps the speedup at 2.8×: only the
+agent pass is parallel.
 
-### Der Flaschenhals sind die Barrieren
+### The bottleneck is the barriers
 
-`SLIMEBENCH_PHASE_STATS=1` trennt Arbeit und Barrierenwartezeit
-(C, `medium`, T=16, Thread 0):
+`SLIMEBENCH_PHASE_STATS=1` separates work from barrier wait
+(C, `medium`, T=16, thread 0), milliseconds per tick:
 
-| Phase | Arbeit | Barriere | Summe |
+| Phase | work | barrier | total |
 |---|---:|---:|---:|
 | agents | 2.755 | 1.085 | 3.839 |
 | prefix | **0.000** | 0.265 | 0.265 |
@@ -536,106 +526,103 @@ deckelt den Speedup bei 2.8×: parallel ist nur der Agenten-Pass.
 | merge | 0.356 | 0.354 | 0.710 |
 | diffuse | 0.424 | — | 0.424 |
 
-**Barrieren sind 35 % der Laufzeit bei T=16 und 53 % bei T=32.** Die
-Präfixsumme, die vorher als „serielle O(T²)-Sektion" im Verdacht stand, leistet
-0,000 ms messbare Arbeit.
+**Barriers are 35 % of the runtime at T=16 and 53 % at T=32.** The prefix sum,
+previously suspected of being a "serial O(T²) section", does 0.000 ms of
+measurable work.
 
-Codeumfang für dieselbe Garantie: **C 326 Zeilen, C++ 264** — der Unterschied
-steckt fast vollständig im Lebenszyklus (`std::jthread` joint beim Zerstören,
-`std::barrier` braucht kein `init`/`destroy`).
+Lines of code for the same guarantee: **C 326, C++ 264** — the difference is
+almost entirely lifecycle (`std::jthread` joins on destruction, `std::barrier`
+needs no `init`/`destroy`).
 
 ---
 
-## 6. Was der GIL kostet (CPython 3.14t)
+## 6. What the GIL costs (CPython 3.14t)
 
-Ein kontrolliertes Experiment: derselbe `Worker`, dieselbe Phasenfolge,
-dieselbe Reduktion, dieselbe Maschine. Verändert wird genau zweierlei — welcher
-Interpreter läuft (3.12 mit GIL, 3.14t ohne) und was die Worker trägt
-(`threading.Thread` über gewöhnlichen numpy-Arrays, oder `multiprocessing` über
-einem `shared_memory`-Block). `--mp-backend threads|processes`.
+A controlled experiment: the same `Worker`, the same phase order, the same
+reduction, the same machine. Exactly two things vary — which interpreter runs
+(3.12 with the GIL, 3.14t without) and what carries the workers
+(`threading.Thread` over ordinary numpy arrays, or `multiprocessing` over a
+`shared_memory` block). `--mp-backend threads|processes`.
 
-![GIL gegen Free-Threading](charts/gil.svg)
+![GIL against free-threading](charts/gil.svg)
 
-`small` (1024², 262 144 Agenten), 100 Ticks. Ein Thread: 3.12 **1907 ms**,
+`small` (1024², 262 144 agents), 100 ticks. One thread: 3.12 **1907 ms**,
 3.14t **1751 ms**.
 
-**`binned`** — ms, in Klammern der Speedup gegen denselben Interpreter bei
-einem Thread:
+**`binned`** — milliseconds, with the speedup against the same interpreter at
+one thread in brackets:
 
-| | 3.12 Threads | 3.12 Prozesse | 3.14t Threads | 3.14t Prozesse |
+| | 3.12 threads | 3.12 processes | 3.14t threads | 3.14t processes |
 |---|---:|---:|---:|---:|
 | T=2 | 1459 (1.31×) | 1229 (1.55×) | 1197 (1.46×) | 1201 (1.46×) |
 | T=4 | 3025 (**0.63×**) | 618 (3.08×) | **560** (3.13×) | 627 (2.79×) |
 | T=8 | 6761 (**0.28×**) | 584 (3.26×) | **493** (3.55×) | 598 (2.93×) |
 | T=16 | 13933 (**0.14×**) | 797 (2.39×) | **643** (2.72×) | 796 (2.20×) |
 
-**`private`**:
+**`private`**, same units:
 
-| | 3.12 Threads | 3.12 Prozesse | 3.14t Threads | 3.14t Prozesse |
+| | 3.12 threads | 3.12 processes | 3.14t threads | 3.14t processes |
 |---|---:|---:|---:|---:|
 | T=2 | 1198 (1.59×) | 999 (1.91×) | 971 (1.80×) | 952 (1.84×) |
 | T=4 | 2493 (0.77×) | **456** (4.18×) | 464 (3.77×) | 490 (3.58×) |
 | T=8 | 5932 (0.32×) | **413** (4.61×) | 405 (4.33×) | 428 (4.09×) |
 | T=16 | 12502 (0.15×) | 496 (3.84×) | 487 (3.60×) | 514 (3.41×) |
 
-**Alle 34 Läufe liefern dasselbe Ergebnis:** Grid `0x65DF83A7`, Agenten
-`0xE02D7B6A` — über zwei Interpreter, zwei Backends, vier Thread-Zahlen und
-beide Reduktionen.
+**All 34 runs produce the same result:** grid `0x65DF83A7`, agents
+`0xE02D7B6A` — across two interpreters, two backends, four thread counts and
+both reductions.
 
-### Die erste Spalte ist der eigentliche Befund
+### The first column is the actual finding
 
-CPython 3.12 mit Threads skaliert nicht bloß nicht, es **degradiert
-superlinear**: 13.9 Sekunden bei 16 Threads gegen 1.9 bei einem, also
-**7.3× langsamer** als der serielle Lauf. Und zwar sauber proportional zur
-Thread-Zahl — 0.63×, 0.28×, 0.14× ist fast exakt eine Halbierung pro
-Verdopplung.
+CPython 3.12 with threads does not merely fail to scale, it **degrades
+super-linearly**: 13.9 seconds at 16 threads against 1.9 at one, so **7.3×
+slower** than the serial run. And cleanly proportional to the thread count —
+0.63×, 0.28×, 0.14× is almost exactly a halving per doubling.
 
-Das ist mehr, als „der GIL serialisiert" erklärt: reine Serialisierung wäre
-1.0×, nicht 0.14×. Die Größenordnung passt zu Konvoi-Verhalten an den
-Barrieren. 139 ms pro Tick bei 16 Threads und sechs Barrieren sind 96
-Durchläufe zu je 1.4 ms, und CPythons Umschaltintervall liegt bei 5 ms — ein
-Wartender, der den GIL an der Barriere abgibt, bekommt ihn also nicht sofort
-zurück. Nachgemessen habe ich das nicht; es ist die Rechnung, die aufgeht,
-nicht der Beleg.
+That is more than "the GIL serialises" explains: pure serialisation would be
+1.0×, not 0.14×. The order of magnitude fits convoying at the barriers. 139 ms
+per tick at 16 threads with six barriers is 96 crossings at 1.4 ms each, and
+CPython's switch interval is 5 ms — so a waiter that gives up the GIL at a
+barrier does not get it straight back. I have not measured that; it is the
+arithmetic working out, not the proof.
 
-### Ohne GIL schlagen Threads Prozesse — aber nur bei `binned`
+### Without the GIL, threads beat processes — but only for `binned`
 
-In `binned` gewinnen Threads bei jeder Thread-Zahl, bei T=8 um 18 %
-(493 gegen 598 ms) und bei T=16 um 19 %. In `private` liegen sie gleichauf
-(405 gegen 428, 487 gegen 496 — innerhalb des Rauschens).
+In `binned`, threads win at every thread count: by 18 % at T=8 (493 against
+598 ms) and by 19 % at T=16. In `private` they are level (405 against 428, 487
+against 496 — inside the noise).
 
-Der Unterschied zwischen den beiden Reduktionen ist die Zahl der Phasen:
-`binned` hat fünf, `private` hat zwei. Jede Phasengrenze ist eine Barriere, und
-eine Barriere zwischen Prozessen ist ein OS-Objekt, wo eine zwischen Threads
-ein Futex im selben Adressraum ist. Wo mehr synchronisiert wird, zahlt sich
-der gemeinsame Adressraum aus.
+The difference between the two reductions is the number of phases: `binned` has
+five, `private` has two. Every phase boundary is a barrier, and a barrier
+between processes is an OS object where one between threads is a futex in the
+same address space. Where more synchronisation happens, the shared address
+space pays off.
 
-### Und die ehrliche Lesart
+### And the honest reading
 
-**Der schnellste Wert der ganzen Tabelle gehört CPython 3.12** — 413 ms,
-`private`, acht Prozesse. Free-Threading macht diese Last also nicht schneller.
-Es macht die Umgehung überflüssig: kein `shared_memory`-Block, keine von Hand
-gerechneten Byte-Offsets, keine `fork`-Pflicht, keine Rückkopie der Arrays am
-Ende. Rund 120 der 350 Zeilen in
-[`slimebench_mp.py`](../impl/python/slimebench_mp.py) existieren nur, weil
-Threads bisher keine Option waren.
+**The fastest value in the whole table belongs to CPython 3.12** — 413 ms,
+`private`, eight processes. So free-threading does not make this workload
+faster. It makes the workaround unnecessary: no `shared_memory` block, no
+hand-computed byte offsets, no `fork` requirement, no copying the arrays back
+at the end. Roughly 120 of the 350 lines in
+[`slimebench_mp.py`](../impl/python/slimebench_mp.py) exist only because
+threads were not an option.
 
-Der Ein-Thread-Vergleich (1751 gegen 1907 ms) sieht aus wie ein Argument dafür,
-dass Free-Threading nichts kostet — **er ist keines**. Die beiden Interpreter
-tragen numpy 2.5.2 und 1.26.4, und der Unterschied zwischen zwei numpy-Versionen
-ist genau die Größenordnung, um die es hier geht. Das Paar ist konfundiert und
-steht nur da, damit die Speedups eine Basis haben.
+The single-thread comparison (1751 against 1907 ms) looks like an argument that
+free-threading costs nothing — **it is not one**. The two interpreters carry
+numpy 2.5.2 and 1.26.4, and the difference between two numpy versions is
+exactly the order of magnitude in question. That pair is confounded and is
+there only to give the speedups a baseline.
 
 ---
 
-## 7. SIMD und Handassembler (Klasse V)
+## 7. SIMD and hand-written assembly (class V)
 
-Explizite Intrinsics für den Diffusionspass, `--simd`, `small`/300. Der
-Agenten-Pass bleibt skalar: mehrere Agenten pro Vektor deponieren routinemäßig
-in dieselbe Zelle, was Konfliktauflösung bräuchte — und das wäre dann echt
-Stufe C.
+Explicit intrinsics for the diffusion pass, `--simd`, `small`/300. The agent
+pass stays scalar: several agents per vector routinely deposit into the same
+cell, which would need conflict resolution — and that really would be tier C.
 
-| Sprache | Compiler | ISA | gesamt | Diffusion | Diffusion skalar ¹ | Faktor |
+| Language | Compiler | ISA | total ms | diffusion ms | scalar diffusion ms ¹ | factor |
 |---|---|---|---:|---:|---:|---:|
 | C | clang | AVX-512 | **871** | 60.2 | 270.0 | 4.49× |
 | C++ | g++ | AVX2 | 927 | 66.1 | 284.6 | 4.31× |
@@ -648,282 +635,280 @@ Stufe C.
 | Rust | cargo | AVX-512 (unchecked) | 1188 | 58.2 | 271.6 | 4.67× |
 | Rust | cargo | AVX-512 (safe) | 1219 | 59.1 | 388.4 | **6.57×** |
 
-¹ Skalare Vergleichszahl ist immer der `-O3 -march=native`-Build derselben
-Sprache und desselben Compilers, auch in den AVX2-Zeilen (`-march=x86-64-v3`).
+¹ The scalar comparison figure is always the `-O3 -march=native` build of the
+same language and compiler, including in the AVX2 rows (`-march=x86-64-v3`).
 
-### Es ist Stufe A
+### It is tier A
 
-Der Kernel hat **keine Cross-Lane-Reduktion**: jede Lane rechnet eine
-Ausgabezelle mit exakt derselben Operationsfolge wie die skalare Schleife.
-Bit-identisch unter gcc und clang, in beiden Update-Modi, auch mit
-`--threads 16 --deposit-reduce binned`.
+The kernel does **no cross-lane reduction**: each lane computes one output cell
+with exactly the operation sequence the scalar loop uses. Bit-identical under
+gcc and clang, in both update modes, and with `--threads 16 --deposit-reduce
+binned`.
 
-Zwei Bedingungen: kein FMA (`4.0f*c + acc` als eine gerundete Operation wäre
-eine andere Zahl) und eine echte `_mm*_div_ps`.
+Two conditions: no FMA (`4.0f*c + acc` as a single rounded operation would be a
+different number) and a real `_mm*_div_ps`.
 
-### Der Stencil wird 4.5×, das Programm 1.25×
+### The stencil gets 4.5×, the program 1.25×
 
-Die Diffusion fällt von ~275 auf ~58 ms, aber sie ist nur ein Viertel der
-Laufzeit — der Agenten-Pass bleibt skalar und dominiert. Amdahl, in einer Zeile.
+Diffusion drops from ~275 to ~58 ms, but it is only a quarter of the runtime —
+the agent pass stays scalar and dominates. Amdahl, in one line.
 
-**Verdoppelte Vektorbreite kauft wenig.** AVX2 gegen AVX-512: bei gcc 65.8
-gegen 55.9 ms (18 %), bei clang 66.1 gegen 60.2 (10 %), bei clang++ 66.5 gegen
-56.3 (18 %). Der 3×3-Stencil liest 36 Byte, um 4 zu schreiben — er ist
-bandbreitengebunden, die Ausführungseinheiten warten auf Speicher, und die
-doppelte Breite hilft nur bei den Lade-Ports.
+**Doubling the vector width buys little.** AVX2 against AVX-512: 65.8 against
+55.9 ms on gcc (18 %), 66.1 against 60.2 on clang (10 %), 66.5 against 56.3 on
+clang++ (18 %). The 3×3 stencil reads 36 bytes to write 4 — it is
+bandwidth-bound, the execution units are waiting on memory, and double the
+width only helps at the load ports.
 
-**Rusts „safe" gewinnt hier den größten Faktor, und das ist ein Artefakt.**
-6.57× klingt beeindruckend, ist aber nur groß, weil der *skalare* Vergleichswert
-schlecht ist: mit Bounds-Checks kostet der skalare Stencil 388 ms statt 272.
-Der SIMD-Kernel geht in beiden Fällen über rohe Zeiger und landet bei 58–59 ms.
-Wer Faktoren gegen die eigene Baseline meldet, misst manchmal die Baseline.
+**Rust's "safe" wins the biggest factor here, and that is an artefact.** 6.57×
+sounds impressive, but it is only large because the *scalar* comparison value
+is bad: with bounds checks the scalar stencil costs 388 ms instead of 272. The
+SIMD kernel goes through raw pointers either way and lands at 58–59 ms. Report
+factors against your own baseline and you sometimes measure the baseline.
 
-**Neben dem `-Ofast`-Befund aus §3 gelesen** wird die Spanne absurd. Derselbe
-Diffusionspass, derselbe Compiler (clang), dasselbe Preset:
+**Read alongside the `-Ofast` finding from §3** the spread becomes absurd. Same
+diffusion pass, same compiler (clang), same preset:
 
-| Strategie | ms |
+| Strategy | ms |
 |---|---:|
-| `-Ofast`, clang überlassen | 815.3 |
-| `-O3 -march=native`, clang überlassen | 270.0 |
-| Intrinsics | 60.2 |
+| `-Ofast`, left to clang | 815.3 |
+| `-O3 -march=native`, left to clang | 270.0 |
+| intrinsics | 60.2 |
 
-**Faktor 13.5 zwischen der besten und der schlechtesten Art, dieselbe Schleife
-zu vektorisieren** — und die schlechteste ist die, bei der man dem Compiler am
-meisten Freiheit gibt.
+**A factor of 13.5 between the best and the worst way to vectorise the same
+loop** — and the worst is the one that gives the compiler the most freedom.
 
-### Und was danach noch übrig ist: Handassembler
+### And what is left after that: hand-written assembly
 
-Der Intrinsics-Kern ist bereits Stufe A und bereits 4.5× über der skalaren
-Schleife. Dieselbe Sache noch einmal in Assembler zu schreiben, würde den
-Assembler messen. [`impl/asm/sb_diffuse_avx512.S`](../impl/asm/sb_diffuse_avx512.S)
-macht deshalb etwas anderes — dieselbe Arithmetik, andere Speicherstrategie:
+The intrinsics kernel is already tier A and already 4.5× over the scalar loop.
+Writing the same thing again in assembly would measure the assembler.
+[`impl/asm/sb_diffuse_avx512.S`](../impl/asm/sb_diffuse_avx512.S) therefore
+does something else — same arithmetic, different memory strategy:
 
-> Der Intrinsics-Kern setzt **neun unausgerichtete Loads pro Ausgabevektor** ab:
-> drei Zeilen mal `x-1`, `x`, `x+1`. Die drei lesen fast dieselben Bytes.
+> The intrinsics kernel issues **nine unaligned loads per output vector**:
+> three rows times `x-1`, `x`, `x+1`. Those three read almost the same bytes.
 >
-> Der handgeschriebene setzt **drei** ab. Er hält den vorherigen, aktuellen und
-> nächsten 16-Lane-Vektor jeder Zeile in Registern und erzeugt die verschobenen
-> Sichten mit `VALIGND`, das zwei Vektoren aneinanderhängt und über alle 512 Bit
-> hinweg um ganze Doublewords schiebt. Pro Ausgabevektor: drei Loads, sechs
-> `VALIGND`, ein Store.
+> The hand-written one issues **three**. It keeps the previous, current and
+> next 16-lane vector of each row in registers and manufactures the shifted
+> views with `VALIGND`, which concatenates two vectors and shifts the result by
+> whole doublewords across all 512 bits. Per output vector: three loads, six
+> `VALIGND`, one store.
 
-![Diffusionskerne](charts/kernels.svg)
+![Diffusion kernels](charts/kernels.svg)
 
-`medium` 2048², nur der Diffusionspass, bester von drei Läufen:
+`medium` 2048², diffusion pass only, best of three runs:
 
-| Kern | gcc | clang |
+| Kernel | gcc (ms) | clang (ms) |
 |---|---:|---:|
-| skalare Schleife | 452.3 | 431.4 |
-| Intrinsics | 203.5 | 192.3 |
-| **Handassembler** | **160.7** | **166.9** |
-| Vorsprung gegen Intrinsics | **21 %** | **13 %** |
+| scalar loop | 452.3 | 431.4 |
+| intrinsics | 203.5 | 192.3 |
+| **hand-written assembly** | **160.7** | **166.9** |
+| lead over intrinsics | **21 %** | **13 %** |
 
-Alle drei Kerne, beide Compiler, ein Grid-Hash: `0x0391F3BD`.
+All three kernels, both compilers, one grid hash: `0x0391F3BD`.
 
-Die 21 % sind zu gut. Über fünf Messreihen liegt der Vorsprung zwischen 5 %
-und 21 %, Median etwa 11 %; eine Kontrollmessung mit neun statt drei
-Wiederholungen ergab 9 % (gcc) und 13 % (clang). Was in allen Reihen stabil
-bleibt: die Assembler-Zahl selbst streut halb so stark wie die der Intrinsics
-(161–175 gegen 183–213 ms). Sie ist schneller, und sie ist gleichmäßiger.
+The 21 % is too good. Across five series the lead sits between 5 % and 21 %,
+median about 11 %; a control measurement with nine repetitions instead of three
+gave 9 % (gcc) and 13 % (clang). What stays stable across all of them: the
+assembly figure itself varies half as much as the intrinsics one (161–175
+against 183–213 ms). It is faster, and it is steadier.
 
-Zwei Nebeneffekte, die nicht in der Tabelle stehen:
+Two side effects that are not in the table:
 
-**Der Torus-Umlauf wird gratis.** Die Zeile ist eine Zweierpotenz lang, also
-ist der Byte-Offset des nächsten Vektors `(xo + 64) & (rowbytes - 1)` — ein
-einziges `AND`. Damit sind der erste und der letzte Vektor einer Zeile
-gewöhnliche Iterationen. Der Intrinsics-Kern kann das nicht ausdrücken und
-schält von jeder Zeile einen skalaren Kopf und Schwanz ab.
+**The torus wrap becomes free.** The row is a power of two long, so the byte
+offset of the next vector is `(xo + 64) & (rowbytes - 1)` — a single `AND`.
+That makes the first and last vector of a row ordinary iterations. The
+intrinsics kernel cannot express this and peels a scalar head and tail off
+every row.
 
-**Die beiden Compiler landen 4 % auseinander** (160.7 gegen 166.9), wo sie bei
-der skalaren Schleife 5 % und bei den Intrinsics 6 % auseinanderliegen. Das
-muss so sein: an dieser Datei hat keiner von beiden mitgeschrieben.
+**The two compilers land 4 % apart** (160.7 against 166.9 ms), where they are
+5 % apart on the scalar loop and 6 % apart on the intrinsics. That is how it
+has to be: neither of them wrote this file.
 
-`VALIGND` ist auch der Grund, warum es AVX-512 bleibt. AVX2s `VPALIGNR` schiebt
-innerhalb der beiden 128-Bit-Hälften und kann keine Lane über die Mitte
-bewegen; dieselbe Idee kostet dort ein `VPERM2F128` je Verschiebung und lohnt
-nicht mehr. Eine AVX2-Fassung dieser Datei wäre der Intrinsics-Kern in lang.
+`VALIGND` is also why this stays AVX-512. AVX2's `VPALIGNR` shifts inside the
+two 128-bit halves and cannot move a lane across the middle; the same idea
+costs a `VPERM2F128` per shift there and stops paying. An AVX2 version of this
+file would be the intrinsics kernel written out longhand.
 
-Gebaut wird sie mit `ASM=1`, ausgewählt mit `--asm`. `sb_asm.c` verweigert mit
-Begründung, wenn die CPU kein AVX-512F hat oder die Breite kein Vielfaches von
-64 ist — der Ringpuffer ist vierfach über sechzehn Lanes ausgerollt — statt
-still etwas anderes zu rechnen.
+It is built with `ASM=1` and selected with `--asm`. `sb_asm.c` refuses with a
+reason when the CPU has no AVX-512F or the width is not a multiple of 64 — the
+register ring is unrolled four times over sixteen lanes — rather than quietly
+computing something else.
 
-### SIMD und Threads sind Substitute
+### SIMD and threads are substitutes
 
-Beide greifen dieselbe Ressource an. Sobald acht Kerne am bandbreitengebundenen
-Diffusionspass arbeiten, ist die Bandbreite ausgereizt: bei T=1 bringt SIMD
-1.10×, bei T=8 exakt 1.00×, bei T=16 1.04× (frühere Reihe). Für den
-Assembler-Kern gilt dasselbe Argument — er spart Ladeoperationen, und
-Ladeoperationen sind genau das, was bei acht Threads knapp wird.
+Both attack the same resource. Once eight cores are working on the
+bandwidth-bound diffusion pass, the bandwidth is exhausted: at T=1 SIMD buys
+1.10×, at T=8 exactly 1.00×, at T=16 1.04× (earlier series). The same argument
+applies to the assembly kernel — it saves loads, and loads are exactly what
+runs short at eight threads.
 
-### Aufwand: Rust braucht mehr Zeremonie
+### Effort: Rust needs more ceremony
 
-C und C++ wählen die ISA mit `#ifdef __AVX512F__`, das `-march=native` setzt.
-Rust hat `cfg!(target_feature = "avx512f")`, verlangt aber zusätzlich
-`#[target_feature(enable = "avx512f")]` an der Funktion, die damit `unsafe`
-aufzurufen ist. `std::simd` wäre portabler, ist aber weiterhin nightly-only.
+C and C++ pick the ISA with `#ifdef __AVX512F__`, which `-march=native` sets.
+Rust has `cfg!(target_feature = "avx512f")` but additionally requires
+`#[target_feature(enable = "avx512f")]` on the function, which then has to be
+called `unsafe`. `std::simd` would be more portable but is still nightly-only.
 
 ---
 
-## 8. GPU (Klasse G)
+## 8. GPU (class G)
 
-Drei Hosts: CUDA, ein GLSL-4.3-Compute-Shader aus C, und derselbe Shader aus
-Python. Alle nur `deferred`, 100 Ticks.
+Three hosts: CUDA, a GLSL 4.3 compute shader driven from C, and the same shader
+driven from Python. All `deferred` only, 100 ticks.
 
 | Host | tiny | small | medium | large | huge |
 |---|---:|---:|---:|---:|---:|
-| CUDA | 8 | 16 | **44** | 191 | 1065 |
+| CUDA (ms) | 8 | 16 | **44** | 191 | 1065 |
 | *MCUPS* | 3202 | 6753 | **9433** | 8764 | 6300 |
-| GL 4.3, C-Host | 214 | 660 | 2379 | 9246 | 39941 |
+| GL 4.3, C host (ms) | 214 | 660 | 2379 | 9246 | 39941 |
 | *MCUPS* | 122 | 159 | 176 | 181 | 168 |
-| GL 4.3, Python-Host | 225 | 656 | 2391 | 9321 | 39956 |
+| GL 4.3, Python host (ms) | 225 | 656 | 2391 | 9321 | 39956 |
 | *MCUPS* | 116 | 160 | 175 | 180 | 168 |
 
-### Klasse G misst nicht die Sprache — jetzt belegt
+MCUPS is million cell updates per second — grid cells, not agents, so the
+figure is comparable across presets.
 
-Der C-Host und der Python-Host fahren **denselben Shader**, und das ist
-nachprüfbar statt behauptet: die GLSL liegt in
-[`impl/glcompute/shaders/`](../impl/glcompute/shaders/), der C-Header wird
-daraus generiert, und beide Hosts drucken einen FNV-32 ihrer kompilierten
-Quelle — `0xB949F398` in beiden.
+### Class G does not measure the language — now demonstrated
 
-Die Zeiten liegen **unter 5 % auseinander** (bei `small` und `huge` sogar
-unter 1 %), und jeder Grid-Hash stimmt überein —
-**auch die vom Treiber abweichenden**. Der Python-Host reproduziert also die
-ULP-Abweichung von Mesas D3D12-Pfad exakt, was ein stärkeres Ergebnis ist, als
-wenn beide nur das richtige Ergebnis geliefert hätten.
+The C host and the Python host run **the same shader**, and that is verifiable
+rather than asserted: the GLSL lives in
+[`impl/glcompute/shaders/`](../impl/glcompute/shaders/), the C header is
+generated from it, and both hosts print an FNV-32 of their compiled source —
+`0xB949F398` in both.
 
-Alles oberhalb des Shaders ist unabhängig implementiert: der Python-Host macht
-seine eigene SPEC-1-3.3-Initialisierung in numpy, baut seine eigenen Puffer und
-schreibt seine eigenen Uniforms. Rund 200 Zeilen gegen die 480 des C-Hosts.
+The times are **under 5 % apart** (under 1 % at `small` and `huge`), and every
+grid hash agrees — **including the ones that deviate from the driver's**. So
+the Python host reproduces the ULP deviation of Mesa's D3D12 path exactly,
+which is a stronger result than both merely producing the correct answer.
 
-### `medium` sättigt, alles darüber fällt ab
+Everything above the shader is independently implemented: the Python host does
+its own SPEC-1 §3.3 initialisation in numpy, builds its own buffers and writes
+its own uniforms. Around 200 lines against the C host's 480.
 
-CUDAs Durchsatz steigt bis `medium` auf 9433 MCUPS und fällt danach — bei
-`huge` (8192², 67 Mio. Zellen) ist er wieder unter dem Stand von `small`. Der
-Speedup gegenüber einem C-Thread ist bei `medium` bereits **hundertfach**:
-44 ms gegen 4391. Für `large` und `huge` fehlt die serielle C-Vergleichszahl in
-dieser Reihe — der Thread-Sweep läuft nur bei `medium`, weil ein einzelner
-C-Thread bei `huge` gut zehn Minuten pro Datenpunkt braucht.
+### `medium` saturates, everything above it falls off
 
-### CUDA ist bit-exakt
+CUDA's throughput rises to 9433 MCUPS at `medium` and falls after that — at
+`huge` (8192², 67 M cells) it is back below the `small` figure. The speedup
+against one C thread is already **a hundredfold** at `medium`: 44 ms against
+4391. For `large` and `huge` the serial C comparison value is missing from this
+series — the thread sweep only runs at `medium`, because a single C thread at
+`huge` needs a good ten minutes per data point.
 
-Geprüft gegen die C-Referenz bei allen fünf Presets, Grid- **und**
-Agenten-Hash: identisch. Nötig dafür:
+### CUDA is bit-exact
 
-1. **`-fmad=false`** — sonst fusioniert nvcc `4.0f*c + acc`.
-2. **`--prec-div=true`** (Default) — korrekt gerundete Division.
-3. **Ganzzahlige Deposit-Atomics.** `atomicAdd(float*)` ist nicht
-   deterministisch; die Reihenfolge der ankommenden Threads bestimmt die
-   Rundung. Stattdessen zählt `atomicAdd(unsigned*)` die Treffer pro Zelle —
-   ganzzahlige Addition ist exakt und reihenfolgeunabhängig — und die
-   Multiplikation mit `deposit` passiert einmal danach.
+Verified against the C reference at all five presets, grid **and** agent hash:
+identical. What that took:
 
-Punkt 3 bringt dieselbe Einschränkung mit wie `private`: mit `--deposit 0.1`
-weicht auch CUDA ab. Geprüft, nicht angenommen.
+1. **`-fmad=false`** — otherwise nvcc fuses `4.0f*c + acc`.
+2. **`--prec-div=true`** (the default) — correctly rounded division.
+3. **Integer deposit atomics.** `atomicAdd(float*)` is not deterministic; the
+   arrival order of threads decides the rounding. Instead `atomicAdd(unsigned*)`
+   counts the hits per cell — integer addition is exact and order-independent —
+   and the multiplication by `deposit` happens once afterwards.
 
-### GLSL: exakt auf einem Treiber, nicht auf dem anderen
+Point 3 brings the same limitation as `private`: with `--deposit 0.1` CUDA
+diverges too. Checked, not assumed.
 
-Auf Mesas `llvmpipe` ist der GL-Pfad bit-exakt gegen C. Auf D3D12/NVIDIA weicht
-er um **maximal 2 ULP** ab: `precise` verbietet in GLSL Umordnen und Fusion,
-erzwingt aber keine korrekt gerundete Division — genau das, was CUDA über
-`--prec-div=true` bekommt. Klasse G ist deshalb pro Backend einzustufen.
+### GLSL: exact on one driver, not on the other
 
-Auf dem Weg dahin: zuerst wich auch der *Agenten*-Hash ab, weil `precise` nur
-auf dem Diffusions-Akkumulator stand. `x + cos*step` im Agenten-Pass wird
-ebenfalls fusioniert, versetzt den Agenten um ein ULP und kippt irgendwann
-einen Sensorvergleich. Dass ausgerechnet der Agenten-Hash brach, hat den Fehler
-lokalisiert.
+On Mesa's `llvmpipe` the GL path is bit-exact against C. On D3D12/NVIDIA it
+deviates by **at most 2 ULP**: `precise` in GLSL forbids reordering and fusion
+but does not force correctly rounded division — exactly what CUDA gets from
+`--prec-div=true`. Class G therefore has to be graded per backend.
 
-> Die GL-Zahlen messen nicht OpenGL, sondern die Mesa-D3D12-Übersetzung: drei
-> Dispatches, drei `GL_ALL_BARRIER_BITS` und ein `glFinish` pro Tick, alles
-> über GL → DXIL → D3D12. Der Durchsatz bleibt über vier Größenordnungen bei
-> ~170 MCUPS konstant, was heißt, dass die Übersetzungsschicht und nicht die
-> GPU der Flaschenhals ist. Auf einem nativen Linux-GL-Treiber wäre der Abstand
-> zu CUDA mit ziemlicher Sicherheit deutlich kleiner.
+On the way there: at first the *agent* hash diverged as well, because `precise`
+was only on the diffusion accumulator. `x + cos*step` in the agent pass is
+fused too, displaces the agent by one ULP and eventually tips a sensor
+comparison. That the agent hash was the one to break is what located the bug.
 
-### Warum numpy `serial` nicht kann
+> The GL numbers do not measure OpenGL, they measure Mesa's D3D12 translation:
+> three dispatches, three `GL_ALL_BARRIER_BITS` and one `glFinish` per tick,
+> all through GL → DXIL → D3D12. Throughput stays at ~170 MCUPS across four
+> orders of magnitude, which says the translation layer and not the GPU is the
+> bottleneck. On a native Linux GL driver the gap to CUDA would almost
+> certainly be much smaller.
 
-`serial` verlangt, dass Agent *i* den Deposit von Agent *i−1* aus demselben
-Tick sieht — eine sequenzielle Abhängigkeit durch das Grid. Kein
-numpy-Ausdruck bildet sie ab. Die Implementierung lehnt den Modus mit
-Exit-Code 3 und Begründung ab, statt still etwas anderes zu rechnen.
+### Why numpy cannot do `serial`
 
-In `deferred` gibt es die Abhängigkeit nicht, und `np.add.at` akkumuliert
-ungepuffert in Indexreihenfolge — exakt die vorgeschriebene.
+`serial` requires agent *i* to see agent *i−1*'s deposit from the same tick — a
+sequential dependency through the grid. No numpy expression models it. The
+implementation refuses the mode with exit code 3 and a reason, rather than
+quietly computing something else.
+
+In `deferred` the dependency does not exist, and `np.add.at` accumulates
+unbuffered in index order — exactly the prescribed one.
 
 ---
 
-## 9. Rendering (Klasse R)
+## 9. Rendering (class R)
 
-1024², `--freeze-sim` (Simulation angehalten, damit nur der Upload-Pfad
-Grid → Textur → Bildschirm gemessen wird). Millisekunden pro Frame, Median.
+1024², `--freeze-sim` (simulation halted, so that only the upload path
+grid → texture → screen is measured). Milliseconds per frame, median.
 
 ![Rendering](charts/render.svg)
 
-| Sprache | Bindung | SDL2 llvmpipe | SDL2 RTX 5080 | raylib llvmpipe | raylib RTX 5080 |
+| Language | Binding | SDL2 llvmpipe | SDL2 RTX 5080 | raylib llvmpipe | raylib RTX 5080 |
 |---|---|---:|---:|---:|---:|
-| C | direkt | 2.883 | 4.092 | 2.036 | 1.844 |
-| C++ | direkt | 2.861 | 4.177 | 2.027 | 1.825 |
+| C | direct | 2.883 | 4.092 | 2.036 | 1.844 |
+| C++ | direct | 2.861 | 4.177 | 2.027 | 1.825 |
 | Haskell | `sdl2` / `foreign import` | **2.682** | 3.995 | **1.927** | 1.821 |
 | Rust | `sdl2` / `raylib` crate | 2.695 | **3.950** | 1.948 | **1.675** |
 | Python | pygame / cffi | 5.238 | 5.297 | 4.325 | 4.263 |
 | Perl | FFI::Platypus | 110.3 | 119.6 | 74.0 | 75.1 |
 
-Die sechs SDL2- und raylib-Frontends von C, C++ und Rust haben inzwischen ein
-HUD; unter `--json` ist es aus, und seine Zeichenzeit wird ohnehin aus dem
-Frame herausgerechnet (§9, Ende).
+The six SDL2 and raylib frontends in C, C++ and Rust now carry a HUD; under
+`--json` it is off, and its drawing time is subtracted from the frame in any
+case (end of this section).
 
-**raylib gewinnt überall, und auf der echten GPU deutlicher:** 1.4× auf
-Software, **2.2×** auf der RTX 5080, in jeder kompilierten Sprache. Die Ursache
-ist das Pixelformat, nicht die Bibliothek — raylib nimmt den
-8-Bit-Graustufenpuffer direkt entgegen (`UNCOMPRESSED_GRAYSCALE`), SDL2 braucht
-ARGB8888 und damit eine Expansionsschleife über eine Million Pixel pro Frame.
+**raylib wins everywhere, and more clearly on the real GPU:** 1.4× on software,
+**2.2×** on the RTX 5080, in every compiled language. The cause is the pixel
+format, not the library — raylib takes the 8-bit greyscale buffer directly
+(`UNCOMPRESSED_GRAYSCALE`), while SDL2 needs ARGB8888 and therefore an
+expansion loop over a million pixels per frame.
 
-**Die vier kompilierten Sprachen liegen auf raylib innerhalb von 10 %**
-(1.675–1.844 ms), auf Software innerhalb von 8 %. Wenn das Backend und das Pixelformat feststehen, ist die
-Sprache in dieser Klasse fast egal — was der interessanteste Befund der Tabelle
-ist, weil er dem Klasse-S-Bild widerspricht.
+**The four compiled languages land within 10 % of each other on raylib**
+(1.675–1.844 ms) and within 8 % on software. Once the backend and the pixel
+format are fixed, the language barely matters in this class — which is the most
+interesting finding in the table, because it contradicts the class S picture.
 
-**SDL2 ist auf der echten GPU langsamer als auf dem Software-Rasterizer**, in
-allen vier kompilierten Sprachen (2.8 → 4.0 ms), während raylib auf beiden
-gleich schnell bleibt. Beide Pfade sind bei 1024² CPU-gebunden; SDL2 zahlt auf
-D3D12 zusätzlich für den `SDL_LockTexture`-Pfad durch die Übersetzungsschicht.
-Für eine GPU-limitierte Messung bräuchte es ein deutlich größeres Grid.
+**SDL2 is slower on the real GPU than on the software rasteriser**, in all four
+compiled languages (2.8 → 4.0 ms), while raylib stays equally fast on both.
+Both paths are CPU-bound at 1024²; on D3D12 SDL2 additionally pays for the
+`SDL_LockTexture` path through the translation layer. A GPU-limited measurement
+would need a much larger grid.
 
-**Python liegt 2× zurück, und der Backend-Unterschied verschwindet fast.** Der
-Frame wird von der numpy-Konvertierung dominiert, nicht vom Upload.
+**Python is 2× behind, and the backend difference nearly vanishes.** The frame
+is dominated by the numpy conversion, not the upload.
 
-**Perl liegt 40–60× zurück, zeigt den Backend-Unterschied aber am
-deutlichsten** (110 gegen 74 ms). Hier hatte ich das Gegenteil erwartet: wenn
-die Konvertierung den Frame dominiert, sollten beide Backends gleich
-herauskommen, wie bei Python. Sie tun es nicht, weil die Konvertierung *selbst*
-der Unterschied ist — raylib will ein Byte pro Pixel (`pack 'C*'`), SDL2 ein
-geschobenes und verodertes 32-Bit-Wort (`pack 'L*'`), und in Perl kostet diese
-Arithmetik mehr als alles andere im Frame zusammen.
+**Perl is 40–60× behind but shows the backend difference most clearly** (110
+against 74 ms). Here I had expected the opposite: if the conversion dominates
+the frame, both backends should come out the same, as they do for Python. They
+do not, because the conversion *is* the difference — raylib wants one byte per
+pixel (`pack 'C*'`), SDL2 a shifted and or-ed 32-bit word (`pack 'L*'`), and in
+Perl that arithmetic costs more than everything else in the frame combined.
 
-### Zwei Bindungen, die nicht das Naheliegende sind
+### Two bindings that are not the obvious ones
 
-Für **Haskell/raylib** und **Perl/raylib** steht nicht das jeweilige
-Ökosystem-Paket im Baum (`h-raylib`, `Raylib::FFI`), sondern
-`foreign import ccall` bzw. `FFI::Platypus` gegen dasselbe
-`/usr/local/lib/libraylib.so`, das C, C++, Rust und Python linken. Grund: beide
-Pakete vendorn raylib und bauen eine eigene Kopie. Damit verglichen man eine
-Sprache gegen einen *anderen Build* der Bibliothek, und Klasse R soll die
-Sprache vergleichen.
+For **Haskell/raylib** and **Perl/raylib** the tree does not contain the
+respective ecosystem package (`h-raylib`, `Raylib::FFI`) but
+`foreign import ccall` and `FFI::Platypus` respectively, against the same
+`/usr/local/lib/libraylib.so` that C, C++, Rust and Python link. The reason:
+both packages vendor raylib and build their own copy. That would compare a
+language against a *different build* of the library, and class R is supposed to
+compare the language.
 
-Beide stoßen dabei auf dieselbe Grenze: raylib übergibt `Image`, `Texture2D`
-und `Color` **by value**, was weder Haskells FFI noch Platypus kann. Die fünf
-betroffenen Aufrufe gehen deshalb durch
-[`impl/shim/raylib_shim.c`](../impl/shim/raylib_shim.c) — 30 Zeilen C, von
-beiden geteilt. Dass zwei so verschiedene Sprachen an derselben Stelle denselben
-Workaround brauchen, ist selbst ein Datenpunkt über C-ABIs.
+Both hit the same limit on the way: raylib passes `Image`, `Texture2D` and
+`Color` **by value**, which neither Haskell's FFI nor Platypus can do. The five
+affected calls therefore go through
+[`impl/shim/raylib_shim.c`](../impl/shim/raylib_shim.c) — 30 lines of C, shared
+by both. That two languages this different need the same workaround in the same
+place is itself a data point about C ABIs.
 
 ---
 
 ## 10. Footprint
 
-| Sprache | Binär KiB (gestrippt) | RSS MiB |
+| Language | Binary KiB (stripped) | RSS MiB |
 |---|---:|---:|
 | C (gcc / clang) | **50** | 18 |
 | C++ (clang++) | 59 | 18 |
@@ -933,160 +918,155 @@ Workaround brauchen, ist selbst ein Datenpunkt über C-ABIs.
 | Rust (safe) | 471 | 18 |
 | **Go** | **1552** | 18 |
 | Haskell | 2779 | 29 |
-| TypeScript / Python / Perl | – (interpretiert) | 18–80 |
+| TypeScript / Python / Perl | – (interpreted) | 18–80 |
 
-Die Spanne über die kompilierten Sprachen beträgt **Faktor 56**, von 50 KiB in
-C bis 2779 in Haskell — und sie ist überall Laufzeitsystem, nicht generierter
-Code. Bemerkenswert ist Swift mit 96 KiB: es liegt näher an C++ als an Rust,
-weil seine Laufzeitbibliothek dynamisch gelinkt wird statt einzuwandern.
-Go bezahlt 1.5 MiB für Goroutinen-Scheduler und Garbage Collector — und ist
-damit die Sprache, die in Klasse P gewinnt (§5). Fat LTO holt bei Rust 7 %
-Binärgröße zurück.
+The spread across the compiled languages is **a factor of 56**, from 50 KiB in
+C to 2779 in Haskell — and all of it is runtime system, not generated code.
+Swift at 96 KiB is notable: it sits closer to C++ than to Rust, because its
+runtime library is linked dynamically rather than absorbed. Go pays 1.5 MiB for
+a goroutine scheduler and a garbage collector — and is the language that wins
+class P (§5). Fat LTO recovers 7 % of the binary size on Rust.
 
-Der RSS ist über fast alle kompilierten Sprachen identisch, weil das Grid ihn
-dominiert (2 × 4 MiB Puffer plus Agentendaten). Auffällig sind nur Swift mit 32 MiB
-und die Laufzeitumgebungen, Node am deutlichsten mit 80 MiB.
+RSS is identical across almost all compiled languages, because the grid
+dominates it (2 × 4 MiB buffers plus agent data). The only outliers are Swift
+at 32 MiB and the runtimes, Node most clearly at 80 MiB.
 
-**Klasse P kostet Speicher, je nach Strategie sehr unterschiedlich:** `private`
-braucht `T × W × H × 4` Byte — 512 MiB bei `medium` und 32 Threads — `binned`
-dagegen `N × 4` Byte plus ein Zeilen-Histogramm, also 8 MiB unabhängig von der
-Thread-Zahl.
+**Class P costs memory, and very differently by strategy:** `private` needs
+`T × W × H × 4` bytes — 512 MiB at `medium` with 32 threads — while `binned`
+needs `N × 4` bytes plus a row histogram, so 8 MiB independent of thread count.
 
 ---
 
-## 11. Was nicht funktioniert hat
+## 11. What did not work
 
-Vier Optimierungsversuche, ein brauchbares Ergebnis. Sie stehen hier, weil sie
-dieselbe Arbeit gekostet haben wie die erfolgreichen.
+Four attempts at optimisation, one usable result. They are here because they
+cost the same work as the successful ones.
 
-### PGO: nichts bei gcc, −6 % bei clang
+### PGO: nothing on gcc, −6 % on clang
 
-Die Vier-Wege-Verzweigung auf die drei Sensorwerte ist datenabhängig und nahezu
-gleichverteilt. PGO kann nur *vorhersagbare* Verzweigungen verbessern und lernt
-hier nichts, was der Hardware-Prädiktor nicht schon hat. Infrastruktur bleibt
-im Baum (`impl/c/pgo.sh`).
+The four-way branch on the three sensor values is data-dependent and close to
+uniformly distributed. PGO can only improve *predictable* branches and learns
+nothing here that the hardware predictor does not already have. The
+infrastructure stays in the tree (`impl/c/pgo.sh`).
 
-### Parallele Präfixsumme: −18 % dort, wo es zählt
+### Parallel prefix sum: −18 % where it counts
 
-Jeder Thread kann seine `offsets`-Zeile allein aus `counts` ableiten — das
-entfernt die serielle Sektion **und** eine von fünf Barrieren. Neun Läufe:
-+9 % bei T=8, **−18 % bei T=16**, ±0 bei T=32. Die Verteilungen überlappen
-nicht.
+Every thread can derive its `offsets` row from `counts` alone — which removes
+the serial section **and** one of five barriers. Nine runs: +9 % at T=8,
+**−18 % at T=16**, ±0 at T=32. The distributions do not overlap.
 
-`counts` wurde gerade zeilenweise von allen T Threads *geschrieben*; lässt man
-danach alle die ganze Matrix lesen, werden aus T² Additionen T²
-Cache-Line-Transfers aus fremden Kernen. Bei T=16 (zwei CCDs, kein SMT) kostet
-das mehr als die eingesparte Barriere. Verworfen.
+`counts` has just been *written* row-wise by all T threads; having all of them
+then read the whole matrix turns T² additions into T² cache-line transfers from
+other cores. At T=16 (two CCDs, no SMT) that costs more than the barrier it
+saves. Rejected.
 
-### Lastausgleich für `binned`: +5,9 %, nicht mehr
+### Load balancing for `binned`: +5.9 %, no more
 
-Zeilenblöcke nach Agentenzahl statt nach Zeilenzahl aufteilen. Korrekt (der
-Hash bleibt identisch, weil die Partition nur bestimmt, *welcher* Thread
-deponiert), aber der Deposit-Pass ist nur 15 % der Laufzeit. Bleibt drin, weil
-billig; abschaltbar mit `SLIMEBENCH_NO_REBALANCE=1`.
+Split row blocks by agent count instead of by row count. Correct (the hash
+stays identical, because the partition only decides *which* thread deposits),
+but the deposit pass is only 15 % of the runtime. Kept because it is cheap;
+switch it off with `SLIMEBENCH_NO_REBALANCE=1`.
 
-### Spin-Barriere: +7 % bei 16 Threads, −55 % bei 32
+### Spin barrier: +7 % at 16 threads, −55 % at 32
 
-16 physische Kerne, 32 logische. Bei T=16 sitzt ein Thread pro Kern und Spinnen
-kostet niemanden etwas. Bei T=32 nimmt jeder Spinner seinem SMT-Geschwister die
-Ausführungsressourcen weg — die Barrierenzeit steigt von 2,45 auf 10,2 ms pro
-Tick.
+16 physical cores, 32 logical. At T=16 one thread sits per core and spinning
+costs nobody anything. At T=32 every spinner takes execution resources from its
+SMT sibling — barrier time rises from 2.45 to 10.2 ms per tick.
 
-`hybrid` (spinnen, dann auf einem Futex parken) ist nie schlechter als
-`pthread`. Default bleibt `pthread`; die Wahl ist ein Umgebungsschalter
+`hybrid` (spin, then park on a futex) is never worse than `pthread`. The
+default stays `pthread`; the choice is an environment switch
 (`SLIMEBENCH_BARRIER`).
 
-Bemerkenswert, wie klein der Gewinn ist, obwohl Barrieren die halbe Laufzeit
-ausmachen: **die Zeit steckt im Warten, nicht im Aufwecken.** Eine billigere
-Barriere macht eine unausgeglichene Phase nicht kürzer.
+Notable how small the gain is even though barriers are half the runtime:
+**the time is in the waiting, not in the waking.** A cheaper barrier does not
+make an unbalanced phase shorter.
 
 ---
 
-## 12. Wo ich mich geirrt habe
+## 12. Where I was wrong
 
-Die Spec und der Buildplan sind mehrfach von Messungen widerlegt worden. Das
-gehört dokumentiert, sonst liest sich das Projekt fehlerfreier als es war.
+The spec and the build plan have been contradicted by measurement repeatedly.
+That belongs in the record, or the project reads as more error-free than it
+was.
 
-| Behauptung | Realität |
+| Claim | Reality |
 |---|---|
-| Stufe-B-Toleranzen: einheitlich 1e-4 | Strukturell falsch. Erhaltungsgrößen bleiben bei 1e-9 (Toleranz jetzt **enger**, 1e-6), strukturempfindliche divergieren unter Chaos (2e-2). |
-| Bit-Exaktheit kostet in Skriptsprachen zwei Größenordnungen | Gemessen 2,3× (Python) und 3,2× (Perl). |
-| Thread-lokale Puffer + feste Reduktionsreihenfolge sind deterministisch | Nur *je Thread-Zahl*. Führte zu SPEC §5.6. |
-| SIMD ⇒ Konformitätsstufe C | Stufe A. Keine Cross-Lane-Reduktion im Stencil. |
-| GPU ⇒ Konformitätsstufe C | CUDA ist Stufe A. Bei GLSL hängt es am Treiber. |
-| PGO ist der plausibelste verbleibende Gewinn | Bringt nichts, schadet clang. |
-| `prefix` ist eine serielle O(T²)-Bremse | 0,000 ms Arbeit. Artefakt meiner Instrumentierung. |
-| wgpu/WGSL als portabler GPU-Weg | Unter WSL2 nicht gangbar: die NVIDIA-Vulkan-ICDs zeigen auf Windows-DLLs. |
-| Die Klasse-R-Zahlen sind GPU-Zahlen | Waren Software-Rendering (§9). |
-| Idiomatisches Haskell kostet wenig | 3,7× gegen den Low-Level-Port (§4). |
-| Der Haskell-Port ist so schnell, wie er sein kann | Vier Zeichen (`(!)` → `unsafeAt`) waren Faktor 1.46 (§4). |
-| Perls Threads sind der Weg zu Klasse P | `threads::shared` kostet 7,6× pro Zugriff; `fork` mit gepackten Pipes gewinnt (§5). |
-| In Perl kostet die Konvertierung so viel, dass beide Render-Backends gleich herauskommen | Die Konvertierung *ist* der Unterschied: raylib 1,5× schneller (§9). |
-| Klasse R vergleicht Sprachen | Auf raylib liegen vier kompilierte Sprachen innerhalb von 10 % (§9). |
-| `medium` lastet die GPU nicht aus | Doch — `medium` ist der Durchsatz-Peak, alles darüber fällt ab (§8). |
-| **Die GL-Zahl für `medium` war 1298 ms** | **Der Diffusionspass lief gar nicht.** `glDispatchCompute` ist auf 65 535 Workgroups pro Dimension begrenzt, `medium` braucht 65 536. Der Treiber meldet das nicht. Korrekt sind 2379 ms, womit GL über D3D12 *langsamer* ist als C auf 16 Threads statt schneller. |
-| Wenn Intrinsics da sind, ist bei Handassembler nichts mehr zu holen | Rund 11 % — nicht durch bessere Befehle, sondern durch ein Drittel der Ladeoperationen (§7). |
-| Klasse P gewinnt C oder C++ | **Go**, bei 32 Threads (§5). |
-| `-Ofast` verliert bei gcc reproduzierbar ein paar Prozent | Es wechselt zwischen Reihen das Vorzeichen. Der Effekt existiert nur bei clang (§3). |
-| LTO bringt bei clang 3 % | In dieser Reihe kostet es 7 %. LTO ist auf diesem Programm Rauschen (§3). |
-| Ein Binary, das antwortet, ist das Binary, das ich gebaut habe | `cargo build --bins` baut die Rust-Frontends nicht — sie hängen an Cargo-Features. Drei Prüfungen liefen gegen ein altes Executable und bestanden alle. |
-| Ein Skript, das von Hand funktioniert, funktioniert auch im Lauf | Zwei neue Skripte legten ihre Ausgabedatei an, wechselten das Verzeichnis und schrieben danach an einen relativen Pfad ins Nichts. Von Hand mit absolutem Pfad getestet — deshalb überlebte es. |
-| Nach `preflight.sh` „18 present, 0 missing" ist alles da | Go und Swift standen nicht im PATH des Laufs und wurden still übersprungen. preflight prüfte sie nicht — dabei ist genau das seine Aufgabe. |
-| Zehn fehlgeschlagene Konformitätsfälle heißen, dass zehn Fälle abweichen | Sie hießen, dass das Programm nie startete. Ein Target trug einen Platzhalter, den niemand ersetzte; danach zeigte `resolve_exe` per `Path.resolve()` am virtualenv vorbei auf den Basis-Interpreter, der numpy nicht sieht. Beide Male meldete der Harness „divergence“ statt „nicht ausführbar“. |
-| Eine Toolchain in den PATH zu hängen ist harmlos | Swifts Toolchain bringt clang 21 mit. Vorangestellt hätte sie das System-clang 18 verdeckt, und die Compiler-Matrix hätte weiter „clang" geschrieben. |
+| Tier B tolerances: a uniform 1e-4 | Structurally wrong. Conserved quantities stay at 1e-9 (tolerance now **tighter**, 1e-6), structure-sensitive ones diverge under chaos (2e-2). |
+| Bit-exactness costs two orders of magnitude in scripting languages | Measured 2.2× (Python) and 3.3× (Perl). |
+| Thread-local buffers plus a fixed reduction order are deterministic | Only *per thread count*. Led to SPEC §5.6. |
+| SIMD ⇒ conformance tier C | Tier A. No cross-lane reduction in the stencil. |
+| GPU ⇒ conformance tier C | CUDA is tier A. For GLSL it depends on the driver. |
+| PGO is the most plausible remaining gain | Gains nothing, hurts clang. |
+| `prefix` is a serial O(T²) bottleneck | 0.000 ms of work. An artefact of my own instrumentation. |
+| wgpu/WGSL as the portable GPU route | Not viable under WSL2: the NVIDIA Vulkan ICDs point at Windows DLLs. |
+| The class R numbers are GPU numbers | They were software rendering (§9). |
+| Idiomatic Haskell costs little | 3.7× against the low-level port (§4). |
+| The Haskell port is as fast as it can be | Four characters (`(!)` → `unsafeAt`) were worth 1.46× (§4). |
+| Perl's threads are the route to class P | `threads::shared` costs 7.6× per access; `fork` with packed pipes wins (§5). |
+| In Perl the conversion costs so much that both render backends come out the same | The conversion *is* the difference: raylib 1.5× faster (§9). |
+| Class R compares languages | On raylib four compiled languages land within 10 % (§9). |
+| `medium` does not saturate the GPU | It does — `medium` is the throughput peak, everything above falls off (§8). |
+| **The GL figure for `medium` was 1298 ms** | **The diffusion pass never ran.** `glDispatchCompute` is limited to 65 535 workgroups per dimension, and `medium` needs 65 536. The driver does not report this. The correct figure is 2379 ms, which makes GL over D3D12 *slower* than C on 16 threads rather than faster. |
+| Once the intrinsics exist there is nothing left for hand-written assembly | About 11 % — not through better instructions, but through a third of the loads (§7). |
+| Class P is won by C or C++ | **Go**, at 32 threads (§5). |
+| `-Ofast` reproducibly loses a few percent on gcc | It changes sign between series. The effect only exists on clang (§3). |
+| LTO gains 3 % on clang | In this series it costs 7 %. LTO is noise on this program (§3). |
+| A binary that answers is the binary I built | `cargo build --bins` does not build the Rust frontends — they sit behind cargo features. Three verifications ran against a stale executable and all passed. |
+| A script that works by hand works in the run | Two new scripts created their output file, changed directory, and then appended to the same relative path, which by then pointed nowhere. Tested by hand with an absolute path — which is why it survived. |
+| After `preflight.sh` says "18 present, 0 missing", everything is there | Go and Swift were not on the run's PATH and were silently skipped. preflight did not check them — which is precisely its job. |
+| Ten failed conformance cases mean ten cases diverge | They meant the program never started. One target carried a placeholder nothing expanded; then `resolve_exe` used `Path.resolve()` and pointed past the virtualenv at the base interpreter, which cannot see numpy. Both times the harness reported "divergence" instead of "not executable". |
+| Putting a toolchain on PATH is harmless | Swift's toolchain ships clang 21. Prepended, it would have shadowed the system clang 18, and the compiler matrix would have gone on printing "clang". |
 
-Ein Muster: **jede Vermutung über Performance, die ich nicht gemessen habe,
-war falsch.** Die Vermutungen über *Korrektheit* — Operationsreihenfolge,
-Trig-Tabelle, PRNG-Wahl — haben dagegen alle gehalten.
+One pattern: **every guess about performance that I did not measure was
+wrong.** The guesses about *correctness* — operation order, trig table, PRNG
+choice — all held.
 
-Und ein zweites: die beiden schlimmsten Fehler in dieser Liste — das
-übersprungene Dispatch und das Software-Rendering — hatten gemeinsam, dass sie
-eine *plausible Zahl* produzierten. Beide sind nur aufgefallen, weil eine
-Skalierung nicht stimmte, nicht weil etwas kaputt aussah.
+And a second: the two worst mistakes in this list — the skipped dispatch and
+the software rendering — had in common that they produced a *plausible number*.
+Both were only noticed because a scaling did not make sense, not because
+anything looked broken.
 
-Die fünf jüngsten Einträge haben das Gegenteil gemeinsam: sie produzierten
-**gar keine Zahl**. Eine Phase, die ins Nichts schrieb; zwei Sprachen, die
-übersprungen wurden; ein Binary, das eine alte Frage beantwortete; ein Target,
-das nie startete und dafür zehnmal als „abweichend“ gezählt wurde. Fehlende
-Ausgabe ist leichter zu finden als falsche — aber nur, wenn man nachzählt, was
-dastehen müsste. Die Zeilen pro Datei zu zählen hat in dieser Sitzung drei
-Fehler gefunden, das Lesen der Zahlen keinen.
+The five most recent entries have the opposite in common: they produced **no
+number at all**. A phase that wrote into nothing; two languages that were
+skipped; a binary that answered an old question; a target that never started
+and was counted ten times as "divergent". Missing output is easier to find than
+wrong output — but only if you count what ought to be there. Counting rows per
+file found three bugs in that session; reading the numbers found none.
 
-Eine Lehre daraus steht jetzt im Code statt hier: `run.py` prüft vor jedem
-Target, ob `argv[0]` überhaupt existiert, und sagt „nicht gefunden,
-übersprungen“ statt zehnmal „divergence“. Ein Werkzeug, das *falsch* meldet,
-wo es *gar nicht gelaufen* meint, kostet mehr Zeit als der Fehler selbst.
+One lesson from that lives in the code rather than here: `run.py` now checks
+that `argv[0]` exists before running a target and says "not found, skipping"
+instead of "divergence" ten times. A tool that reports *wrong* where it means
+*never ran* costs more than the bug itself.
 
 ---
 
-## 13. Offene Punkte
+## 13. Open questions
 
-- **Ein nativer Linux-GL-Treiber.** Die GL-Zahlen messen Mesas
-  D3D12-Übersetzung mit; der konstante Durchsatz von ~145 MCUPS über vier
-  Größenordnungen sagt, dass sie und nicht die GPU der Flaschenhals ist.
-- **Klasse R bei einer Grid-Größe, die die GPU auslastet.** Bei 1024² sind
-  beide Pfade CPU-gebunden, und der Vergleich misst die Formatkonvertierung.
-- **Klasse P für reines Python.** Mit `multiprocessing` würde es fast linear
-  skalieren — aber bei `medium` wären das Stunden pro Datenpunkt. (Das
-  freithreadige CPython ist inzwischen da und in §6 gemessen; offen ist nur
-  noch der reine Interpreter ohne numpy.)
-- **Warum Go Klasse P gewinnt.** Die Barrieren gegeneinander tauschen oder die
-  Wartezeit pro Phase instrumentieren. Die Erklärung in §5 ist plausibel und
-  ungemessen, und diese Kategorie hat in §12 eine schlechte Bilanz.
-- **Ein Lean-Port.** Sondiert und machbar: `Float32` existiert, `0.94` ist
-  `0x3F70A3D7`, und eine endrekursive Schleife über `FloatArray` schafft rund
-  8 ns pro Zelle. Was fehlt, ist Klarheit darüber, welches von drei fast
-  gleichen Array-Idiomen der Compiler zu einem destruktiven Update macht — sie
-  liegen um Faktor 6 auseinander. Eine Zahl zu veröffentlichen, ohne das zu
-  wissen, hieße das Idiom zu messen statt die Sprache, und das ist genau der
-  Fehler, den kitties Haskell-Kritik aufgedeckt hat (§4).
-- **Das HUD in Haskell, Perl und Python.** Sechs Frontends haben es, sechs
-  nicht. Der 5×7-Font ist bewusst Daten in einem Header, damit ein Port ihn
-  übernehmen kann; die Rust-Fassung wird aus der C-Fassung generiert und über
-  einen gemeinsamen FNV-Hash gegen sie geprüft.
-- **`perf`** ist unter dem WSL2-Kernel nicht verfügbar (kein passendes
-  `linux-tools`-Paket). Die Phasen-Timer und `hyperfine` ersetzen es
-  teilweise, aber Cache-Miss-Zahlen fehlen.
-- **Alles hier ist WSL2**, nicht natives Linux, auf einer Maschine, auf der
-  nebenher Windows arbeitet. Innerhalb dieser einen Messreihe ist das
-  unkritisch; bei Absolutwerten ist es zu bedenken.
+- **A native Linux GL driver.** The GL numbers include Mesa's D3D12
+  translation; the constant throughput of ~170 MCUPS across four orders of
+  magnitude says that layer, not the GPU, is the bottleneck.
+- **Class R at a grid size that saturates the GPU.** At 1024² both paths are
+  CPU-bound and the comparison measures format conversion.
+- **Class P for pure Python.** With `multiprocessing` it would scale almost
+  linearly — but at `medium` that would be hours per data point. (The
+  free-threaded CPython has arrived and is measured in §6; what remains open is
+  only the pure interpreter without numpy.)
+- **Why Go wins class P.** Swap the barriers between implementations, or
+  instrument the wait time per phase. The explanation in §5 is plausible and
+  unmeasured, and that category has a poor record in §12.
+- **A Lean port.** Probed and viable: `Float32` exists, `0.94` is
+  `0x3F70A3D7`, and a tail-recursive loop over `FloatArray` manages about 8 ns
+  per cell. What is missing is knowing which of three near-identical array
+  idioms the compiler turns into a destructive update — they differ by a factor
+  of 6. Publishing a number without knowing that would measure the idiom rather
+  than the language, which is exactly the mistake §4 is about.
+- **The HUD in Haskell, Perl and Python.** Six frontends have it, six do not.
+  The 5×7 font is deliberately data in a header so a port can adopt it; the
+  Rust version is generated from the C one and checked against it through a
+  shared FNV hash.
+- **`perf`** is unavailable under the WSL2 kernel (no matching `linux-tools`
+  package). The phase timers and `hyperfine` partly replace it, but cache-miss
+  counts are missing.
+- **Everything here is WSL2**, not native Linux, on a machine that is also
+  running Windows alongside. Within this one series that is harmless; for
+  absolute values it is worth keeping in mind.
