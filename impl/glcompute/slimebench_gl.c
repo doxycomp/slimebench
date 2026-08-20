@@ -69,7 +69,13 @@ static void   (*p_glBufferData)(GLenum, GLsizeiptr, const void *, GLenum);
 static void   (*p_glBufferSubData)(GLenum, GLintptr, GLsizeiptr, const void *);
 static void   (*p_glGetBufferSubData)(GLenum, GLintptr, GLsizeiptr, void *);
 static void   (*p_glBindBufferBase)(GLenum, GLuint, GLuint);
+/* Not in every system GL header; the value is fixed by the spec. */
+#ifndef GL_MAX_COMPUTE_WORK_GROUP_COUNT
+#define GL_MAX_COMPUTE_WORK_GROUP_COUNT 0x91BE
+#endif
+
 static void   (*p_glDispatchCompute)(GLuint, GLuint, GLuint);
+static void   (*p_glGetIntegeri_v)(GLenum, GLuint, GLint *);
 static void   (*p_glMemoryBarrier)(GLenum);
 static GLint  (*p_glGetUniformLocation)(GLuint, const char *);
 static void   (*p_glUniform1ui)(GLint, GLuint);
@@ -88,6 +94,7 @@ static int load_gl(void) {
     L(glLinkProgram); L(glGetProgramiv); L(glGetProgramInfoLog); L(glUseProgram);
     L(glGenBuffers); L(glBindBuffer); L(glBufferData); L(glBufferSubData);
     L(glGetBufferSubData); L(glBindBufferBase); L(glDispatchCompute);
+    L(glGetIntegeri_v);
     L(glMemoryBarrier); L(glGetUniformLocation); L(glUniform1ui);
     L(glUniform1i); L(glUniform1f); L(glFinish);
 #undef L
@@ -166,7 +173,7 @@ typedef struct {
 static void usage(FILE *f, const char *a0) {
     fprintf(f,
         "usage: %s [options]   (slimebench " SPEC_VERSION ", GL compute, class G)\n"
-        "  --preset NAME        tiny|small|medium|large|browser\n"
+        "  --preset NAME        tiny|small|medium|large|huge|browser\n"
         "  --width N --height N powers of two\n"
         "  --agents N  --ticks N  --warmup N  --seed N\n"
         "  --update MODE        deferred only (serial is refused)\n"
@@ -178,6 +185,19 @@ static void usage(FILE *f, const char *a0) {
         "  For the discrete GPU under WSL2, run with:\n"
         "    GALLIUM_DRIVER=d3d12 MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA\n",
         a0);
+}
+
+/* Lay `groups` work groups out in a 2D grid within the driver's per-dimension
+ * limits, keeping the product exactly >= groups and x as large as allowed so
+ * the tail of partly-idle invocations stays small. Returns non-zero if even
+ * two dimensions are not enough. */
+static int sb_split_groups(GLuint groups, GLuint maxx, GLuint maxy,
+                           GLuint *gx, GLuint *gy) {
+    if (groups == 0) { *gx = *gy = 1; return 0; }
+    if (groups <= maxx) { *gx = groups; *gy = 1; return 0; }
+    *gx = maxx;
+    *gy = (groups + maxx - 1) / maxx;
+    return (*gy <= maxy) ? 0 : -1;
 }
 
 int main(int argc, char **argv) {
@@ -197,6 +217,7 @@ int main(int argc, char **argv) {
             else if (!strcmp(p, "small"))  { o.width=1024; o.height=1024; o.agents=262144;  o.ticks=1000; }
             else if (!strcmp(p, "medium")) { o.width=2048; o.height=2048; o.agents=1048576; o.ticks=1000; }
             else if (!strcmp(p, "large"))  { o.width=4096; o.height=4096; o.agents=4194304; o.ticks=500; }
+            else if (!strcmp(p, "huge"))   { o.width=8192; o.height=8192; o.agents=16777216; o.ticks=100; }
             else if (!strcmp(p, "browser")){ o.width=1024; o.height=1024; o.agents=262144;  o.ticks=0; }
             else { fprintf(stderr, "error: unknown preset '%s'\n", p); return 2; }
             o.preset = p;
@@ -342,8 +363,25 @@ int main(int argc, char **argv) {
 #undef U1F
     }
 
-    const GLuint ag_groups = (o.agents + 63u) / 64u;
-    const GLuint cl_groups = (GLuint)((cells + 63) / 64);
+    /* Work groups go in a 2D grid. glDispatchCompute is limited to
+     * GL_MAX_COMPUTE_WORK_GROUP_COUNT per dimension -- the spec guarantees only
+     * 65 535, and the diffusion pass needs 262 144 groups at `large` and
+     * 1 048 576 at `huge`. Exceeding it is not an error the driver reports:
+     * the dispatch simply does nothing, and the run reports 29 ms for sixteen
+     * times the work. The shaders rebuild the linear index from x and y. */
+    GLint max_groups[3] = {65535, 65535, 65535};
+    p_glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 0, &max_groups[0]);
+    p_glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 1, &max_groups[1]);
+
+    GLuint ag_gx, ag_gy, cl_gx, cl_gy;
+    if (sb_split_groups((o.agents + 63u) / 64u, (GLuint)max_groups[0],
+                        (GLuint)max_groups[1], &ag_gx, &ag_gy) != 0 ||
+        sb_split_groups((GLuint)((cells + 63) / 64), (GLuint)max_groups[0],
+                        (GLuint)max_groups[1], &cl_gx, &cl_gy) != 0) {
+        fprintf(stderr, "error: preset too large for this driver's work-group "
+                        "limits (%d x %d)\n", max_groups[0], max_groups[1]);
+        return 1;
+    }
     int grid_is_buf0 = 1;   /* which SSBO currently holds the live grid */
 
     /* Ping-pong by rebinding rather than copying: the diffusion shader always
@@ -356,13 +394,13 @@ int main(int argc, char **argv) {
         p_glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, buf[_live]);          \
         p_glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, buf[_other]);         \
         p_glUseProgram(pr_agents);                                            \
-        p_glDispatchCompute(ag_groups, 1, 1);                                 \
+        p_glDispatchCompute(ag_gx, ag_gy, 1);                                 \
         p_glMemoryBarrier(GL_ALL_BARRIER_BITS);                               \
         p_glUseProgram(pr_merge);                                             \
-        p_glDispatchCompute(cl_groups, 1, 1);                                 \
+        p_glDispatchCompute(cl_gx, cl_gy, 1);                                 \
         p_glMemoryBarrier(GL_ALL_BARRIER_BITS);                               \
         p_glUseProgram(pr_diffuse);                                           \
-        p_glDispatchCompute(cl_groups, 1, 1);                                 \
+        p_glDispatchCompute(cl_gx, cl_gy, 1);                                 \
         p_glMemoryBarrier(GL_ALL_BARRIER_BITS);                               \
         grid_is_buf0 = !grid_is_buf0;                                         \
     } while (0)
@@ -434,17 +472,19 @@ int main(int argc, char **argv) {
                "\"width\":%u,\"height\":%u,\"agents\":%u,\"ticks\":%zu,\"seed\":%u,"
                "\"update\":\"deferred\",\"threads\":1,"
                "\"grid_hash\":\"0x%08X\",\"agent_hash\":\"0x%08X\",\"dirtable_hash\":\"0x%08X\","
+               "\"shader_hash\":\"0x%08X\","
                "\"ms_total\":%.4f,\"ms_agents\":0.0,\"ms_diffuse\":0.0,"
                "\"ms_per_tick_mean\":%.6f,\"ms_per_tick_median\":%.6f,\"ms_per_tick_p99\":%.6f,"
                "\"maups\":%.4f,\"mcups\":%.4f}\n",
                o.preset, renderer ? renderer : "unknown",
                o.width, o.height, o.agents, n, o.seed,
-               gh, agh, dh, ms_total, mean, median, p99,
+               gh, agh, dh, SB_GLSL_HASH, ms_total, mean, median, p99,
                ms_total > 0 ? (double)o.agents * n / ms_total / 1000.0 : 0.0,
                ms_total > 0 ? (double)cells * n / ms_total / 1000.0 : 0.0);
     } else {
         printf("%s %ux%u agents=%u ticks=%u update=deferred\n",
                o.preset, o.width, o.height, o.agents, o.ticks);
+        printf("  shader_hash 0x%08X\n", SB_GLSL_HASH);
         printf("  renderer   %s\n", renderer ? renderer : "unknown");
         printf("  grid_hash  0x%08X\n", gh);
         printf("  agent_hash 0x%08X\n", agh);

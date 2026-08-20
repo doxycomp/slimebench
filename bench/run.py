@@ -720,7 +720,7 @@ def main() -> int:
 
     b = sub.add_parser("bench", help="build and time targets")
     b.add_argument("--preset", default="small",
-                   choices=["tiny", "small", "medium", "large"])
+                   choices=["tiny", "small", "medium", "large", "huge"])
     b.add_argument("--width", type=int, help="overrides --preset (with --height/--agents)")
     b.add_argument("--height", type=int)
     b.add_argument("--agents", type=int)

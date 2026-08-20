@@ -22,6 +22,8 @@ bool applyPreset(Config& c, std::string_view name) {
         c.width = 2048; c.height = 2048; c.agents = 1048576; c.ticks = 1000;
     } else if (name == "large") {
         c.width = 4096; c.height = 4096; c.agents = 4194304; c.ticks = 500;
+    } else if (name == "huge") {
+        c.width = 8192; c.height = 8192; c.agents = 16777216; c.ticks = 100;
     } else if (name == "browser") {
         c.width = 1024; c.height = 1024; c.agents = 262144;  c.ticks = 0;
     } else {
@@ -36,7 +38,7 @@ bool applyPreset(Config& c, std::string_view name) {
 void printUsage(std::FILE* f, const char* argv0) {
     std::fprintf(f,
         "usage: %s [options]   (slimebench %s)\n"
-        "  --preset NAME        tiny|small|medium|large|browser\n"
+        "  --preset NAME        tiny|small|medium|large|huge|browser\n"
         "  --width N --height N powers of two\n"
         "  --agents N  --ticks N  --warmup N  --seed N\n"
         "  --update MODE        serial|deferred\n"

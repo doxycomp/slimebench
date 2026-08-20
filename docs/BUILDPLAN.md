@@ -98,20 +98,20 @@ fünf betroffenen Aufrufe teilen sich
 
 | | SDL2 | raylib |
 |---|---:|---:|
-| C | 4.27 | 2.06 |
-| C++ | 4.39 | **1.91** |
-| Haskell | 4.30 | 1.95 |
-| Rust | 4.60 | 1.99 |
-| Python | 4.98 | 4.58 |
-| Perl | 118.5 | 78.5 |
+| C | 5.74 | 2.65 |
+| C++ | 5.73 | 2.74 |
+| Haskell | 5.61 | 2.68 |
+| Rust | **5.59** | **2.63** |
+| Python | 5.77 | 5.25 |
+| Perl | 124.5 | 82.7 |
 
-raylib gewinnt überall, auf der GPU um **2.2×**. Es liegt am Pixelformat, nicht
+raylib gewinnt überall, auf der GPU um **2.1×**. Es liegt am Pixelformat, nicht
 an der Bibliothek: raylib nimmt den 8-Bit-Graustufenpuffer direkt entgegen,
 SDL2 braucht ARGB8888 und damit eine Expansionsschleife über eine Million
 Pixel pro Frame.
 
 Der eigentliche Befund ist aber, dass **die vier kompilierten Sprachen auf
-raylib innerhalb von 9 % liegen**. Steht das Backend fest, ist die Sprache in
+raylib innerhalb von 4 % liegen**. Steht das Backend fest, ist die Sprache in
 dieser Klasse fast egal — anders als in Klasse S. Und SDL2 ist auf der echten
 GPU *langsamer* als auf dem Software-Rasterizer, in allen vieren: beide Pfade
 sind bei 1024² CPU-gebunden. Details in
@@ -181,13 +181,13 @@ denselben *falschen* Hash (`0xE82B2012`). Skalierung bei `medium`/100:
 
 | Sprache | 1 Thread | bester | Speedup |
 |---|---:|---:|---:|
-| C++ | 5659 | 674 | 8.4× |
-| C | 5233 | 635 | 8.2× |
-| Haskell | 5339 | 741 | 7.2× |
-| Rust | 6808 | 1007 | 6.8× |
-| TypeScript | 13345 | 1190 | **11.2×** |
-| Python | 7857 | 1888 | 4.2× |
-| Perl (bei `tiny`) | 4141 | 1568 | 2.6× |
+| C++ | 5972 | 698 | 8.6× |
+| Haskell | 6806 | 808 | 8.4× |
+| C | 5609 | 707 | 7.9× |
+| Rust | 7796 | 990 | 7.9× |
+| TypeScript | 15642 | 1357 | **11.5×** |
+| Python | 9298 | 2257 | 4.1× |
+| Perl (bei `tiny`) | 4866 | 1753 | 2.8× |
 
 Zwei Dinge, die sich aus Klasse S nicht vorhersagen ließen: **TypeScript
 skaliert am besten** und schrumpft den Abstand zu C von 3.0× auf 1.6×; und
@@ -302,6 +302,20 @@ Diagramme eingecheckt sind.
 ```bash
 python3 bench/charts.py
 ```
+
+**Nachtrag.** Die Zahlen im Dokument waren über ein Dutzend Sitzungen an
+verschiedenen Tagen entstanden — innerhalb einer Reihe unkritisch, über Reihen
+hinweg still irreführend, und das Dokument zog mehrere Vergleiche über Reihen
+hinweg. Es gibt jetzt
+
+```bash
+scripts/stage-wsl.sh && bench/full-run.sh
+```
+
+was alle Klassen in einem Zug nach `results/run-<datum>/` misst und
+Toolchain-Versionen und Commit daneben schreibt, plus `bench/tables.py`, das
+die Markdown-Tabellen daraus erzeugt. Alle Zahlen in RESULTS.md stammen seitdem
+aus einem Lauf.
 
 Offen geblieben: die Heatmap-Darstellung der Compiler-Matrix (die sortierte
 Balkenliste liest sich besser, weil die interessanten Paare nicht benachbart

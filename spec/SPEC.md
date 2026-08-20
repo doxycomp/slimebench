@@ -626,7 +626,14 @@ Drei Dinge müssen dafür zusammenkommen:
 | `small` | 1024 × 1024 | 262 144 | 25 % | 1 000 | schneller Vergleich, auch für Perl erträglich |
 | `medium` | 2048 × 2048 | 1 048 576 | 25 % | 1 000 | **Headline-Zahl** |
 | `large` | 4096 × 4096 | 4 194 304 | 25 % | 500 | Bandbreiten-Stress |
+| `huge` | 8192 × 8192 | 16 777 216 | 25 % | 100 | Klasse G ausreizen |
 | `browser` | 1024 × 1024 | 262 144 | 25 % | ∞ | interaktiv |
+
+`huge` ist für Klasse G gedacht und auf einer CPU nicht sinnvoll zu Ende
+zu rechnen: 1,25 GB Puffer und 16,8 Millionen Agenten. Es existiert, weil
+`medium` eine RTX 5080 nicht auslastet — dort kosten `small` und `medium`
+praktisch dasselbe, womit die gemessene Beschleunigung eine Untergrenze ist
+und keine Antwort.
 
 Agentendichte 25 % der Zellen. (Die Vorlage nutzt 0.6 Agenten pro *Zelle* bei
 8 px Zellgröße — auf Pixelauflösung übertragen wäre das absurd viel.)
@@ -643,7 +650,7 @@ MÜSSEN mit Exit-Code 2 und einer Fehlermeldung auf stderr abgelehnt werden
 jeder Compiler-Bug).
 
 ```
---preset NAME          tiny|small|medium|large|browser
+--preset NAME          tiny|small|medium|large|huge|browser
 --width N --height N   Zweierpotenzen
 --agents N
 --ticks N

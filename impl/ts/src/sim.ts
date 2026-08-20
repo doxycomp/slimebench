@@ -43,6 +43,7 @@ export const PRESETS: Record<string, { width: number; height: number; agents: nu
   small:   { width: 1024, height: 1024, agents: 262144,  ticks: 1000 },
   medium:  { width: 2048, height: 2048, agents: 1048576, ticks: 1000 },
   large:   { width: 4096, height: 4096, agents: 4194304, ticks: 500 },
+  huge:    { width: 8192, height: 8192, agents: 16777216, ticks: 100 },
   browser: { width: 1024, height: 1024, agents: 262144,  ticks: 0 },
 };
 

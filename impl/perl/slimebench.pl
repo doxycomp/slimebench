@@ -34,6 +34,7 @@ my %PRESETS = (
     small   => [ 1024, 1024, 262144,  1000 ],
     medium  => [ 2048, 2048, 1048576, 1000 ],
     large   => [ 4096, 4096, 4194304, 500 ],
+    huge    => [ 8192, 8192, 16777216, 100 ],
     browser => [ 1024, 1024, 262144,  0 ],
 );
 
@@ -41,7 +42,7 @@ sub usage {
     my $fh = shift // \*STDOUT;
     print {$fh} <<"USAGE";
 usage: slimebench.pl [options]   (slimebench @{[SPEC_VERSION]})
-  --preset NAME        tiny|small|medium|large|browser
+  --preset NAME        tiny|small|medium|large|huge|browser
   --width N --height N powers of two
   --agents N  --ticks N  --warmup N  --seed N
   --update MODE        serial|deferred

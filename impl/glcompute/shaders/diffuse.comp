@@ -1,0 +1,23 @@
+layout(local_size_x = 64) in;
+void main() {
+  uint i = gl_GlobalInvocationID.x
+        + gl_GlobalInvocationID.y * gl_NumWorkGroups.x * gl_WorkGroupSize.x;
+  if (i >= uCells) return;
+  uint x = i & uXmask;
+  uint y = i >> uLog2w;
+  uint xm = (x - 1u) & uXmask;
+  uint xp = (x + 1u) & uXmask;
+  uint rowm = ((y - 1u) & uYmask) << uLog2w;
+  uint row0 = y << uLog2w;
+  uint rowp = ((y + 1u) & uYmask) << uLog2w;
+  precise float acc = grid[rowm | xm];
+  acc = acc + grid[rowm | x];
+  acc = acc + grid[rowm | xp];
+  acc = acc + grid[row0 | xm];
+  acc = acc + 4.0 * grid[row0 | x];
+  acc = acc + grid[row0 | xp];
+  acc = acc + grid[rowp | xm];
+  acc = acc + grid[rowp | x];
+  acc = acc + grid[rowp | xp];
+  scratch[row0 | x] = (acc / 12.0) * uDecay;
+}
