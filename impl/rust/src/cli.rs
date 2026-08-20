@@ -9,6 +9,9 @@ pub struct Opts {
     pub freeze_sim: bool,
     pub dump_grid: Option<String>,
     pub display_max: f32,
+    /// Overlay in the windowed frontends: on for a human, off under --json
+    /// because drawing it is work the class R number should not include.
+    pub want_hud: bool,
 }
 
 const USAGE: &str = "\
@@ -23,6 +26,7 @@ usage: slimebench [options]   (slimebench SPEC-1)
   --step F  --deposit F  --decay F
   --headless  --render  --freeze-sim
   --simd / --no-simd   vectorised diffusion pass (class V)
+  --hud  / --no-hud    on-screen overlay (default on, off with --json)
   --json  --hash-every N  --dump-grid PATH  --display-max F
   -h, --help";
 
@@ -58,8 +62,12 @@ pub fn parse_args() -> Opts {
         freeze_sim: false,
         dump_grid: None,
         display_max: 100.0,
+        // Resolved after parsing, once --json is known.
+        want_hud: true,
     };
 
+    // --hud is resolved after the loop: its default depends on --json.
+    let mut hud_flag: Option<bool> = None;
     let mut i = 1;
     let need = |i: usize, argv: &[String], flag: &str| -> String {
         if i + 1 >= argv.len() {
@@ -120,6 +128,8 @@ pub fn parse_args() -> Opts {
             }
             "--simd" => o.cfg.simd = true,
             "--no-simd" => o.cfg.simd = false,
+            "--hud" => hud_flag = Some(true),
+            "--no-hud" => hud_flag = Some(false),
             "--headless" => o.want_render = false,
             "--render" => o.want_render = true,
             "--freeze-sim" => o.freeze_sim = true,
@@ -129,6 +139,7 @@ pub fn parse_args() -> Opts {
         }
         i += 1;
     }
+    o.want_hud = hud_flag.unwrap_or(!o.want_json);
     o
 }
 

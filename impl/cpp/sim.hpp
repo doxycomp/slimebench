@@ -100,6 +100,19 @@ class Sim {
     void renderGray(std::uint8_t* out, float display_max) const noexcept;
 
     const Config& cfg() const noexcept { return cfg_; }
+
+    // The parameters an interactive frontend is allowed to change while the
+    // simulation runs. Deliberately not a mutable cfg() reference: width and
+    // height have cached masks behind them, and editing those at runtime
+    // would desync the geometry rather than produce a different simulation.
+    void setTunables(float deposit, float decay, float sensor_dist,
+                     float step, std::uint32_t rot_steps) noexcept {
+        cfg_.deposit = deposit;
+        cfg_.decay = decay;
+        cfg_.sensor_dist = sensor_dist;
+        cfg_.step = step;
+        cfg_.rot_steps = rot_steps;
+    }
     const std::vector<float>& grid() const noexcept { return grid_; }
 
     // ---- used by the threaded tick (class P) ----------------------------

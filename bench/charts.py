@@ -27,7 +27,7 @@ OUT = ROOT / "docs" / "charts"
 # same machine state as the tables in docs/RESULTS.md, or a reader comparing a
 # chart against a table is comparing two different afternoons. Override with
 #   bench/charts.py results/run-YYYYmmdd-HHMM
-RESULTS = ROOT / "results" / "run-20260819-2056"
+RESULTS = ROOT / "results" / "run-20260820-0330"
 if len(sys.argv) > 1:
     RESULTS = pathlib.Path(sys.argv[1])
 
@@ -162,7 +162,8 @@ def hbar_chart(path: pathlib.Path, title: str, subtitle: str, bars: list[Bar],
 def line_chart(path: pathlib.Path, title: str, subtitle: str,
                series: list[tuple[str, str, list[tuple[float, float]]]],
                x_label: str, y_label: str, width: int = 760, height: int = 380,
-               ideal: bool = False) -> None:
+               ideal: bool = False, baseline: float | None = None,
+               baseline_label: str = "") -> None:
     pad_l, pad_r, pad_t, pad_b = 62, 150, 52, 46
     plot_w = width - pad_l - pad_r
     plot_h = height - pad_t - pad_b
@@ -199,6 +200,17 @@ def line_chart(path: pathlib.Path, title: str, subtitle: str,
         s.append(f'<text x="{x:.1f}" y="{height - pad_b + 18}" class="lbl-s" '
                  f'text-anchor="middle">{t}</text>')
         t *= 2
+
+    # A horizontal reference the reader is meant to compare against -- for the
+    # GIL chart, "1.0" is the whole point and it falls between two gridlines.
+    if baseline is not None:
+        y = py(baseline)
+        s.append(f'<line x1="{pad_l}" y1="{y:.1f}" x2="{pad_l + plot_w}" '
+                 f'y2="{y:.1f}" stroke="{MUTED}" stroke-width="1" '
+                 f'stroke-dasharray="5 4"/>')
+        if baseline_label:
+            s.append(f'<text x="{pad_l + plot_w + 6}" y="{y + 4:.1f}" '
+                     f'class="lbl-s">{esc(baseline_label)}</text>')
 
     if ideal:
         pts = " ".join(f"{px(v):.1f},{py(v):.1f}" for v in (1, xmax))
@@ -446,6 +458,81 @@ def chart_render() -> None:
                    bars, "ms per frame (log)", log=True)
 
 
+def chart_kernels() -> None:
+    """The four-way diffusion-kernel comparison.
+
+    ms_diffuse, not ms_total: the agent pass is the same code in all of them
+    and would flatten the difference to nothing.
+    """
+    rows = load("V-asm-kernels.jsonl")
+    if not rows:
+        return
+    names = {"no-simd": "scalar loop", "simd": "intrinsics", "asm": "hand-written asm"}
+    order = ["no-simd", "simd", "asm"]
+    colours = {"no-simd": "#8c8c8c", "simd": ACCENT, "asm": "#54a24b"}
+    bars = []
+    for cc in sorted({r["cc"] for r in rows}):
+        for k in order:
+            m = [r for r in rows if r["cc"] == cc and r["kernel"] == k]
+            if not m:
+                continue
+            bars.append(Bar(f"{cc}  {names[k]}", m[0]["ms_diffuse"], colours[k]))
+    if not bars:
+        return
+    preset = rows[0]["preset"]
+    hbar_chart(OUT / "kernels.svg",
+               "Class V: what is left for hand-written assembly",
+               f"Diffusion pass only, {preset} {rows[0]['width']}^2, 100 ticks. "
+               "Same grid hash throughout.",
+               bars, "ms in the diffusion pass")
+
+
+def chart_gil() -> None:
+    """Free-threading against the GIL, threads against processes.
+
+    Plotted as speedup rather than milliseconds. In milliseconds the GIL
+    thread line reaches 14.7 s while everything else sits near 0.5 s, and a
+    linear axis collapses the three interesting curves into one flat line at
+    the bottom. As speedup all four are legible, and the shape that matters --
+    one curve going the wrong way past 1.0 -- is the shape you see.
+    """
+    rows = load("P-gil-matrix.jsonl")
+    if not rows:
+        return
+    base = {r["interp"]: r["ms_total"] for r in rows if r.get("mp_backend") == "serial"}
+    if not base:
+        return
+    series = []
+    style = {
+        ("gil", "threads"): ("3.12 threads", "#e45756"),
+        ("gil", "processes"): ("3.12 processes", "#f58518"),
+        ("nogil", "threads"): ("3.14t threads", "#54a24b"),
+        ("nogil", "processes"): ("3.14t processes", "#4c78a8"),
+    }
+    threads = [1, 2, 4, 8, 16]
+    for (interp, be), (label, colour) in style.items():
+        if interp not in base:
+            continue
+        pts = [(1, 1.0)]
+        for t in threads[1:]:
+            m = [r for r in rows
+                 if r.get("interp") == interp and r.get("mp_backend") == be
+                 and r["threads"] == t and "binned" in (r.get("variant") or "")]
+            if m:
+                pts.append((t, base[interp] / m[0]["ms_total"]))
+        if len(pts) > 1:
+            series.append((label, colour, pts))
+    if not series:
+        return
+    line_chart(OUT / "gil.svg",
+               "What the GIL costs, with everything else held fixed",
+               "Same Worker, same phase order, binned reduction, small 1024^2, "
+               "100 ticks. Above the dashed line the extra workers are "
+               "paying for themselves.",
+               series, "threads", "speedup vs 1 thread",
+               baseline=1.0, baseline_label="1 thread")
+
+
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     print("charts:")
@@ -456,6 +543,8 @@ def main() -> int:
     chart_haskell_style()
     chart_scaling_langs()
     chart_render()
+    chart_kernels()
+    chart_gil()
     return 0
 
 

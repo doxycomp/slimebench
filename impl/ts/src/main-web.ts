@@ -88,6 +88,9 @@ function buildUI(): void {
     name.textContent = c.label;
 
     const input = document.createElement("input");
+    // Read back by the keyboard bindings, which drive the slider rather than
+    // the config so both routes share one handler.
+    input.dataset.id = c.id;
     input.type = "range";
     input.min = String(c.min);
     input.max = String(c.max);
@@ -160,9 +163,77 @@ function frame(): void {
   requestAnimationFrame(frame);
 }
 
-document.getElementById("hashBtn")!.addEventListener("click", () => {
+function showHash(): void {
   document.getElementById("hash")!.textContent =
     `Tick ${tickCount}  grid=${hex32(sim.hashGrid())}  agents=${hex32(sim.hashAgents())}`;
+}
+
+document.getElementById("hashBtn")!.addEventListener("click", showHash);
+
+/* ---- keyboard ------------------------------------------------------------
+ *
+ * The same key map the native frontends use (impl/c/sb_hud.h), so muscle
+ * memory carries across all seven. No bitmap overlay here: this page has a
+ * DOM, and drawing text into the canvas with a 5x7 font when the sidebar can
+ * render it properly would be a worse HUD, not a more consistent one. What
+ * has to be consistent is which key does what.
+ *
+ * Parameters sit on digit pairs rather than letter-plus-shift because SDL2,
+ * raylib, GLFW and the browser each report shift state differently -- here it
+ * would be easy, but a scheme that only works in one frontend is the thing
+ * being avoided.
+ */
+
+function setPauseLabel(): void {
+  document.getElementById("pause")!.textContent = running ? "Pause" : "Weiter";
+}
+
+/** Nudge a slider by n steps and fire its input handler, so the keyboard and
+ * the mouse go through exactly one code path. */
+function nudge(id: string, n: number): void {
+  const input = document.querySelector<HTMLInputElement>(`#controls input[data-id="${id}"]`);
+  if (!input) return;
+  const step = Number(input.step) || 1;
+  const v = Number(input.value) + n * step;
+  input.value = String(Math.min(Number(input.max), Math.max(Number(input.min), v)));
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function toggleHelp(force?: boolean): void {
+  const el = document.getElementById("help")!;
+  const show = force ?? el.hidden;
+  el.hidden = !show;
+}
+
+const KEYS: Record<string, () => void> = {
+  " ": () => { running = !running; setPauseLabel(); },
+  n: () => { running = false; setPauseLabel(); sim.tick(); tickCount++; },
+  r: () => rebuild(),
+  c: () => showHash(),
+  h: () => toggleHelp(),
+  F1: () => toggleHelp(),
+  Escape: () => toggleHelp(false),
+  "1": () => nudge("deposit", -1),
+  "2": () => nudge("deposit", +1),
+  "3": () => nudge("decay", -1),
+  "4": () => nudge("decay", +1),
+  "5": () => nudge("sensorDist", -1),
+  "6": () => nudge("sensorDist", +1),
+  "7": () => nudge("step", -1),
+  "8": () => nudge("step", +1),
+  "9": () => nudge("rotSteps", -1),
+  "0": () => nudge("rotSteps", +1),
+};
+
+window.addEventListener("keydown", (e) => {
+  // A slider has focus after it is dragged, and the arrow keys belong to it.
+  const t = e.target as HTMLElement | null;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const fn = KEYS[e.key] ?? KEYS[e.key.toLowerCase()];
+  if (!fn) return;
+  e.preventDefault();
+  fn();
 });
 
 buildUI();

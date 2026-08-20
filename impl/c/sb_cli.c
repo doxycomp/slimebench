@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "sb_simd.h"
+#include "sb_asm.h"
 
 void sb_print_usage(FILE *f, const char *argv0) {
     fprintf(f,
@@ -17,6 +18,7 @@ void sb_print_usage(FILE *f, const char *argv0) {
         "  --deposit-reduce M   private|binned  (SPEC-1 5.6)\n"
         "  --sensor-dist F  --sensor-steps N  --rot-steps N\n"
         "  --step F  --deposit F  --decay F\n"
+        "  --hud  | --no-hud    on-screen overlay (default on, off with --json)\n"
         "  --headless  --render  --freeze-sim\n"
         "  --json  --hash-every N  --dump-grid PATH  --display-max F\n"
         "  -h, --help\n",
@@ -55,6 +57,7 @@ int sb_parse_args(int argc, char **argv, sb_config *cfg, sb_cli_opts *opt) {
     sb_config_defaults(cfg);
     memset(opt, 0, sizeof *opt);
     opt->display_max = 100.0f;
+    opt->want_hud = -1;   /* resolved after parsing, once --json is known */
 
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
@@ -104,10 +107,27 @@ int sb_parse_args(int argc, char **argv, sb_config *cfg, sb_cli_opts *opt) {
         else if (!strcmp(a, "--freeze-sim")) { opt->freeze_sim = 1; }
         else if (!strcmp(a, "--simd"))       { cfg->simd = 1; }
         else if (!strcmp(a, "--no-simd"))    { cfg->simd = 0; }
+        else if (!strcmp(a, "--hud"))        { opt->want_hud = 1; }
+        else if (!strcmp(a, "--no-hud"))     { opt->want_hud = 0; }
+        else if (!strcmp(a, "--asm"))        { cfg->use_asm = 1; }
+        else if (!strcmp(a, "--no-asm"))     { cfg->use_asm = 0; }
         else {
             /* SPEC-1 section 10: never silently ignore an unknown flag. */
             fprintf(stderr, "error: unknown argument '%s'\n", a);
             sb_print_usage(stderr, argv[0]);
+            return 2;
+        }
+    }
+    if (opt->want_hud < 0) opt->want_hud = !opt->want_json;
+    if (cfg->use_asm) {
+        if (cfg->simd) {
+            fprintf(stderr, "error: --asm and --simd both choose the diffusion "
+                            "kernel; pick one\n");
+            return 2;
+        }
+        const char *why = NULL;
+        if (!sb_asm_available(cfg, &why)) {
+            fprintf(stderr, "error: --asm unavailable here: %s\n", why);
             return 2;
         }
     }
@@ -132,8 +152,8 @@ void sb_emit_json(const sb_sim *s, const char *impl, const char *backend,
     snprintf(variant, sizeof variant, "%s%s%s",
              parallel ? (s->cfg.reduce == SB_REDUCE_BINNED ? "binned" : "private")
                       : "scalar",
-             s->cfg.simd ? "+simd-" : "",
-             s->cfg.simd ? sb_simd_name() : "");
+             s->cfg.use_asm ? "+" : (s->cfg.simd ? "+simd-" : ""),
+             s->cfg.use_asm ? sb_asm_name() : (s->cfg.simd ? sb_simd_name() : ""));
     double median = 0.0, p99 = 0.0, mean = 0.0;
     if (n_ticks > 0) {
         double *sorted = (double *)malloc(n_ticks * sizeof(double));

@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 446" width="760" height="446" role="img" aria-label="Class S: one thread, one core">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 506" width="760" height="506" role="img" aria-label="Class S: one thread, one core">
 
   <style>
     .bg    { fill: none; }
@@ -20,60 +20,66 @@
 
 <text x="16" y="22" class="ttl">Class S: one thread, one core</text>
 <text x="16" y="39" class="sub">256x256, 16 384 agents, serial update. Log scale -- the range is 500x.</text>
-<line x1="224.1" y1="44" x2="224.1" y2="416" class="grid"/>
-<text x="224.1" y="430" class="lbl-s" text-anchor="middle">0.2</text>
-<line x1="285.9" y1="44" x2="285.9" y2="416" class="grid"/>
-<text x="285.9" y="430" class="lbl-s" text-anchor="middle">0.5</text>
-<line x1="332.7" y1="44" x2="332.7" y2="416" class="grid"/>
-<text x="332.7" y="430" class="lbl-s" text-anchor="middle">1</text>
-<line x1="379.5" y1="44" x2="379.5" y2="416" class="grid"/>
-<text x="379.5" y="430" class="lbl-s" text-anchor="middle">2</text>
-<line x1="441.3" y1="44" x2="441.3" y2="416" class="grid"/>
-<text x="441.3" y="430" class="lbl-s" text-anchor="middle">5</text>
-<line x1="488.1" y1="44" x2="488.1" y2="416" class="grid"/>
-<text x="488.1" y="430" class="lbl-s" text-anchor="middle">10</text>
-<line x1="534.9" y1="44" x2="534.9" y2="416" class="grid"/>
-<text x="534.9" y="430" class="lbl-s" text-anchor="middle">20</text>
-<line x1="596.7" y1="44" x2="596.7" y2="416" class="grid"/>
-<text x="596.7" y="430" class="lbl-s" text-anchor="middle">50</text>
-<line x1="643.5" y1="44" x2="643.5" y2="416" class="grid"/>
-<text x="643.5" y="430" class="lbl-s" text-anchor="middle">100</text>
-<text x="430" y="442" class="lbl-s" text-anchor="middle">ms per tick (log)</text>
+<line x1="229.4" y1="44" x2="229.4" y2="476" class="grid"/>
+<text x="229.4" y="490" class="lbl-s" text-anchor="middle">0.2</text>
+<line x1="291.5" y1="44" x2="291.5" y2="476" class="grid"/>
+<text x="291.5" y="490" class="lbl-s" text-anchor="middle">0.5</text>
+<line x1="338.4" y1="44" x2="338.4" y2="476" class="grid"/>
+<text x="338.4" y="490" class="lbl-s" text-anchor="middle">1</text>
+<line x1="385.4" y1="44" x2="385.4" y2="476" class="grid"/>
+<text x="385.4" y="490" class="lbl-s" text-anchor="middle">2</text>
+<line x1="447.5" y1="44" x2="447.5" y2="476" class="grid"/>
+<text x="447.5" y="490" class="lbl-s" text-anchor="middle">5</text>
+<line x1="494.4" y1="44" x2="494.4" y2="476" class="grid"/>
+<text x="494.4" y="490" class="lbl-s" text-anchor="middle">10</text>
+<line x1="541.4" y1="44" x2="541.4" y2="476" class="grid"/>
+<text x="541.4" y="490" class="lbl-s" text-anchor="middle">20</text>
+<line x1="603.5" y1="44" x2="603.5" y2="476" class="grid"/>
+<text x="603.5" y="490" class="lbl-s" text-anchor="middle">50</text>
+<line x1="650.4" y1="44" x2="650.4" y2="476" class="grid"/>
+<text x="650.4" y="490" class="lbl-s" text-anchor="middle">100</text>
+<text x="430" y="502" class="lbl-s" text-anchor="middle">ms per tick (log)</text>
 <text x="180" y="69" class="lbl" text-anchor="end">C clang</text>
-<rect x="190" y="52" width="31.7" height="24" rx="2" fill="#4c78a8"/>
-<text x="229.7" y="69" class="lbl-s">0.19  tier A</text>
+<rect x="190" y="52" width="31.8" height="24" rx="2" fill="#4c78a8"/>
+<text x="229.8" y="69" class="lbl-s">0.18  tier A</text>
 <text x="180" y="99" class="lbl" text-anchor="end">C++ clang++</text>
-<rect x="190" y="82" width="38.5" height="24" rx="2" fill="#f58518"/>
-<text x="236.5" y="99" class="lbl-s">0.21  tier A</text>
-<text x="180" y="129" class="lbl" text-anchor="end">C++ g++</text>
-<rect x="190" y="112" width="39.7" height="24" rx="2" fill="#f58518"/>
-<text x="237.7" y="129" class="lbl-s">0.22  tier A</text>
-<text x="180" y="159" class="lbl" text-anchor="end">C gcc</text>
-<rect x="190" y="142" width="40.8" height="24" rx="2" fill="#4c78a8"/>
-<text x="238.8" y="159" class="lbl-s">0.22  tier A</text>
+<rect x="190" y="82" width="39.4" height="24" rx="2" fill="#f58518"/>
+<text x="237.4" y="99" class="lbl-s">0.20  tier A</text>
+<text x="180" y="129" class="lbl" text-anchor="end">C gcc</text>
+<rect x="190" y="112" width="40.0" height="24" rx="2" fill="#4c78a8"/>
+<text x="238.0" y="129" class="lbl-s">0.20  tier A</text>
+<text x="180" y="159" class="lbl" text-anchor="end">C++ g++</text>
+<rect x="190" y="142" width="41.6" height="24" rx="2" fill="#f58518"/>
+<text x="239.6" y="159" class="lbl-s">0.21  tier A</text>
 <text x="180" y="189" class="lbl" text-anchor="end">Haskell</text>
-<rect x="190" y="172" width="43.6" height="24" rx="2" fill="#b279a2"/>
-<text x="241.6" y="189" class="lbl-s">0.23  tier A</text>
-<text x="180" y="219" class="lbl" text-anchor="end">Rust unchecked</text>
-<rect x="190" y="202" width="52.7" height="24" rx="2" fill="#54a24b"/>
-<text x="250.7" y="219" class="lbl-s">0.26  tier A</text>
-<text x="180" y="249" class="lbl" text-anchor="end">Rust safe</text>
-<rect x="190" y="232" width="59.2" height="24" rx="2" fill="#54a24b"/>
-<text x="257.2" y="249" class="lbl-s">0.29  tier A</text>
-<text x="180" y="279" class="lbl" text-anchor="end">TypeScript</text>
-<rect x="190" y="262" width="115.6" height="24" rx="2" fill="#e45756"/>
-<text x="313.6" y="279" class="lbl-s">0.67  tier A</text>
-<text x="180" y="309" class="lbl" text-anchor="end">Python pure</text>
-<rect x="190" y="292" width="389.0" height="24" rx="2" fill="#72b7b2"/>
-<text x="587.0" y="309" class="lbl-s">38  tier B</text>
-<text x="180" y="339" class="lbl" text-anchor="end">Perl plain</text>
-<rect x="190" y="322" width="392.4" height="24" rx="2" fill="#eeca3b"/>
-<text x="590.4" y="339" class="lbl-s">40  tier B</text>
-<text x="180" y="369" class="lbl" text-anchor="end">Python pure-strict</text>
-<rect x="190" y="352" width="445.1" height="24" rx="2" fill="#72b7b2"/>
-<text x="643.1" y="369" class="lbl-s">88  tier A</text>
-<text x="180" y="399" class="lbl" text-anchor="end">Perl strict-f32</text>
-<rect x="190" y="382" width="470.6" height="24" rx="2" fill="#eeca3b"/>
-<text x="668.6" y="399" class="lbl-s">129  tier A</text>
-<line x1="190" y1="44" x2="190" y2="416" class="axis"/>
+<rect x="190" y="172" width="43.5" height="24" rx="2" fill="#b279a2"/>
+<text x="241.5" y="189" class="lbl-s">0.21  tier A</text>
+<text x="180" y="219" class="lbl" text-anchor="end">Swift</text>
+<rect x="190" y="202" width="47.4" height="24" rx="2" fill="#4c78a8"/>
+<text x="245.4" y="219" class="lbl-s">0.23  tier A</text>
+<text x="180" y="249" class="lbl" text-anchor="end">Rust unchecked</text>
+<rect x="190" y="232" width="53.8" height="24" rx="2" fill="#54a24b"/>
+<text x="251.8" y="249" class="lbl-s">0.25  tier A</text>
+<text x="180" y="279" class="lbl" text-anchor="end">Go</text>
+<rect x="190" y="262" width="54.5" height="24" rx="2" fill="#4c78a8"/>
+<text x="252.5" y="279" class="lbl-s">0.25  tier A</text>
+<text x="180" y="309" class="lbl" text-anchor="end">Rust safe</text>
+<rect x="190" y="292" width="61.6" height="24" rx="2" fill="#54a24b"/>
+<text x="259.6" y="309" class="lbl-s">0.28  tier A</text>
+<text x="180" y="339" class="lbl" text-anchor="end">TypeScript</text>
+<rect x="190" y="322" width="117.8" height="24" rx="2" fill="#e45756"/>
+<text x="315.8" y="339" class="lbl-s">0.64  tier A</text>
+<text x="180" y="369" class="lbl" text-anchor="end">Perl plain</text>
+<rect x="190" y="352" width="390.1" height="24" rx="2" fill="#eeca3b"/>
+<text x="588.1" y="369" class="lbl-s">35  tier B</text>
+<text x="180" y="399" class="lbl" text-anchor="end">Python pure</text>
+<rect x="190" y="382" width="391.5" height="24" rx="2" fill="#72b7b2"/>
+<text x="589.5" y="399" class="lbl-s">36  tier B</text>
+<text x="180" y="429" class="lbl" text-anchor="end">Python pure-strict</text>
+<rect x="190" y="412" width="446.0" height="24" rx="2" fill="#72b7b2"/>
+<text x="644.0" y="429" class="lbl-s">81  tier A</text>
+<text x="180" y="459" class="lbl" text-anchor="end">Perl strict-f32</text>
+<rect x="190" y="442" width="470.5" height="24" rx="2" fill="#eeca3b"/>
+<text x="668.5" y="459" class="lbl-s">116  tier A</text>
+<line x1="190" y1="44" x2="190" y2="476" class="axis"/>
 </svg>

@@ -16,13 +16,34 @@
 # bridge the build times and binary sizes measure the bridge. On native Linux
 # staging is unnecessary.
 #
-# Roughly 90 minutes. Each phase writes its own .jsonl as it finishes, so an
+# Roughly two hours. Each phase writes its own .jsonl as it finishes, so an
 # interrupted run still leaves usable output.
 
 set -u
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 ROOT=$PWD
+
+# A git worktree checked out from Windows carries a .git file holding a
+# Windows path, which git-inside-WSL cannot resolve -- so the manifest recorded
+# "commit unknown" and the series could not be tied to a revision. Translate
+# the drive letter and ask again.
+sb_commit() {
+  local c gd drive
+  c=$(git rev-parse --short HEAD 2>/dev/null) && { echo "$c"; return; }
+  if [ -f .git ]; then
+    gd=$(sed -n 's/^gitdir: //p' .git)
+    gd=${gd//\\//}          # a Windows gitdir may use backslashes
+    case "$gd" in
+      [A-Za-z]:/*)
+        drive=$(printf '%s' "${gd%%:*}" | tr 'A-Z' 'a-z')
+        gd="/mnt/$drive${gd#?:}"
+        ;;
+    esac
+    c=$(git --git-dir="$gd" rev-parse --short HEAD 2>/dev/null) && { echo "$c"; return; }
+  fi
+  echo unknown
+}
 
 OUT=${1:-results/run-$(date +%Y%m%d-%H%M)}
 mkdir -p "$OUT"
@@ -36,6 +57,16 @@ echo "==> writing to $OUT"
 [ -d /usr/local/cuda/bin ] && export PATH=/usr/local/cuda/bin:$PATH
 [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
 [ -f "$HOME/.ghcup/env" ] && . "$HOME/.ghcup/env"
+# Go and Swift install into $HOME rather than onto the system PATH, and
+# without these two lines run.py reports "compiler not installed" and
+# quietly drops both languages from class S -- which is how the first
+# series to include them came out with seven languages instead of nine.
+# Appended, not prepended, and that matters: the Swift toolchain ships its
+# own clang 21, which would shadow the system clang 18 and silently change
+# what the compiler matrix measured. These two entries exist to add `go`
+# and `swiftc`, not to reorder anything already on PATH.
+[ -d "$HOME/opt/go/bin" ]        && export PATH="$PATH:$HOME/opt/go/bin"
+[ -d "$HOME/opt/swift/usr/bin" ] && export PATH="$PATH:$HOME/opt/swift/usr/bin"
 
 # WSL reaches the discrete GPU only through Mesa's D3D12 backend; setting these
 # on a native driver would replace a working GL stack with a broken one. The
@@ -77,7 +108,7 @@ HAVE_DISPLAY=0
   # SLIMEBENCH_COMMIT lets the launcher pass it in: the staged copy has no
   # .git, and a run whose numbers cannot be tied to a revision is a
   # transcript rather than a measurement.
-  echo "commit      ${SLIMEBENCH_COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}"
+  echo "commit      ${SLIMEBENCH_COMMIT:-$(sb_commit)}"
 } | tee "$OUT/environment.txt"
 echo
 
@@ -96,7 +127,7 @@ done
 # ---- 2. compiler matrix --------------------------------------------------
 phase "compiler matrix, 1024x1024, 300 ticks"
 python3 bench/run.py bench --preset small --ticks 300 --reps 3 \
-  --targets c,cpp,rust,haskell,haskell-vector,c-pgo \
+  --targets c,cpp,rust,haskell,haskell-vector,c-pgo,go,swift \
   --out "$OUT/C-compiler-matrix.jsonl" || true
 
 # ---- 3. class V ----------------------------------------------------------
@@ -104,6 +135,38 @@ phase "class V (SIMD), 1024x1024, 300 ticks"
 python3 bench/run.py bench --preset small --ticks 300 --reps 3 \
   --targets c-simd,cpp-simd,rust-simd \
   --out "$OUT/G-simd.jsonl" || true
+
+# The four-way kernel comparison, reported as ms_diffuse: the agent pass is
+# identical in all of them and would dilute the difference. Needs AVX-512 and
+# ASM=1; the script says so and writes nothing if either is missing.
+phase "class V, diffusion kernels: scalar / intrinsics / assembly"
+bench/asm-kernels.sh "$OUT/V-asm-kernels.jsonl" medium 100 || true
+
+# ---- 3b. the style axis --------------------------------------------------
+# One language, three ways of writing it, against the C reference. This used
+# to be a file copied in from whichever session produced it; the (!) variant
+# is now a build profile, so the comparison re-runs with everything else.
+phase "Haskell style axis, 1024x1024, 300 ticks"
+: > "$OUT/M-haskell-style.jsonl"
+style() { # variant-label cmd...
+  local label=$1; shift
+  local ms hg
+  local line
+  line=$(timeout 1800 "$@" --preset small --ticks 300 --update deferred 2>/dev/null) || {
+    echo "  $label FAILED"; return; }
+  ms=$(echo "$line" | awk '/^  total/{print $2}')
+  hg=$(echo "$line" | awk '/^  grid_hash/{print $2}')
+  [ -z "$ms" ] && { echo "  $label no output"; return; }
+  printf '{"schema":1,"impl":"haskell","class":"S","preset":"small","ticks":300,''"update":"deferred","variant":"%s","ms_total":%s,"grid_hash":"%s"}
+'     "$label" "$ms" "$hg" >> "$OUT/M-haskell-style.jsonl"
+  printf '  %-34s %9s ms  %s
+' "$label" "$ms" "$hg"
+}
+( cd impl/haskell && ./build.sh o2-llvm-safetrig ) >/dev/null 2>&1
+style "C reference (clang -O3 -native)" impl/c/build/clang-o3-native/slimebench-headless
+style "haskell lowlevel, (!) lookups"   impl/haskell/build/o2-llvm-safetrig/slimebench
+style "haskell lowlevel, unsafeAt"      impl/haskell/build/o2-llvm/slimebench
+style "haskell idiomatic (vector)"      impl/haskell/build/o2-llvm-vector/slimebench
 
 # ---- 4. class P ----------------------------------------------------------
 # One thread sweep per language. Perl runs at `tiny`: `medium` there is hours,
@@ -140,7 +203,15 @@ psweep rust    medium 100 binned private -- impl/rust/build/release-native-unche
 psweep haskell medium 100 binned private -- impl/haskell/build/o2-llvm/slimebench
 psweep ts      medium 100 binned private -- node --experimental-strip-types --no-warnings impl/ts/src/main-node.ts
 psweep python  medium 100 binned private -- python3 impl/python/slimebench_numpy.py
+psweep go      medium 100 binned private -- impl/go/build/nobounds/slimebench
+psweep swift   medium 100 binned private -- impl/swift/build/unchecked/slimebench
 psweep perl    tiny    20 ""              -- perl impl/perl/slimebench.pl
+
+# The free-threading experiment: {GIL, no-GIL} x {threads, processes} x T,
+# everything else held fixed. Skipped with a note if no free-threaded
+# interpreter is installed -- the GIL half alone is not the measurement.
+phase "class P, CPython free-threading matrix"
+bench/gil-matrix.sh "$OUT/P-gil-matrix.jsonl" small 100 || true
 
 # ---- 5. class G ----------------------------------------------------------
 phase "class G, every preset"
@@ -178,7 +249,14 @@ render() { # lang label cmd...
   local lang=$1 label=$2; shift 2
   local n=200; [ "$lang" = perl ] && n=20
   local j
-  j=$(timeout 900 "$@" --preset small --ticks "$n" --freeze-sim --json 2>/dev/null \
+  # --json already turns the HUD off everywhere it exists; passing --no-hud
+  # as well makes that explicit in the command line, so a frame that drew
+  # an overlay could not be mistaken for one of these numbers. Only the
+  # three languages that have a HUD accept the flag -- SPEC-1 section 10
+  # says the others must reject it, and they do.
+  local -a hud=()
+  case "$lang" in c|cpp|rust) hud=(--no-hud);; esac
+  j=$(timeout 900 "$@" --preset small --ticks "$n" --freeze-sim --json "${hud[@]}" 2>/dev/null \
       | grep -m1 '^{') || { echo "  $label FAILED"; return; }
   [ -z "$j" ] && { echo "  $label no json"; return; }
   echo "$j" | RL="$RLABEL" python3 -c "

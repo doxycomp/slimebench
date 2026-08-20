@@ -164,6 +164,56 @@ pub static SIN_BITS: [u32; {NDIR}] = [
     write(ROOT / "impl" / "rust" / "src" / "dirtable.rs", body)
 
 
+def emit_go(cos_b, sin_b, table_hash):
+    body = f"""// {BANNER}
+// SPEC-1 section 4: quantised direction table, NDIR={NDIR}.
+
+package sim
+
+// NDIR is the number of quantised headings.
+const NDIR = {NDIR}
+
+// DirtableHash is recomputed from the bit arrays at run time; this constant
+// exists so the generated value is greppable next to the data.
+const DirtableHash uint32 = 0x{table_hash:08X}
+
+// CosBits and SinBits are f32 bit patterns, not floats: a Go float32 literal
+// would be parsed by the compiler and there is no guarantee the decimal round
+// trip lands on the same bits the generator computed.
+var CosBits = [NDIR]uint32{{
+{chr(10).join(rows(cos_b))}
+}}
+
+var SinBits = [NDIR]uint32{{
+{chr(10).join(rows(sin_b))}
+}}
+"""
+    write(ROOT / "impl" / "go" / "sim" / "dirtable.go", body)
+
+
+def emit_swift(cos_b, sin_b, table_hash):
+    body = f"""// {BANNER}
+// SPEC-1 section 4: quantised direction table, NDIR={NDIR}.
+
+public let NDIR: Int = {NDIR}
+
+// Recomputed from the bit arrays at run time; this constant exists so the
+// generated value is greppable next to the data.
+public let DIRTABLE_HASH: UInt32 = 0x{table_hash:08X}
+
+// Bit patterns rather than Float literals: a decimal round trip through the
+// Swift parser is not guaranteed to land on the bits the generator computed.
+public let COS_BITS: [UInt32] = [
+{chr(10).join(rows(cos_b))}
+]
+
+public let SIN_BITS: [UInt32] = [
+{chr(10).join(rows(sin_b))}
+]
+"""
+    write(ROOT / "impl" / "swift" / "Sources" / "SlimebenchCore" / "DirTable.swift", body)
+
+
 def hex_lines(blob: bytes, per_line: int = 32) -> list[str]:
     h = blob.hex().upper()
     chunk = per_line * 2
@@ -318,6 +368,8 @@ def main() -> int:
     emit_python(blob, table_hash)
     emit_perl(blob, table_hash)
     emit_haskell(blob, table_hash)
+    emit_go(cos_b, sin_b, table_hash)
+    emit_swift(cos_b, sin_b, table_hash)
     emit_bin(cos_b, sin_b)
     return 0
 

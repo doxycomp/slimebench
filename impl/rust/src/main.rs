@@ -2,6 +2,10 @@
 
 mod cli;
 mod dirtable;
+// Not used by the headless binary; declared so `cargo test` runs the check
+// that keeps the Rust glyph table in step with impl/c/sb_font.h.
+mod hud;
+mod render;
 mod parallel;
 mod simd;
 mod sim;

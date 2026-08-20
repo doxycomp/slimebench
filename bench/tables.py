@@ -187,6 +187,101 @@ def sec_parallel(d: pathlib.Path) -> str:
     return "".join(out) + "\n"
 
 
+def sec_kernels(d: pathlib.Path) -> str:
+    """The four-way diffusion-kernel comparison.
+
+    Reported as ms_diffuse rather than ms_total: the agent pass is identical
+    in all of them and would dilute the difference into invisibility.
+    """
+    rows = load(d, "V-asm-kernels.jsonl")
+    if not rows:
+        return ""
+    names = {"no-simd": "skalar", "simd": "Intrinsics", "asm": "Assembly"}
+    order = ["no-simd", "simd", "asm"]
+    ccs = sorted({r["cc"] for r in rows})
+    by = {(r["cc"], r["kernel"]): r for r in rows}
+
+    preset = rows[0]["preset"]
+    w = rows[0]["width"]
+    body = []
+    for k in order:
+        cells = []
+        for cc in ccs:
+            r = by.get((cc, k))
+            cells.append(fnum(r["ms_diffuse"], 1) if r else "—")
+        # Speedup against the scalar loop of the same compiler, which is the
+        # only comparison the row supports: the assembly is identical across
+        # compilers by construction.
+        rel = []
+        for cc in ccs:
+            base, cur = by.get((cc, "no-simd")), by.get((cc, k))
+            rel.append(f"{base['ms_diffuse'] / cur['ms_diffuse']:.2f}×"
+                       if base and cur else "—")
+        body.append([names[k]] + cells + rel)
+
+    hashes = {r["grid_hash"] for r in rows}
+    note = ""
+    if len(hashes) == 1:
+        note = f"\nAlle drei Kerne, beide Compiler, ein Grid-Hash: `{hashes.pop()}`\n"
+    return (f"### §6b Diffusionskerne, `{preset}` {w}²\n"
+            + table(["Kern"] + [f"{c} ms" for c in ccs] + [f"{c} rel." for c in ccs],
+                    body)
+            + note + "\n")
+
+
+def sec_gil(d: pathlib.Path) -> str:
+    """{GIL, no-GIL} x {threads, processes} x thread count.
+
+    Everything else is held fixed -- same Worker, same phase order, same
+    reduction, same host -- so a difference between two cells is attributable
+    to the carrier and the interpreter and nothing else.
+    """
+    rows = load(d, "P-gil-matrix.jsonl")
+    if not rows:
+        return ""
+    base = {r["interp"]: r["ms_total"] for r in rows if r["mp_backend"] == "serial"}
+    if not base:
+        return ""
+    interps = [i for i in ("gil", "nogil") if i in base]
+    names = {"gil": "3.12", "nogil": "3.14t"}
+    threads = [2, 4, 8, 16]
+
+    out = []
+    preset = rows[0]["preset"]
+    out.append(f"### §5b CPython, GIL gegen Free-Threading, `{preset}`\n")
+    out.append("\nEin Thread: "
+               + ", ".join(f"{names[i]} {fnum(base[i])} ms" for i in interps)
+               + ". Die Interpreter tragen numpy 2.5.2 bzw. 1.26.4, dieses Paar "
+                 "ist also konfundiert und sagt nichts über die Kosten des "
+                 "Free-Threading aus.\n\n")
+
+    for red in ("binned", "private"):
+        cols, body = [], []
+        for i in interps:
+            for be in ("threads", "processes"):
+                cols.append((i, be))
+        for t in threads:
+            cells = []
+            for i, be in cols:
+                m = [r for r in rows
+                     if r["interp"] == i and r["mp_backend"] == be
+                     and r["threads"] == t and red in (r.get("variant") or "")]
+                cells.append(f"{fnum(m[0]['ms_total'])} ({base[i] / m[0]['ms_total']:.2f}×)"
+                             if m else "—")
+            body.append([f"T={t}"] + cells)
+        if body:
+            out.append(f"\n**{red}** — ms, in Klammern der Speedup gegen "
+                       "denselben Interpreter bei einem Thread\n\n")
+            be_de = {"threads": "Threads", "processes": "Prozesse"}
+            out.append(table([""] + [f"{names[i]} {be_de[be]}" for i, be in cols], body))
+
+    hashes = {(r["grid_hash"], r["agent_hash"]) for r in rows}
+    if len(hashes) == 1:
+        g, a = hashes.pop()
+        out.append(f"\nAlle {len(rows)} Läufe: Grid `{g}`, Agenten `{a}`.\n")
+    return "".join(out) + "\n"
+
+
 def sec_gpu(d: pathlib.Path) -> str:
     rows = load(d, "H-gpu.jsonl")
     if not rows:
@@ -251,8 +346,8 @@ def main() -> int:
     if env.exists():
         print("```\n" + env.read_text(encoding="utf-8").rstrip() + "\n```\n")
 
-    for fn in (sec_crosslang, sec_compilers, sec_parallel, sec_gpu,
-               sec_render, sec_footprint):
+    for fn in (sec_crosslang, sec_compilers, sec_parallel, sec_gil,
+               sec_kernels, sec_gpu, sec_render, sec_footprint):
         s = fn(d)
         if s:
             print(s)

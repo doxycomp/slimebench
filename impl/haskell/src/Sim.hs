@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -53,6 +54,7 @@ module Sim
 
 import Control.Monad (forM_)
 import Data.Array.Base (unsafeAt, unsafeRead, unsafeWrite)
+import Data.Array.Unboxed (UArray, (!))
 import Data.Array.IO (IOUArray, getElems, newArray)
 import Data.Bits (shiftL, shiftR, xor, (.&.), (.|.))
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
@@ -165,6 +167,26 @@ wrapf !v0 !m =
   let !v1 = if v0 < 0.0 then v0 + m else v0
   in if v1 >= m then v1 - m else v1
 {-# INLINE wrapf #-}
+
+-- | The trig lookup, behind a switch, because the difference between the two
+-- ways of writing it is a benchmark result rather than a matter of taste.
+--
+-- @unsafeAt@ is what the port uses. @(!)@ is the obvious way to write it, goes
+-- through the @Ix@ class to compute the offset and range-checks it, and GHC
+-- eliminates neither even though the bounds are a compile-time constant. The
+-- index here has already been reduced mod NDIR, so the check can never fire.
+--
+-- Building the same source both ways (profile @o2-llvm-safetrig@) is what
+-- makes section 4 of docs/RESULTS.md a measurement instead of a memory: the
+-- slow variant was fixed rather than kept, and a comparison against a variant
+-- that no longer compiles is not reproducible.
+trigAt :: UArray Int Float -> Int -> Float
+#ifdef SB_SAFE_TRIG
+trigAt = (!)
+#else
+trigAt = unsafeAt
+#endif
+{-# INLINE trigAt #-}
 
 -- ---- construction ---------------------------------------------------------
 
@@ -290,8 +312,8 @@ agentRange Sim{..} !lo !hi !mAidx = do
 
       sense :: Float -> Float -> Int -> IO Float
       sense !x !y !d = do
-        let !sx = wrapf (x + (cosTable `unsafeAt` d) * cfgSensorDist) fw
-            !sy = wrapf (y + (sinTable `unsafeAt` d) * cfgSensorDist) fh
+        let !sx = wrapf (x + (cosTable `trigAt` d) * cfgSensorDist) fw
+            !sy = wrapf (y + (sinTable `trigAt` d) * cfgSensorDist) fh
             !ix = truncate sx .&. xmask
             !iy = truncate sy .&. ymask
         unsafeRead grid ((iy `shiftL` log2w) .|. ix)
@@ -323,8 +345,8 @@ agentRange Sim{..} !lo !hi !mAidx = do
                         then pure ((d0 - cfgRotSteps + ndirI) `mod` ndirI)
                         else pure ((d0 + cfgRotSteps) `mod` ndirI)
 
-            let !x = wrapf (x0 + (cosTable `unsafeAt` d) * cfgStep) fw
-                !y = wrapf (y0 + (sinTable `unsafeAt` d) * cfgStep) fh
+            let !x = wrapf (x0 + (cosTable `trigAt` d) * cfgStep) fw
+                !y = wrapf (y0 + (sinTable `trigAt` d) * cfgStep) fh
                 !ix = truncate x .&. xmask
                 !iy = truncate y .&. ymask
                 !idx = (iy `shiftL` log2w) .|. ix

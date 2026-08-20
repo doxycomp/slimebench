@@ -13,6 +13,10 @@ typedef struct {
     int freeze_sim;       /* --freeze-sim */
     const char *dump_grid;
     float display_max;
+    /* Overlay in the windowed frontends. Defaults on for a human and off
+     * under --json, because drawing it is work the class R number should
+     * not include. -1 means 'not asked for either way'. */
+    int want_hud;
 } sb_cli_opts;
 
 /* Returns 0 on success, 2 on a usage error (message already on stderr). */

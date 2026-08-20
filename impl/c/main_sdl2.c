@@ -10,7 +10,19 @@
 #include <stdlib.h>
 
 #include "sb_cli.h"
+#include "sb_hud_c.h"
 #include "sb_render.h"
+
+/* SDL keycodes for printable ASCII are the ASCII value, so the shared table
+ * covers everything except the three keys that have no character. */
+static sb_action sdl_action(SDL_Keycode k) {
+    switch (k) {
+    case SDLK_ESCAPE: return SB_ACT_QUIT;
+    case SDLK_TAB:    return SB_ACT_HUD;
+    case SDLK_F1:     return SB_ACT_HELP;
+    default:          return sb_hud_action_for_char((int)k);
+    }
+}
 
 int main(int argc, char **argv) {
     sb_config cfg;
@@ -49,21 +61,37 @@ int main(int argc, char **argv) {
 
     sb_render_stats stats;
     sb_rs_init(&stats, cfg.ticks == 0xFFFFFFFFu ? 100000 : cfg.ticks);
-    int running = 1;
+    sb_hud hud;
+    sb_hud_init(&hud, "c / sdl2", opt.want_hud);
+    sb_hud_view view = sb_hud_view_of(&sim);
 
-    for (uint32_t t = 0; running && t < cfg.ticks; t++) {
+    for (uint32_t t = 0; !hud.want_quit && t < cfg.ticks; t++) {
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
-            if (e.type == SDL_QUIT) running = 0;
-            if (e.type == SDL_KEYDOWN &&
-                (e.key.keysym.sym == SDLK_ESCAPE || e.key.keysym.sym == SDLK_q))
-                running = 0;
+            if (e.type == SDL_QUIT) hud.want_quit = 1;
+            if (e.type == SDL_KEYDOWN)
+                sb_hud_apply(&hud, &view, &opt.freeze_sim, &opt.display_max,
+                             sdl_action(e.key.keysym.sym));
         }
+        sb_hud_view_into(&view, &sim);
+        if (!sb_hud_service(&hud, &sim, &view)) break;
 
-        if (!opt.freeze_sim) sb_tick(&sim);
+        const uint64_t s0 = sb_now_ns();
+        if (!opt.freeze_sim && (!hud.paused || hud.step_once)) {
+            sb_tick(&sim);
+            hud.tick++;
+            hud.step_once = 0;
+        }
+        const double sim_ms = (double)(sb_now_ns() - s0) / 1e6;
 
         const uint64_t r0 = sb_now_ns();
         sb_render_gray(&sim, gray, opt.display_max);
+
+        /* Timed separately and subtracted below: the overlay is not part of
+         * the grid -> texture -> screen path the class R number reports. */
+        const uint64_t h0 = sb_now_ns();
+        sb_hud_draw(&hud, &view, gray, opt.display_max);
+        const uint64_t hud_ns = sb_now_ns() - h0;
 
         void *pixels = NULL;
         int pitch = 0;
@@ -81,7 +109,9 @@ int main(int argc, char **argv) {
         SDL_RenderClear(ren);
         SDL_RenderCopy(ren, tex, NULL, NULL);
         SDL_RenderPresent(ren);
-        sb_rs_add(&stats, sb_now_ns() - r0);
+        const uint64_t frame_ns = sb_now_ns() - r0;
+        sb_rs_add(&stats, frame_ns - hud_ns);
+        sb_hud_observe(&hud, sim_ms, (double)(frame_ns - hud_ns) / 1e6);
 
         if (stats.since_title >= 60) {
             const double ms = sb_rs_recent_mean(&stats, 60);
@@ -94,7 +124,11 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (opt.want_json) sb_rs_emit_json(&stats, &sim, "c", "sdl2");
+    if (opt.want_json) {
+        char backend[32];
+        snprintf(backend, sizeof backend, "sdl2%s", sb_hud_json_suffix(&hud));
+        sb_rs_emit_json(&stats, &sim, "c", backend);
+    }
 
     sb_rs_free(&stats);
     free(gray);

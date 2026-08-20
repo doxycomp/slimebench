@@ -19,6 +19,7 @@
 #include "sb_agent.h"
 #include "sb_barrier.h"
 #include "sb_simd.h"
+#include "sb_asm.h"
 
 typedef struct sb_worker {
     sb_pool *pool;
@@ -277,7 +278,9 @@ static void phase_diffuse(sb_pool *p, uint32_t tid) {
     sb_sim *s = p->sim;
     uint32_t lo, hi;
     split(s->cfg.height, p->nthreads, tid, &lo, &hi);
-    if (s->cfg.simd)
+    if (s->cfg.use_asm)
+        sb_diffuse_rows_asm(s, s->grid, s->scratch, lo, hi);
+    else if (s->cfg.simd)
         sb_diffuse_rows_simd(s, s->grid, s->scratch, lo, hi);
     else
         sb_diffuse_rows(s, s->grid, s->scratch, lo, hi);

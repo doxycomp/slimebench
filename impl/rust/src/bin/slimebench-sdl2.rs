@@ -19,6 +19,8 @@ use sdl2::pixels::PixelFormatEnum;
 mod cli;
 #[path = "../dirtable.rs"]
 mod dirtable;
+#[path = "../hud.rs"]
+mod hud;
 #[path = "../parallel.rs"]
 mod parallel;
 #[path = "../render.rs"]
@@ -28,8 +30,30 @@ mod simd;
 #[path = "../sim.rs"]
 mod sim;
 
+use hud::{Action, Hud};
 use render::RenderStats;
 use sim::{now_ns, Sim};
+
+/// SDL keycodes for printable ASCII are the ASCII value, so the shared table
+/// covers everything except the three keys that have no character.
+fn sdl_action(k: Keycode) -> Action {
+    match k {
+        Keycode::Escape => Action::Quit,
+        Keycode::Tab => Action::Hud,
+        Keycode::F1 => Action::Help,
+        other => {
+            // Keycode has no numeric cast in rust-sdl2; its Display impl is
+            // the SDL key name, which for a printable key is that character.
+            let name = other.name();
+            let mut chars = name.chars();
+            match (chars.next(), chars.next()) {
+                (Some(c), None) if c.is_ascii() => hud::action_for_char(c),
+                _ if name == "Space" => hud::action_for_char(' '),
+                _ => Action::None,
+            }
+        }
+    }
+}
 
 fn main() {
     let o = cli::parse_args();
@@ -61,21 +85,42 @@ fn main() {
     let cells = (cfg.width * cfg.height) as usize;
     let mut gray = vec![0u8; cells];
     let mut stats = RenderStats::new(if frames == u32::MAX { 100_000 } else { frames as usize });
+    let mut hud = Hud::new("rust / sdl2", o.want_hud);
+    let mut freeze = o.freeze_sim;
+    let mut bright = o.display_max;
 
-    'outer: for _ in 0..frames {
+    for _ in 0..frames {
         for ev in events.poll_iter() {
             match ev {
-                Event::Quit { .. }
-                | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => break 'outer,
+                Event::Quit { .. } => hud.want_quit = true,
+                Event::KeyDown { keycode: Some(k), .. } => {
+                    let a = sdl_action(k);
+                    hud.apply(&mut simulation.cfg, &mut freeze, &mut bright, a);
+                }
                 _ => {}
             }
         }
-        if !o.freeze_sim {
-            simulation.tick();
+        hud.service(&mut simulation);
+        if hud.want_quit {
+            break;
         }
 
+        let s0 = now_ns();
+        if !freeze && (!hud.paused || hud.step_once) {
+            simulation.tick();
+            hud.tick += 1;
+            hud.step_once = false;
+        }
+        let sim_ms = (now_ns() - s0) as f64 / 1e6;
+
         let r0 = now_ns();
-        simulation.render_gray(&mut gray, o.display_max);
+        simulation.render_gray(&mut gray, bright);
+
+        // Timed separately and subtracted below: the overlay is not part of
+        // the grid -> texture -> screen path the class R number reports.
+        let h0 = now_ns();
+        hud::draw(&hud, &simulation.cfg, &mut gray, bright);
+        let hud_ns = now_ns() - h0;
         tex.with_lock(None, |buf: &mut [u8], pitch: usize| {
             for y in 0..cfg.height as usize {
                 let row = &mut buf[y * pitch..y * pitch + cfg.width as usize * 4];
@@ -92,7 +137,9 @@ fn main() {
         canvas.clear();
         canvas.copy(&tex, None, None).expect("copy");
         canvas.present();
-        stats.add(now_ns() - r0);
+        let frame_ns = now_ns() - r0;
+        stats.add(frame_ns - hud_ns);
+        hud.observe(sim_ms, (frame_ns - hud_ns) as f64 / 1e6);
 
         if stats.since_title >= 60 {
             let ms = stats.recent_mean(60);
@@ -106,7 +153,8 @@ fn main() {
     }
 
     if o.want_json {
-        if let Some(j) = stats.json(&simulation, "sdl2") {
+        let backend = format!("sdl2{}", hud.json_suffix());
+        if let Some(j) = stats.json(&simulation, &backend) {
             println!("{j}");
         }
     }

@@ -31,6 +31,7 @@ typedef struct {
     sb_update_mode update;
     sb_reduce_mode reduce;
     int simd;                 /* class V: vectorised diffusion pass */
+    int use_asm;              /* class V: hand-written assembly kernel */
 
     float sensor_dist;
     float step;

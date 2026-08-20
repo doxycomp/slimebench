@@ -16,6 +16,8 @@ use std::ffi::CString;
 mod cli;
 #[path = "../dirtable.rs"]
 mod dirtable;
+#[path = "../hud.rs"]
+mod hud;
 #[path = "../parallel.rs"]
 mod parallel;
 #[path = "../render.rs"]
@@ -25,6 +27,7 @@ mod simd;
 #[path = "../sim.rs"]
 mod sim;
 
+use hud::{Action, Hud};
 use render::RenderStats;
 use sim::{now_ns, Sim};
 
@@ -44,6 +47,9 @@ fn main() {
     let cells = (cfg.width * cfg.height) as usize;
     let mut gray = vec![0u8; cells];
     let mut stats = RenderStats::new(if frames == u32::MAX { 100_000 } else { frames as usize });
+    let mut hud = Hud::new("rust / raylib", o.want_hud);
+    let mut freeze = o.freeze_sim;
+    let mut bright = o.display_max;
 
     // The safe wrapper owns the window handle and will not hand out a raw
     // Texture2D to UpdateTexture, so the frontend goes through raylib::ffi
@@ -53,6 +59,9 @@ fn main() {
         ffi::SetTraceLogLevel(ffi::TraceLogLevel::LOG_WARNING as i32);
         let title = CString::new("slimebench -- Rust / raylib").unwrap();
         ffi::InitWindow(cfg.width as i32, cfg.height as i32, title.as_ptr());
+        // raylib closes the window on Escape by default; the HUD wants to see
+        // the key so quitting goes through the same path in both frontends.
+        ffi::SetExitKey(0);
 
         let img = ffi::Image {
             data: gray.as_mut_ptr() as *mut std::ffi::c_void,
@@ -69,19 +78,58 @@ fn main() {
             if ffi::WindowShouldClose() {
                 break;
             }
-            if !o.freeze_sim {
-                simulation.tick();
+            // GetCharPressed drains the character queue; the three
+            // non-character keys are polled separately.
+            loop {
+                let ch = ffi::GetCharPressed();
+                if ch == 0 {
+                    break;
+                }
+                let a = if (0..128).contains(&ch) {
+                    hud::action_for_char(ch as u8 as char)
+                } else {
+                    Action::None
+                };
+                hud.apply(&mut simulation.cfg, &mut freeze, &mut bright, a);
+            }
+            for (key, act) in [
+                (ffi::KeyboardKey::KEY_ESCAPE, Action::Quit),
+                (ffi::KeyboardKey::KEY_TAB, Action::Hud),
+                (ffi::KeyboardKey::KEY_F1, Action::Help),
+            ] {
+                if ffi::IsKeyPressed(key as i32) {
+                    hud.apply(&mut simulation.cfg, &mut freeze, &mut bright, act);
+                }
+            }
+            hud.service(&mut simulation);
+            if hud.want_quit {
+                break;
             }
 
+            let s0 = now_ns();
+            if !freeze && (!hud.paused || hud.step_once) {
+                simulation.tick();
+                hud.tick += 1;
+                hud.step_once = false;
+            }
+            let sim_ms = (now_ns() - s0) as f64 / 1e6;
+
             let r0 = now_ns();
-            simulation.render_gray(&mut gray, o.display_max);
+            simulation.render_gray(&mut gray, bright);
+
+            let h0 = now_ns();
+            hud::draw(&hud, &simulation.cfg, &mut gray, bright);
+            let hud_ns = now_ns() - h0;
+
             ffi::UpdateTexture(tex, gray.as_ptr() as *const std::ffi::c_void);
 
             ffi::BeginDrawing();
             ffi::ClearBackground(black);
             ffi::DrawTexture(tex, 0, 0, white);
             ffi::EndDrawing();
-            stats.add(now_ns() - r0);
+            let frame_ns = now_ns() - r0;
+            stats.add(frame_ns - hud_ns);
+            hud.observe(sim_ms, (frame_ns - hud_ns) as f64 / 1e6);
 
             if stats.since_title >= 60 {
                 let ms = stats.recent_mean(60);
@@ -101,7 +149,8 @@ fn main() {
     }
 
     if o.want_json {
-        if let Some(j) = stats.json(&simulation, "raylib") {
+        let backend = format!("raylib{}", hud.json_suffix());
+        if let Some(j) = stats.json(&simulation, &backend) {
             println!("{j}");
         }
     }

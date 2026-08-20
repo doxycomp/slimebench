@@ -124,6 +124,7 @@ class Target:
     def subst(self, s: str, cc: str, profile: str) -> str:
         out = s.replace("{cc}", cc).replace("{profile}", profile)
         out = out.replace("{dir}", str(self.dir))
+        out = out.replace("{python314t}", free_threaded_python())
         if self.binary:
             b = self.binary.replace("{cc}", cc).replace("{profile}", profile)
             out = out.replace("{binary}", str(self.dir / b))
@@ -338,6 +339,10 @@ def bench_one(t: Target, cc: str, profile: str, a: argparse.Namespace) -> dict:
 
     argv = [t.subst(x, cc, profile) for x in t.run] + sim_args(a) + t.extra_args
     argv[0] = resolve_exe(argv[0])
+    if not runnable(argv):
+        print(f"   {argv[0]} not found, skipping")
+        return {"target": t.id, "lang": t.lang, "cc": cc, "profile": profile,
+                "status": "unavailable"}
 
     reps: list[dict] = []
     for i in range(a.reps):
@@ -386,9 +391,43 @@ def bench_one(t: Target, cc: str, profile: str, a: argparse.Namespace) -> dict:
     }
 
 
+def free_threaded_python() -> str:
+    """Path to a free-threaded CPython, or a name that will not resolve.
+
+    It is deliberately not on PATH as `python3`: a free-threaded build installs
+    beside the stock one. SLIMEBENCH_PY314T overrides; the default is where the
+    setup script puts it.
+    """
+    env = os.environ.get("SLIMEBENCH_PY314T")
+    if env:
+        return env
+    cand = pathlib.Path.home() / "opt" / "ft314" / "bin" / "python"
+    return str(cand) if cand.exists() else "python3.14t-not-installed"
+
+
+def runnable(argv: list[str]) -> bool:
+    """Whether argv[0] is something the OS can actually start.
+
+    Cheap, and it catches the failure mode that produced this function: a
+    target whose command still held an unexpanded placeholder ran ten
+    conformance cases and reported ten divergences, where the honest answer
+    was that it never started. A target that cannot run is a skip, not a
+    failure -- but only if someone checks.
+    """
+    exe = argv[0]
+    if "/" in exe or "\\" in exe:
+        return pathlib.Path(exe).exists()
+    return shutil.which(exe) is not None
+
+
 def resolve_exe(x: str) -> str:
+    # absolute(), not resolve(): a virtualenv's bin/python is a symlink to the
+    # base interpreter, and a venv works by the path it was *invoked* through.
+    # Following the link lands on the base interpreter, which cannot see the
+    # venv's site-packages -- the free-threaded target failed conformance ten
+    # times with "No module named numpy" before this comment existed.
     if "/" in x or "\\" in x:
-        return str(Path(x).resolve())
+        return os.path.normpath(str(Path(x).absolute()))
     found = shutil.which(x)
     return found if found else x
 
@@ -503,6 +542,11 @@ def cmd_conformance(a: argparse.Namespace) -> int:
                        t.profiles[0])
         if t.build and not shutil.which(cc.split("/")[-1]):
             print(f"-- {t.id}: {cc} not installed, skipping")
+            continue
+        probe = [t.subst(x, cc, profile) for x in t.run]
+        probe[0] = resolve_exe(probe[0])
+        if not runnable(probe):
+            print(f"-- {t.id}: {probe[0]} not found, skipping")
             continue
 
         b = do_build(t, cc, profile, a.verbose)
