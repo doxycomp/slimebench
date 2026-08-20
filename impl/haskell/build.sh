@@ -34,6 +34,11 @@ case "$PROFILE" in
   o1)             OPT=(-O1) ;;
   o2)             OPT=(-O2) ;;
   o2-llvm)        OPT=(-O2 -fllvm) ;;
+  # The style axis of docs/RESULTS.md section 4: the same source with the
+  # obvious Data.Array.Unboxed.(!) trig lookup instead of unsafeAt. Slower on
+  # purpose; it exists so the comparison can be re-run rather than remembered.
+  o2-llvm-safetrig)
+                  OPT=(-O2 -fllvm -DSB_SAFE_TRIG) ;;
   o2-vector)      OPT=(-O2);         MAIN=src/MainVector.hs ;;
   o2-llvm-vector) OPT=(-O2 -fllvm);  MAIN=src/MainVector.hs ;;
   # Windowed frontends (class R). Separate profiles rather than separate

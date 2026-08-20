@@ -142,6 +142,32 @@ python3 bench/run.py bench --preset small --ticks 300 --reps 3 \
 phase "class V, diffusion kernels: scalar / intrinsics / assembly"
 bench/asm-kernels.sh "$OUT/V-asm-kernels.jsonl" medium 100 || true
 
+# ---- 3b. the style axis --------------------------------------------------
+# One language, three ways of writing it, against the C reference. This used
+# to be a file copied in from whichever session produced it; the (!) variant
+# is now a build profile, so the comparison re-runs with everything else.
+phase "Haskell style axis, 1024x1024, 300 ticks"
+: > "$OUT/M-haskell-style.jsonl"
+style() { # variant-label cmd...
+  local label=$1; shift
+  local ms hg
+  local line
+  line=$(timeout 1800 "$@" --preset small --ticks 300 --update deferred 2>/dev/null) || {
+    echo "  $label FAILED"; return; }
+  ms=$(echo "$line" | awk '/^  total/{print $2}')
+  hg=$(echo "$line" | awk '/^  grid_hash/{print $2}')
+  [ -z "$ms" ] && { echo "  $label no output"; return; }
+  printf '{"schema":1,"impl":"haskell","class":"S","preset":"small","ticks":300,''"update":"deferred","variant":"%s","ms_total":%s,"grid_hash":"%s"}
+'     "$label" "$ms" "$hg" >> "$OUT/M-haskell-style.jsonl"
+  printf '  %-34s %9s ms  %s
+' "$label" "$ms" "$hg"
+}
+( cd impl/haskell && ./build.sh o2-llvm-safetrig ) >/dev/null 2>&1
+style "C reference (clang -O3 -native)" impl/c/build/clang-o3-native/slimebench-headless
+style "haskell lowlevel, (!) lookups"   impl/haskell/build/o2-llvm-safetrig/slimebench
+style "haskell lowlevel, unsafeAt"      impl/haskell/build/o2-llvm/slimebench
+style "haskell idiomatic (vector)"      impl/haskell/build/o2-llvm-vector/slimebench
+
 # ---- 4. class P ----------------------------------------------------------
 # One thread sweep per language. Perl runs at `tiny`: `medium` there is hours,
 # and the shape of its curve is the datapoint, not a cross-language absolute.
