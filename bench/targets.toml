@@ -656,6 +656,21 @@ skip_conformance = true
 
 # ------------------------------------------------------------------- Swift
 
+# ------------------------------------------------------------------------ Lean
+
+[[target]]
+id       = "lean"
+lang     = "Lean"
+backend  = "headless"
+class    = "S"
+dir      = "impl/lean"
+build    = "./build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["lake"]
+profiles  = ["default", "o3-native"]
+optional = true
+
 [[target]]
 id       = "swift"
 lang     = "Swift"

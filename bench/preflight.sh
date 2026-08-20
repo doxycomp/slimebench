@@ -78,6 +78,7 @@ echo
 # and `swiftc`, not to reorder anything already on PATH.
 [ -d "$HOME/opt/go/bin" ]        && export PATH="$PATH:$HOME/opt/go/bin"
 [ -d "$HOME/opt/swift/usr/bin" ] && export PATH="$PATH:$HOME/opt/swift/usr/bin"
+[ -d "$HOME/.elan/bin" ]         && export PATH="$PATH:$HOME/.elan/bin"
 
 echo "=== compilers ==="
 have_tool "gcc"     gcc     "class S/P/V/R for C"
@@ -91,6 +92,7 @@ have_tool "python3" python3 "class S/P/G/R for Python -- and the harness itself"
 have_tool "perl"    perl    "class S/P/R for Perl"
 have_tool "go"      go      "class S/P for Go"
 have_tool "swiftc"  swiftc  "class S/P for Swift"
+have_tool "lake"    lake    "class S for Lean 4"
 have_tool "nvcc"    nvcc    "class G via CUDA"
 
 echo

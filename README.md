@@ -1,6 +1,6 @@
 # slimebench
 
-A Physarum (slime mould) simulation in nine languages — with a verification
+A Physarum (slime mould) simulation in ten languages — with a verification
 mechanism that proves the same simulation really is running everywhere, and a
 harness for performance and footprint comparisons across languages, rendering
 backends and compilers.
@@ -23,6 +23,7 @@ backends and compilers.
 | Haskell (2 styles) | ✅ | ✅ | ✅ | ✅ | — | tier A |
 | Go | ✅ | ✅ | — | — | — | tier A |
 | Swift | ✅ | ✅ | — | — | — | tier A |
+| Lean 4 | ✅ | — | — | — | — | tier A |
 | TypeScript / Node | ✅ | ✅ | — | — | — | tier A |
 | TypeScript / Canvas | — | — | ✅ browser | — | sliders | tier A |
 | Python / numpy | ✅ | ✅ | ✅ pygame | ✅ | — | tier A, `deferred` only |
@@ -32,7 +33,7 @@ backends and compilers.
 Plus two GPU hosts that are not languages of their own: CUDA and GLSL compute
 (the latter driven from C and from Python, out of the same shader source).
 
-**All nine languages pass `bench/run.py conformance`.** Seven of them are
+**All ten languages pass `bench/run.py conformance`.** Eight of them are
 bit-exact against the C reference on both the grid *and* the agent checksum,
 across `micro`/`tiny`/`small` × `serial`/`deferred` × tick counts
 {1, 10, 100, 1000}. Python and Perl reach bit-exactness with `--strict-f32`.
@@ -49,8 +50,8 @@ The same simulation, `medium` (2048², 1 M agents), 100 ticks:
 | P — 32 threads | **Go**, `binned` | 516 | **8.5×** |
 | G — GPU | CUDA, RTX 5080 | **44** | **100×** |
 
-Class P exists in all nine languages, every one of them bit-identical to the
-serial run — and it is won by neither C nor C++, but by Go:
+Class P exists in nine of the ten languages, every one of them bit-identical
+to the serial run — and it is won by neither C nor C++, but by Go:
 
 ![Scaling across languages](docs/charts/scaling-langs.svg)
 
@@ -206,6 +207,12 @@ bench/gil-matrix.sh results/P-gil-matrix.jsonl small 100
   **7.3× slower** than with one. Without the GIL the same configuration is
   2.7× *faster*, and threads then beat processes wherever the reduction has
   many phases. [bench/gil-matrix.sh](bench/gil-matrix.sh).
+- **What a proof assistant does with a mutable-array workload.** Lean 4
+  lands at 8.9× C, between TypeScript and pure Python — and gets there in
+  native `Float32`, because Lean's is IEEE binary32 (verified against
+  `round_f32(f64_op(a,b))` over 50 000 pairs). Its arrays are copy-on-write
+  with refcounting, so a write loop is O(n), not O(n²).
+  [impl/lean/Slimebench/Sim.lean](impl/lean/Slimebench/Sim.lean).
 - **Everything that did not work.** PGO, the parallel prefix sum, the load
   balancer, the pure spin barrier — four plausible optimisations, one usable
   result. With reasoning in

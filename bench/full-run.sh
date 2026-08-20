@@ -68,6 +68,7 @@ echo "==> writing to $OUT"
 # and `swiftc`, not to reorder anything already on PATH.
 [ -d "$HOME/opt/go/bin" ]        && export PATH="$PATH:$HOME/opt/go/bin"
 [ -d "$HOME/opt/swift/usr/bin" ] && export PATH="$PATH:$HOME/opt/swift/usr/bin"
+[ -d "$HOME/.elan/bin" ]         && export PATH="$PATH:$HOME/.elan/bin"
 
 # WSL reaches the discrete GPU only through Mesa's D3D12 backend; setting these
 # on a native driver would replace a working GL stack with a broken one. The
