@@ -211,6 +211,55 @@ ratio: 3.5, 4.9, 3.8 — not 16.
 1.5 % slower than the default, which is inside the noise. The generated C is
 dominated by Lean runtime calls, and a C compiler cannot improve those.
 
+#### Class P: the only language where the obstacle is not the barrier
+
+Every other port's class P problem is synchronisation — workers share one grid
+and coordinate at six barriers per tick. Lean has no shared mutable grid to
+coordinate over. Its arrays are reference-counted and copy-on-write, so two
+tasks holding the same destination buffer would each copy it on the first
+write. The design space is *ownership*, not synchronisation, and it allows
+three shapes. All three were measured, all three are bit-identical to the
+serial run (`0xBEBD17BD`), and the experiment is
+[`bench/lean-tasks.sh`](../bench/lean-tasks.sh):
+
+| Shape | T=2 | T=4 | T=8 | T=16 |
+|---|---:|---:|---:|---:|
+| striped, boxed ¹ | 0.38× | 0.45× | 0.49× | 0.50× |
+| sliced, boxed | 0.45× | 0.51× | 0.55× | 0.54× |
+| **sliced, unboxed** | 1.02× | 1.36× | **1.52×** | 1.44× |
+
+Speedup against the serial version *of the same representation*,
+`LEAN_NUM_THREADS=16`, 512², diffusion pass only.
+
+**With the natural representation, tasks make it slower at every thread
+count.** `Array Float32` stores every element as a heap object. Once an array
+is shared with a task Lean marks it multi-threaded and reference-counts it
+atomically — so nine reads per cell become nine atomic read-modify-writes per
+cell, and no number of cores buys that back.
+
+**Storing the f32 bit patterns in an `Array UInt32` removes the per-element
+object**, and the same code then reaches 1.52× at eight tasks. But that
+representation is 19 % *slower* serially (the `ofBits`/`toBits` conversions),
+so measured end to end against the best serial version the win is **1.27×**,
+not 1.52×.
+
+For comparison, the other eight languages reach 6.8× to 9.5× on the same
+axis. Lean is the outlier, and the reason is structural rather than a missing
+optimisation: a language whose memory model makes sharing expensive pays for
+it exactly where a benchmark like this looks.
+
+The port therefore ships **class S only**. A class P target reaching 1.2×
+would sit in the §5 scaling table next to eight languages that parallelise the
+whole tick, and it would parallelise the diffusion pass alone — the agent pass
+needs a shared deposit buffer, which is the thing that does not exist here.
+Putting it in that table would compare two different things, which is what
+benchmark classes exist to prevent.
+
+¹ `Array (Array Float32)`, one block per task. A first version indexed the
+nested array nine times per cell and cost 4.7× against serial; resolving the
+three source blocks once per row halved that. It is in the table because the
+gap between the two is a fair warning about where the cost hides.
+
 The next full run will fold Lean into the tables and this section can go.
 
 ### What bit-exactness costs in the scripting languages
@@ -1089,9 +1138,11 @@ instead of "divergence" ten times. A tool that reports *wrong* where it means
 - **Why Go wins class P.** Swap the barriers between implementations, or
   instrument the wait time per phase. The explanation in §5 is plausible and
   unmeasured, and that category has a poor record in §12.
-- **Class P for Lean.** The port is class S only. Lean has `Task` and
-  `IO.asTask`, so the shape exists; whether a barrier over them is cheap
-  enough to be worth measuring is unknown.
+- **Class P for Lean — measured, and the answer is no.** Not "unknown" any
+  more: three ownership shapes, all bit-exact, best 1.27× end to end against
+  8–9× elsewhere (§2). What remains genuinely open is whether an FFI escape to
+  a raw buffer would change it, which would be measuring C through Lean rather
+  than Lean.
 - **The HUD in Haskell, Perl and Python.** Six frontends have it, six do not.
   The 5×7 font is deliberately data in a header so a port can adopt it; the
   Rust version is generated from the C one and checked against it through a

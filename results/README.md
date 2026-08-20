@@ -56,6 +56,11 @@ Older `run-*/` directories are left in place. They are internally consistent
 and therefore still usable; they are simply no longer the ones the document
 quotes.
 
+`P-lean-tasks.txt` is the Lean class P experiment — three ownership shapes
+against the serial run, at two thread-pool sizes. It is a text table rather
+than JSONL because nothing generates a chart from it and inventing a schema
+for one experiment would be worse than reading it.
+
 The root directory also holds a few individual measurements that belong to no
 series and are not meant to: `V-asm-kernels-reps9.jsonl`, for instance, is the
 control measurement with nine repetitions instead of three, used to check

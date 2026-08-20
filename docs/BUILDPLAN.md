@@ -323,6 +323,18 @@ only reason it landed bit-exact on the first run:
 
 Tier A on the full conformance set. 8.9× C at 256², class S only.
 
+Class P was then measured and declined. Lean has `Task` and `IO.asTask`, so
+the machinery exists, but its arrays are reference-counted: two tasks holding
+one destination buffer would each copy it. Three ownership shapes were
+measured, all bit-exact, and with the natural `Array Float32` every one of them
+is *slower* than serial at every thread count — a shared array is marked
+multi-threaded and its boxed elements are then reference-counted atomically,
+nine times per cell. Storing bit patterns in an `Array UInt32` removes that and
+reaches 1.52× at eight tasks, but costs 19 % serially, so the end-to-end win is
+1.27× against 6.8–9.5× elsewhere. The experiment stays in the tree as
+`bench/lean-tasks.sh`; the target stays class S. Reasoning in
+[RESULTS.md §2](RESULTS.md#2-language-comparison-class-s).
+
 ## Open
 
 - **A native Linux GL driver.** The GL numbers include Mesa's D3D12
