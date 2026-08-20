@@ -12,7 +12,7 @@
 # Exits 0 always. Missing toolchains are a fact about the machine, not an error.
 
 set -u
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
+cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 
 [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
 [ -f "$HOME/.ghcup/env" ] && . "$HOME/.ghcup/env"
