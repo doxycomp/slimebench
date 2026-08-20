@@ -1,0 +1,9 @@
+name = "slimebench"
+defaultTargets = ["slimebench"]
+
+[[lean_lib]]
+name = "Slimebench"
+
+[[lean_exe]]
+name = "slimebench"
+root = "Main"

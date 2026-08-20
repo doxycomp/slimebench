@@ -214,6 +214,41 @@ public let SIN_BITS: [UInt32] = [
     write(ROOT / "impl" / "swift" / "Sources" / "SlimebenchCore" / "DirTable.swift", body)
 
 
+def emit_lean(cos_b, sin_b, table_hash):
+    body = f"""-- {BANNER}
+-- SPEC-1 section 4: quantised direction table, NDIR={NDIR}.
+
+namespace Slimebench
+
+def NDIR : Nat := {NDIR}
+
+/-- Recomputed from the bit arrays at run time; this constant exists so the
+    generated value is greppable next to the data. -/
+def DIRTABLE_HASH : UInt32 := 0x{table_hash:08X}
+
+-- Bit patterns rather than Float32 literals. Lean parses `0.9781476` into the
+-- nearest f32, which is very probably the right bits -- but "very probably" is
+-- not what a bit-exactness claim rests on, and the other eight ports do it
+-- this way for the same reason.
+def cosBits : Array UInt32 := #[
+{chr(10).join(rows(cos_b))}
+]
+
+def sinBits : Array UInt32 := #[
+{chr(10).join(rows(sin_b))}
+]
+
+/-- Widened once at startup. Reads in the agent pass go through these, not
+    through `ofBits`, so the conversion is paid 2 * NDIR times per process
+    rather than four times per agent per tick. -/
+def cosTable : Array Float32 := cosBits.map Float32.ofBits
+def sinTable : Array Float32 := sinBits.map Float32.ofBits
+
+end Slimebench
+"""
+    write(ROOT / "impl" / "lean" / "Slimebench" / "DirTable.lean", body)
+
+
 def hex_lines(blob: bytes, per_line: int = 32) -> list[str]:
     h = blob.hex().upper()
     chunk = per_line * 2
@@ -370,6 +405,7 @@ def main() -> int:
     emit_haskell(blob, table_hash)
     emit_go(cos_b, sin_b, table_hash)
     emit_swift(cos_b, sin_b, table_hash)
+    emit_lean(cos_b, sin_b, table_hash)
     emit_bin(cos_b, sin_b)
     return 0
 
