@@ -70,6 +70,15 @@ case "$PWD" in
 esac
 
 echo
+# The same two $HOME toolchains full-run.sh adds, so preflight sees the
+# PATH the run will see.
+# Appended, not prepended, and that matters: the Swift toolchain ships its
+# own clang 21, which would shadow the system clang 18 and silently change
+# what the compiler matrix measured. These two entries exist to add `go`
+# and `swiftc`, not to reorder anything already on PATH.
+[ -d "$HOME/opt/go/bin" ]        && export PATH="$PATH:$HOME/opt/go/bin"
+[ -d "$HOME/opt/swift/usr/bin" ] && export PATH="$PATH:$HOME/opt/swift/usr/bin"
+
 echo "=== compilers ==="
 have_tool "gcc"     gcc     "class S/P/V/R for C"
 have_tool "clang"   clang   "the clang half of the compiler matrix"
@@ -80,6 +89,8 @@ have_tool "ghc"     ghc     "all Haskell targets"
 have_tool "node"    node    "class S and P for TypeScript"
 have_tool "python3" python3 "class S/P/G/R for Python -- and the harness itself"
 have_tool "perl"    perl    "class S/P/R for Perl"
+have_tool "go"      go      "class S/P for Go"
+have_tool "swiftc"  swiftc  "class S/P for Swift"
 have_tool "nvcc"    nvcc    "class G via CUDA"
 
 echo

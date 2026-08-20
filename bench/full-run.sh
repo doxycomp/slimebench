@@ -57,6 +57,16 @@ echo "==> writing to $OUT"
 [ -d /usr/local/cuda/bin ] && export PATH=/usr/local/cuda/bin:$PATH
 [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
 [ -f "$HOME/.ghcup/env" ] && . "$HOME/.ghcup/env"
+# Go and Swift install into $HOME rather than onto the system PATH, and
+# without these two lines run.py reports "compiler not installed" and
+# quietly drops both languages from class S -- which is how the first
+# series to include them came out with seven languages instead of nine.
+# Appended, not prepended, and that matters: the Swift toolchain ships its
+# own clang 21, which would shadow the system clang 18 and silently change
+# what the compiler matrix measured. These two entries exist to add `go`
+# and `swiftc`, not to reorder anything already on PATH.
+[ -d "$HOME/opt/go/bin" ]        && export PATH="$PATH:$HOME/opt/go/bin"
+[ -d "$HOME/opt/swift/usr/bin" ] && export PATH="$PATH:$HOME/opt/swift/usr/bin"
 
 # WSL reaches the discrete GPU only through Mesa's D3D12 backend; setting these
 # on a native driver would replace a working GL stack with a broken one. The
