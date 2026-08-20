@@ -21,8 +21,9 @@
 
 set -u
 
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
-ROOT=$PWD
+# A failed cd here would write the entire series into whatever directory
+# the caller happened to be in, so it is fatal rather than ignored.
+cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 
 # A git worktree checked out from Windows carries a .git file holding a
 # Windows path, which git-inside-WSL cannot resolve -- so the manifest recorded
