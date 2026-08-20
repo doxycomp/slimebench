@@ -211,6 +211,55 @@ ratio: 3.5, 4.9, 3.8 — not 16.
 1.5 % slower than the default, which is inside the noise. The generated C is
 dominated by Lean runtime calls, and a C compiler cannot improve those.
 
+#### Class P: the only language where the obstacle is not the barrier
+
+Every other port's class P problem is synchronisation — workers share one grid
+and coordinate at six barriers per tick. Lean has no shared mutable grid to
+coordinate over. Its arrays are reference-counted and copy-on-write, so two
+tasks holding the same destination buffer would each copy it on the first
+write. The design space is *ownership*, not synchronisation, and it allows
+three shapes. All three were measured, all three are bit-identical to the
+serial run (`0xBEBD17BD`), and the experiment is
+[`bench/lean-tasks.sh`](../bench/lean-tasks.sh):
+
+| Shape | T=2 | T=4 | T=8 | T=16 |
+|---|---:|---:|---:|---:|
+| striped, boxed ¹ | 0.38× | 0.45× | 0.49× | 0.50× |
+| sliced, boxed | 0.45× | 0.51× | 0.55× | 0.54× |
+| **sliced, unboxed** | 1.02× | 1.36× | **1.52×** | 1.44× |
+
+Speedup against the serial version *of the same representation*,
+`LEAN_NUM_THREADS=16`, 512², diffusion pass only.
+
+**With the natural representation, tasks make it slower at every thread
+count.** `Array Float32` stores every element as a heap object. Once an array
+is shared with a task Lean marks it multi-threaded and reference-counts it
+atomically — so nine reads per cell become nine atomic read-modify-writes per
+cell, and no number of cores buys that back.
+
+**Storing the f32 bit patterns in an `Array UInt32` removes the per-element
+object**, and the same code then reaches 1.52× at eight tasks. But that
+representation is 19 % *slower* serially (the `ofBits`/`toBits` conversions),
+so measured end to end against the best serial version the win is **1.27×**,
+not 1.52×.
+
+For comparison, the other eight languages reach 6.8× to 9.5× on the same
+axis. Lean is the outlier, and the reason is structural rather than a missing
+optimisation: a language whose memory model makes sharing expensive pays for
+it exactly where a benchmark like this looks.
+
+The port therefore ships **class S only**. A class P target reaching 1.2×
+would sit in the §5 scaling table next to eight languages that parallelise the
+whole tick, and it would parallelise the diffusion pass alone — the agent pass
+needs a shared deposit buffer, which is the thing that does not exist here.
+Putting it in that table would compare two different things, which is what
+benchmark classes exist to prevent.
+
+¹ `Array (Array Float32)`, one block per task. A first version indexed the
+nested array nine times per cell and cost 4.7× against serial; resolving the
+three source blocks once per row halved that. It is in the table because the
+gap between the two is a fair warning about where the cost hides.
+
 The next full run will fold Lean into the tables and this section can go.
 
 ### What bit-exactness costs in the scripting languages
@@ -465,18 +514,43 @@ ahead of C++ (551) and C (550) — from a 12 % single-thread deficit against C.
 It is also the only language whose `binned` curve still falls at 32 threads;
 C, C++, Haskell, Rust and Swift bottom out at 16 or turn back up after it.
 
-The shape of the curve says where it comes from: at T=4 Go is *well behind* C
-(1442 against 1112 ms), and at T=32 it is ahead. The advantage therefore grows
-with the number of participants, which points at synchronisation rather than
-the compute kernel — six barriers per tick times 32 workers is 192 wakeups, and
-Go's barrier is a `sync.Cond` over a mutex, parking waiting goroutines in the
-runtime scheduler where C uses `futex` and C++ `std::condition_variable`.
+The shape of the curve says where to look: at T=4 Go is *well behind* C
+(1442 against 1112 ms) and at T=32 it is ahead, so the advantage grows with the
+number of participants — synchronisation, not the compute kernel.
 
-> That is the plausible explanation, not the measured one. Establishing it
-> would mean swapping the barriers between implementations, or instrumenting
-> the wait time per phase; both are open. Per §12 of this document, unmeasured
-> performance explanations are the category in which I have been reliably
-> wrong.
+**That was a hypothesis, and it has now been measured.** Both implementations
+report the same work/barrier split under `SLIMEBENCH_PHASE_STATS=1`; three runs
+each, `medium`/100, T=32, `binned`, ms per tick, goroutine/thread 0:
+
+| | C | Go |
+|---|---|---|
+| work | 2.10 – 2.19 | 2.04 – 2.32 |
+| barrier | **3.23 – 3.31** | **2.67 – 2.84** |
+| barrier share of the tick | 61 % | 56 % |
+
+**The compute work is indistinguishable** — the two ranges overlap, and a
+single sample that appeared to show Go doing 10 % more did not survive
+repetition. **The barrier is not**: Go's is consistently around 17 % cheaper,
+outside the run-to-run spread of either.
+
+The difference concentrates in one phase. `prefix` is the step where worker 0
+computes the offset table alone and the other 31 wait:
+
+| Phase | C barrier | Go barrier |
+|---|---:|---:|
+| prefix | 0.530 | **0.210** |
+| agents | 1.068 | 0.680 |
+| merge | 0.657 | 0.878 |
+
+Go is 2.5× cheaper on the most one-sided wait in the tick and *loses* on
+`merge`, where all 32 workers arrive at roughly the same moment. That is the
+shape one would expect if parking a waiter in a user-space scheduler is cheap
+and waking a thundering herd of them is not — but that second half is now the
+hypothesis, and it is labelled as one.
+
+What the measurement settles is narrower and firmer than the original claim:
+Go wins class P at 32 threads because its barrier costs less, not because its
+kernel is faster.
 
 ### Determinism
 
@@ -1050,6 +1124,7 @@ was.
 | After `preflight.sh` says "18 present, 0 missing", everything is there | Go and Swift were not on the run's PATH and were silently skipped. preflight did not check them — which is precisely its job. |
 | Ten failed conformance cases mean ten cases diverge | They meant the program never started. One target carried a placeholder nothing expanded; then `resolve_exe` used `Path.resolve()` and pointed past the virtualenv at the base interpreter, which cannot see numpy. Both times the harness reported "divergence" instead of "not executable". |
 | Lean is blocked on which array idiom the compiler makes destructive | They all are. At 7.9 ns per element on an 8 M array a copying `set!` would be years of work, so the arithmetic refuted the question before any experiment did. Lean's arrays are copy-on-write with refcounting and a write loop is O(n) (§2). |
+| Give C a better barrier and it catches Go | It does not. `SLIMEBENCH_BARRIER=hybrid` measures 651 ms at T=32 against `pthread`'s 641 and Go's 584 — the three barrier implementations C already has are within 2 % of each other, so the gap is not something a different C barrier closes (§5). |
 | Putting a toolchain on PATH is harmless | Swift's toolchain ships clang 21. Prepended, it would have shadowed the system clang 18, and the compiler matrix would have gone on printing "clang". |
 
 One pattern: **every guess about performance that I did not measure was
@@ -1086,12 +1161,15 @@ instead of "divergence" ten times. A tool that reports *wrong* where it means
   linearly — but at `medium` that would be hours per data point. (The
   free-threaded CPython has arrived and is measured in §6; what remains open is
   only the pure interpreter without numpy.)
-- **Why Go wins class P.** Swap the barriers between implementations, or
-  instrument the wait time per phase. The explanation in §5 is plausible and
-  unmeasured, and that category has a poor record in §12.
-- **Class P for Lean.** The port is class S only. Lean has `Task` and
-  `IO.asTask`, so the shape exists; whether a barrier over them is cheap
-  enough to be worth measuring is unknown.
+- **Why Go's barrier is cheaper, phase by phase.** §5 now measures *that* it
+  is, and locates the gap in `prefix`. Why parking 31 waiters in a user-space
+  scheduler beats `futex` there while losing on `merge` is the next question,
+  and answering it means counting wakeups rather than timing them.
+- **Class P for Lean — measured, and the answer is no.** Not "unknown" any
+  more: three ownership shapes, all bit-exact, best 1.27× end to end against
+  8–9× elsewhere (§2). What remains genuinely open is whether an FFI escape to
+  a raw buffer would change it, which would be measuring C through Lean rather
+  than Lean.
 - **The HUD in Haskell, Perl and Python.** Six frontends have it, six do not.
   The 5×7 font is deliberately data in a header so a port can adopt it; the
   Rust version is generated from the C one and checked against it through a

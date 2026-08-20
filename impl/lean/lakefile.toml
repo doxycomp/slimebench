@@ -7,3 +7,10 @@ name = "Slimebench"
 [[lean_exe]]
 name = "slimebench"
 root = "Main"
+
+# The class P experiment. A separate executable rather than a flag on the main
+# one: it answers a question about the language, not about the simulation, and
+# it is not part of the benchmark matrix.
+[[lean_exe]]
+name = "lean-tasks"
+root = "Bench.Tasks"

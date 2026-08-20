@@ -1,0 +1,31 @@
+# host: Linux 6.18.33.2-microsoft-standard-WSL2  cores: 32
+# --- LEAN_NUM_THREADS=1 ---
+# Lean tasks on the SPEC-1 diffusion pass, 512x512, 20 ticks
+# LEAN_NUM_THREADS=(some 1)
+
+serial (boxed)      2.559964 ms/tick   1.00 x   0xBEBD17BD
+sliced boxed T=2   6.676090 ms/tick   0.383453 x   0xBEBD17BD
+sliced boxed T=4   5.597495 ms/tick   0.457341 x   0xBEBD17BD
+sliced boxed T=8   5.639058 ms/tick   0.453970 x   0xBEBD17BD
+sliced boxed T=16   5.556444 ms/tick   0.460720 x   0xBEBD17BD
+
+serial (unboxed)    2.885335 ms/tick   1.00 x   0xBEBD17BD
+sliced unboxed T=2 4.741136 ms/tick   0.608575 x   0xBEBD17BD
+sliced unboxed T=4 5.175516 ms/tick   0.557497 x   0xBEBD17BD
+sliced unboxed T=8 3.865515 ms/tick   0.746430 x   0xBEBD17BD
+sliced unboxed T=16 4.002839 ms/tick   0.720822 x   0xBEBD17BD
+# --- LEAN_NUM_THREADS=16 ---
+# Lean tasks on the SPEC-1 diffusion pass, 512x512, 20 ticks
+# LEAN_NUM_THREADS=(some 16)
+
+serial (boxed)      2.740000 ms/tick   1.00 x   0xBEBD17BD
+sliced boxed T=2   6.076284 ms/tick   0.450933 x   0xBEBD17BD
+sliced boxed T=4   5.401122 ms/tick   0.507302 x   0xBEBD17BD
+sliced boxed T=8   4.991422 ms/tick   0.548942 x   0xBEBD17BD
+sliced boxed T=16   5.055026 ms/tick   0.542035 x   0xBEBD17BD
+
+serial (unboxed)    3.270467 ms/tick   1.00 x   0xBEBD17BD
+sliced unboxed T=2 3.207851 ms/tick   1.019520 x   0xBEBD17BD
+sliced unboxed T=4 2.396195 ms/tick   1.364858 x   0xBEBD17BD
+sliced unboxed T=8 2.158685 ms/tick   1.515027 x   0xBEBD17BD
+sliced unboxed T=16 2.272474 ms/tick   1.439166 x   0xBEBD17BD
