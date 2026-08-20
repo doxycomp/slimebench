@@ -1,335 +1,330 @@
-# Buildplan
+# Build plan
 
-Reihenfolge ist nicht beliebig. Sie folgt zwei Regeln:
+The order is not arbitrary. It follows two rules:
 
-1. **Spec und Verifikation zuerst.** Jeder Port wird gegen Referenz-Prüfsummen
-   geprüft, bevor er gemessen wird. Ein Port ohne grüne Konformität ist kein
-   Datenpunkt, sondern eine Fehlerquelle.
-2. **Erst die Sprach-Achse (Klasse S) vollständig, dann Parallelität.**
-   Parallelisierung erst dann, wenn alle acht Sprachen single-threaded stehen —
-   sonst vergleichst du am Ende Thread-Pools statt Sprachen.
+1. **Spec and verification first.** Every port is checked against reference
+   checksums before it is measured. A port without a green conformance run is
+   not a data point, it is a source of error.
+2. **Finish the language axis (class S) before parallelism.** Parallelise only
+   once every language stands single-threaded — otherwise you end up comparing
+   thread pools instead of languages.
 
-Status: ✅ fertig · 🔨 als nächstes · ⬜ offen
+Status: ✅ done · 🔨 next · ⬜ open
+
+> The numbers inside each phase are the ones that were measured **when that
+> phase was done**, and they are left as they were: this file is a record of
+> how the project got here. For current figures — all from one series — see
+> [RESULTS.md](RESULTS.md).
 
 ---
 
-## Phase 0 — Fundament ✅
+## Phase 0 — Foundation ✅
 
-- ✅ `spec/SPEC.md` — normative Spezifikation
-- ✅ Richtungstabellen-Codegen (`spec/tools/gen_dirtable.py`)
-- ✅ `bench/run.py` — Build, Messung, Konformität, Report
-- ✅ `bench/targets.toml` — Registry Sprache × Compiler × Profil
+- ✅ `spec/SPEC.md` — the normative specification
+- ✅ direction-table codegen (`spec/tools/gen_dirtable.py`)
+- ✅ `bench/run.py` — build, measurement, conformance, report
+- ✅ `bench/targets.toml` — registry of language × compiler × profile
 - ✅ `scripts/setup-wsl.sh`, `scripts/stage-wsl.sh`
-- ✅ Referenzvektoren `spec/testvectors/SPEC-1.json`
+- ✅ reference vectors `spec/testvectors/SPEC-1.json`
 
-## Phase 1 — Referenzimplementierungen ✅
+## Phase 1 — Reference implementations ✅
 
-- ✅ **C headless** — die normative Referenz. Alle Vektoren werden hieraus erzeugt.
-- ✅ **C + SDL2** — Fenster-Frontend, gemeinsamer Kern
-- ✅ **TypeScript** — Kern + Node-headless
-- ✅ **HTML5 Canvas** — interaktives Frontend mit Parameter-Reglern
-- ✅ Nachweis: C / Node / Chrome byteidentisch nach 300 Ticks
+- ✅ **C headless** — the normative reference. All vectors are generated from it.
+- ✅ **C + SDL2** — windowed frontend, shared core
+- ✅ **TypeScript** — core + Node headless
+- ✅ **HTML5 canvas** — interactive frontend with parameter sliders
+- ✅ Demonstrated: C / Node / Chrome byte-identical after 300 ticks
 
-**Belegt damit:** Die Spec ist implementierbar und cross-language bit-exakt.
-Das ist die Voraussetzung für alles Weitere.
-
----
-
-## Phase 2 — Die kompilierten Sprachen ✅
-
-- ✅ **C++** — idiomatisch (`std::vector`, `std::bit_cast`, RAII), nicht als
-  C-Transliteration. Bit-exakt.
-- ✅ **Rust** — zwei Varianten über ein Cargo-Feature: `safe` und `unchecked`.
-  Beide bit-exakt.
-- ✅ **Haskell** — zwei Stile, beide bit-exakt und gegeneinander geprüft:
-  `IOUArray` in `IO` mit `unsafeRead`/`unsafeAt` (**1.06× von C**), und eine
-  idiomatische Fassung über unveränderliche `Data.Vector.Unboxed` (3.48× von
-  C). Der Anstoß kam von außen: ein Haskell-Programmierer las den ersten Port
-  und nannte ihn eine zeilenweise C-Transliteration, was zutraf. Was dabei
-  herauskam, steht in [RESULTS.md §4](RESULTS.md#4-wie-sehr-der-programmierstil-zählt-haskell)
-  — unter anderem, dass vier Zeichen (`(!)` → `unsafeAt`) Faktor 1.45
-  ausmachten.
-- ✅ Konformitätsgate grün.
+**What that establishes:** the spec is implementable and bit-exact across
+languages. Everything else depends on it.
 
 ---
 
-## Phase 3 — Die Skriptsprachen ✅
+## Phase 2 — The compiled languages ✅
 
-- ✅ **Python pur** — Stufe B per Default, Stufe A mit `--strict-f32`
-  (nachgewiesen bit-exakt, Aufschlag 2.3×).
-- ✅ **Python numpy** — Stufe A, aber **nur `deferred`**: `serial` hat eine
-  sequenzielle Abhängigkeit durch das Grid. Die Implementierung lehnt den
-  Modus mit klarer Meldung ab. Die vektorisierte xoshiro-Fortschaltung
-  (nur Sackgassen-Agenten dürfen ihren Strom weiterdrehen) und `np.add.at`
-  reproduzieren die Spec-Semantik exakt.
-- ✅ **Perl** — Stufe B per Default, Stufe A mit `--strict-f32` (Aufschlag 3.3×).
-- ✅ **Tolerantes Konformitätsgate** — Metriken statt Hashes, getrennt nach
-  Erhaltungsgrößen (1e-6) und strukturempfindlichen Größen (2e-2).
-- ⬜ Optional: `numba` als drittes Python-Datum.
-- ⬜ Rendering für Python/Perl (Phase 4).
+- ✅ **C++** — idiomatic (`std::vector`, `std::bit_cast`, RAII), not a C
+  transliteration. Bit-exact.
+- ✅ **Rust** — two variants behind a cargo feature: `safe` and `unchecked`.
+  Both bit-exact.
+- ✅ **Haskell** — two styles, both bit-exact and checked against each other:
+  `IOUArray` in `IO` with `unsafeRead`/`unsafeAt`, and an idiomatic version
+  over immutable `Data.Vector.Unboxed`. The comparison is in
+  [RESULTS.md §4](RESULTS.md#4-how-much-programming-style-matters-haskell) —
+  among other things, that four characters (`(!)` → `unsafeAt`) were worth
+  1.46×.
+- ✅ Conformance gate green.
 
 ---
 
-## Phase 4 — Rendering-Backends ✅
+## Phase 3 — The scripting languages ✅
 
-Beide Backends erhalten exakt denselben Graustufen-Puffer; `--freeze-sim`
-hält die Simulation an, damit wirklich nur der Upload-Pfad Grid → Textur →
-Bildschirm gemessen wird.
+- ✅ **Pure Python** — tier B by default, tier A with `--strict-f32`
+  (demonstrably bit-exact, surcharge 2.2×).
+- ✅ **Python numpy** — tier A, but **`deferred` only**: `serial` has a
+  sequential dependency through the grid. The implementation refuses the mode
+  with a clear message. The vectorised xoshiro advance (only dead-end agents
+  may step their stream) and `np.add.at` reproduce the spec semantics exactly.
+- ✅ **Perl** — tier B by default, tier A with `--strict-f32` (surcharge 3.3×).
+- ✅ **Tolerant conformance gate** — metrics instead of hashes, separated into
+  conserved quantities (1e-6) and structure-sensitive ones (2e-2).
+- ⬜ Optional: `numba` as a third Python data point.
 
-| Sprache | SDL2 | raylib |
+---
+
+## Phase 4 — Rendering backends ✅
+
+Both backends receive exactly the same greyscale buffer; `--freeze-sim` halts
+the simulation so that only the upload path grid → texture → screen is
+measured.
+
+| Language | SDL2 | raylib |
 |---|---|---|
 | C | ✅ | ✅ |
 | C++ | ✅ | ✅ |
 | Rust | ✅ `sdl2` crate | ✅ `raylib` crate |
-| Haskell | ✅ `sdl2` | ✅ `foreign import` + Shim |
+| Haskell | ✅ `sdl2` | ✅ `foreign import` + shim |
 | Python | ✅ `pygame` | ✅ `raylib-python-cffi` |
-| Perl | ✅ `FFI::Platypus` | ✅ `FFI::Platypus` + Shim |
+| Perl | ✅ `FFI::Platypus` | ✅ `FFI::Platypus` + shim |
 
-Für Haskell/raylib und Perl/raylib steht bewusst nicht das Ökosystem-Paket im
-Baum: `h-raylib` und die Perl-raylib-Distributionen vendorn raylib und bauen
-eine eigene Kopie, womit man eine Sprache gegen einen *anderen Build* der
-Bibliothek vergliche. Beide binden stattdessen dasselbe
-`/usr/local/lib/libraylib.so` wie alle anderen — und stoßen dabei auf dieselbe
-Grenze, weil raylib `Image`, `Texture2D` und `Color` by value übergibt. Die
-fünf betroffenen Aufrufe teilen sich
+For Haskell/raylib and Perl/raylib the tree deliberately does not use the
+ecosystem package: `h-raylib` and the Perl raylib distributions vendor raylib
+and build their own copy, which would compare a language against a *different
+build* of the library. Both bind the same `/usr/local/lib/libraylib.so` as
+everyone else — and both hit the same limit, because raylib passes `Image`,
+`Texture2D` and `Color` by value. The five affected calls share
 [`impl/shim/raylib_shim.c`](../impl/shim/raylib_shim.c).
 
-**Ergebnis** (1024², eingefrorene Simulation, RTX 5080, ms/Frame):
+raylib wins everywhere, on the GPU by over 2×. It is the pixel format, not the
+library: raylib takes the 8-bit greyscale buffer directly, SDL2 needs ARGB8888
+and therefore an expansion loop over a million pixels per frame.
 
-| | SDL2 | raylib |
-|---|---:|---:|
-| C | 5.74 | 2.65 |
-| C++ | 5.73 | 2.74 |
-| Haskell | 5.61 | 2.68 |
-| Rust | **5.59** | **2.63** |
-| Python | 5.77 | 5.25 |
-| Perl | 124.5 | 82.7 |
-
-raylib gewinnt überall, auf der GPU um **2.1×**. Es liegt am Pixelformat, nicht
-an der Bibliothek: raylib nimmt den 8-Bit-Graustufenpuffer direkt entgegen,
-SDL2 braucht ARGB8888 und damit eine Expansionsschleife über eine Million
-Pixel pro Frame.
-
-Der eigentliche Befund ist aber, dass **die vier kompilierten Sprachen auf
-raylib innerhalb von 4 % liegen**. Steht das Backend fest, ist die Sprache in
-dieser Klasse fast egal — anders als in Klasse S. Und SDL2 ist auf der echten
-GPU *langsamer* als auf dem Software-Rasterizer, in allen vieren: beide Pfade
-sind bei 1024² CPU-gebunden. Details in
-[RESULTS.md §8](RESULTS.md#8-rendering-klasse-r).
+The actual finding, though, is that **the four compiled languages land within
+10 % of each other on raylib**. Once the backend is fixed, the language barely
+matters in this class — unlike in class S. And SDL2 is *slower* on the real GPU
+than on the software rasteriser, in all four: both paths are CPU-bound at
+1024². Details in [RESULTS.md §9](RESULTS.md#9-rendering-class-r).
 
 ---
 
-## Phase 5 — Compiler-Matrix ✅
+## Phase 5 — Compiler matrix ✅
 
-Das erklärte Hauptziel. Vollautomatisch über `bench/run.py bench`.
+The stated main goal. Fully automated through `bench/run.py bench`.
 
-| Achse | Werte |
+| Axis | Values |
 |---|---|
 | C | gcc, clang |
 | C++ | g++, clang++ |
-| Rust | rustc (LLVM), optional `-Zbuild-std` |
-| Haskell | GHC NCG vs. LLVM-Backend (`-fllvm`) |
-| Profile | `-O0 -O1 -O2 -O3 -Os`, `-march=native`, LTO, PGO, `-Ofast` |
+| Rust | rustc (LLVM), optionally `-Zbuild-std` |
+| Haskell | GHC NCG vs. the LLVM backend (`-fllvm`) |
+| Go | default vs. `-gcflags=all=-B` |
+| Swift | `release` vs. `-Ounchecked` |
+| Profiles | `-O0 -O1 -O2 -O3 -Os`, `-march=native`, LTO, PGO, `-Ofast` |
 
-**Erste Befunde aus Phase 1** (small, gcc 13.3, Ryzen 9950X3D):
-
-| Profil | ms total | rel. |
-|---|---:|---:|
-| `-O2` | 4290 | 1.00× |
-| `-O3 -march=native` | 4371 | 1.02× |
-| `-Ofast -march=native` | 4422 | 1.03× |
-
-`-O3` und `-Ofast` sind hier **langsamer** als `-O2`. Plausible Erklärung:
-Der Agenten-Pass ist zu ~65 % der Laufzeit reines Gather/Scatter mit
-datenabhängigen Adressen — davon profitiert keine Vektorisierung, aber der
-größere Code drückt auf den µop-Cache. Das ist genau die Art Ergebnis, für die
-das Projekt existiert, und es gehört mit `perf`-Zahlen unterfüttert (in WSL2
-ersatzweise über `hyperfine` und die Phasen-Timer).
-
-**PGO wurde gemessen und bringt nichts** — bei clang kostet es sogar 6 %. Die
-Vier-Wege-Verzweigung auf die Sensorwerte ist datenabhängig und nahezu
-gleichverteilt; PGO kann nur *vorhersagbare* Verzweigungen verbessern. Die
-Vermutung an dieser Stelle war falsch. Details in
-[RESULTS.md §9](RESULTS.md#10-was-nicht-funktioniert-hat).
+**PGO was measured and buys nothing** — on clang it costs 6 %. The four-way
+branch on the sensor values is data-dependent and close to uniformly
+distributed; PGO can only improve *predictable* branches. The guess at this
+point was wrong. Details in
+[RESULTS.md §11](RESULTS.md#11-what-did-not-work).
 
 ---
 
-## Phase 6 — Parallelität ✅
+## Phase 6 — Parallelism ✅
 
-Ausschließlich im `deferred`-Update-Modus (SPEC §5.5) — `serial` ist
-prinzipiell nicht deterministisch parallelisierbar.
+`deferred` update mode only (SPEC §5.5) — `serial` cannot be deterministically
+parallelised in principle.
 
-**Die Determinismus-Regel aus der ersten Fassung war falsch.** Sie forderte
-thread-lokale Puffer mit fester Reduktionsreihenfolge und nannte das
-deterministisch. Das liefert aber nur Reproduzierbarkeit *je Thread-Zahl*:
-`(Σ Thread 0) + (Σ Thread 1) + …` ist eine andere Klammerung als die serielle
-Kette. SPEC §5.6 unterscheidet jetzt zwei Strategien, und beide sind gemessen.
+**The determinism rule in the first version was wrong.** It required
+thread-local buffers with a fixed reduction order and called that
+deterministic. That only delivers reproducibility *per thread count*:
+`(Σ thread 0) + (Σ thread 1) + …` is a different parenthesisation from the
+serial chain. SPEC §5.6 now distinguishes two strategies, and both are
+measured.
 
-| Sprache | Weg | Status |
+| Language | Approach | Status |
 |---|---|---|
 | C | pthreads, `binned` + `private` | ✅ |
-| C++ | `std::jthread` + `std::barrier`, beide Strategien | ✅ |
-| Rust | `std::thread::scope`, beide Strategien | ✅ |
-| TypeScript | `worker_threads` + `SharedArrayBuffer`, beide Strategien | ✅ |
-| Haskell | `forkOn` + `-threaded`, MVar-Barriere, beide Strategien | ✅ |
-| Python | `multiprocessing` + `shared_memory`, beide Strategien | ✅ |
-| Perl | `fork` + Pipes, replizierte Reduktion | ✅ |
+| C++ | `std::jthread` + `std::barrier`, both strategies | ✅ |
+| Rust | `std::thread::scope`, both strategies | ✅ |
+| Go | goroutines + `sync.Cond` barrier, both strategies | ✅ |
+| Swift | `Foundation.Thread` + `NSCondition`, both strategies | ✅ |
+| TypeScript | `worker_threads` + `SharedArrayBuffer`, both strategies | ✅ |
+| Haskell | `forkOn` + `-threaded`, MVar barrier, both strategies | ✅ |
+| Python | `multiprocessing` + `shared_memory`, and threads (phase 11) | ✅ |
+| Perl | `fork` + pipes, replicated reduction | ✅ |
 
-**Alle sieben Ports sind bit-identisch zum jeweils seriellen Lauf**, und die
-fünf mit `private`-Strategie liefern bei `--deposit 0.1` und T=4 sogar
-denselben *falschen* Hash (`0xE82B2012`). Skalierung bei `medium`/100:
+**Every port is bit-identical to its own serial run**, and the ones using the
+`private` strategy even produce the same *wrong* hash (`0xE82B2012`) at
+`--deposit 0.1` and T=4.
 
-| Sprache | 1 Thread | bester | Speedup |
-|---|---:|---:|---:|
-| C++ | 5972 | 698 | 8.6× |
-| Haskell | 6806 | 808 | 8.4× |
-| C | 5609 | 707 | 7.9× |
-| Rust | 7796 | 990 | 7.9× |
-| TypeScript | 15642 | 1357 | **11.5×** |
-| Python | 9298 | 2257 | 4.1× |
-| Perl (bei `tiny`) | 4866 | 1753 | 2.8× |
+**Perl needed a design of its own.** `threads::shared` costs 7.6× per random
+read-modify-write on this machine; the diffusion stencil reads nine cells per
+output cell, so a shared grid could never win. Pushing a whole block through
+`pack`/`unpack`, by contrast, costs about as much as *one* traversal of a
+normal array. So: `fork` with private grids and packed binary over pipes — and
+a third reduction strategy, **replicated**, that SPEC §5.6 does not define:
+every process applies every deposit in ascending agent index, which is exactly
+the serial chain. Bit-identical for any process count without the `binned`
+sort, at the price of running the deposit and merge passes N times.
 
-Zwei Dinge, die sich aus Klasse S nicht vorhersagen ließen: **TypeScript
-skaliert am besten** und schrumpft den Abstand zu C von 3.0× auf 1.6×; und
-**Haskell holt C ein** (741 gegen 729 ms), nachdem die `unsafeAt`-Korrektur
-aus Phase 2 den Agenten-Pass entlastet hat.
-
-**Perl brauchte einen eigenen Entwurf.** `threads::shared` kostet auf dieser
-Maschine 7.6× pro zufälligem Read-Modify-Write; der Diffusionsstencil liest
-neun Zellen pro Ausgabezelle, ein geteiltes Grid könnte also nie gewinnen. Ein
-ganzer Block durch `pack`/`unpack` kostet dagegen so viel wie *ein* Durchlauf
-über ein normales Array. Also `fork` mit privaten Grids und gepacktem Binär
-über Pipes — und eine dritte Reduktionsstrategie, **repliziert**, die SPEC §5.6
-nicht kennt: jeder Prozess wendet jeden Deposit in aufsteigendem Agentenindex
-an, also exakt die serielle Kette. Bit-identisch für jede Prozesszahl ohne den
-`binned`-Sort, zum Preis eines N-fach ausgeführten Deposit- und Merge-Passes.
-
-**Ergebnis** (2048², 1 M Agenten): `binned` skaliert auf **9.5× bei 16
-Threads** und ist für jede Thread-Zahl bit-identisch zum seriellen Lauf.
-`private` erreicht nur 3.5× und **fällt bei 32 Threads unter die serielle
-Laufzeit** — die Reduktion liest dort 512 MiB pro Tick. C und C++ sind bis
-acht Threads ununterscheidbar. Zahlen und Begründung in
-[RESULTS.md §4](RESULTS.md#5-parallelität-klasse-p).
-
-Codeumfang für dieselbe Garantie: **C 326 Zeilen, C++ 264**. Der Unterschied
-steckt fast vollständig im Lebenszyklus — `std::jthread` joint beim Zerstören,
-`std::barrier` braucht kein `init`/`destroy`-Paar.
-
-**Barrieren sind der Flaschenhals**, nicht die Arbeitsverteilung: 35 % der
-Laufzeit bei T=16, 53 % bei T=32. Eine spinnende Barriere bringt dort +7 %,
-kostet bei 32 Threads aber 55 % (die Spinner nehmen ihren SMT-Geschwistern die
-Ausführungsressourcen weg). Die hybride Variante — spinnen, dann auf einem
-Futex parken — ist nie schlechter als `pthread` und wird über
-`SLIMEBENCH_BARRIER` gewählt. Der Gewinn bleibt klein, weil die Zeit im
-*Warten* steckt und nicht im Aufwecken.
+**Barriers are the bottleneck**, not work distribution: 35 % of the runtime at
+T=16, 53 % at T=32. A spinning barrier gains 7 % there but costs 55 % at 32
+threads (the spinners take execution resources from their SMT siblings). The
+hybrid variant — spin, then park on a futex — is never worse than `pthread` and
+is selected through `SLIMEBENCH_BARRIER`. The gain stays small, because the
+time is in the *waiting*, not in the waking.
 
 ---
 
 ## Phase 7 — SIMD ✅ (C, C++, Rust)
 
-| Sprache | Status |
+| Language | Status |
 |---|---|
-| C | ✅ AVX2 + AVX-512 für den Diffusionspass, `--simd` |
-| C++ | ✅ dieselben Intrinsics |
-| Rust | ✅ `core::arch` (nicht `std::simd`, das ist nightly-only) |
-| Haskell, Python, Perl, TS | — kein ehrlicher Weg, wird so dokumentiert |
+| C | ✅ AVX2 + AVX-512 for the diffusion pass, `--simd` |
+| C++ | ✅ the same intrinsics |
+| Rust | ✅ `core::arch` (not `std::simd`, which is nightly-only) |
+| Haskell, Python, Perl, TS | — no honest route; documented as such |
 
-**Die Annahme „umsortierte Reduktion ⇒ Stufe C" war falsch.** Der Kernel hat
-keine Cross-Lane-Reduktion; jede Lane rechnet eine Ausgabezelle mit derselben
-Operationsfolge wie die skalare Schleife. Das Ergebnis ist bit-identisch —
-nachgewiesen unter gcc und clang, in beiden Update-Modi und kombiniert mit
-16 Threads. Bedingungen: kein FMA, echte Division. Siehe SPEC §8.1.
+**The assumption "reordered reduction ⇒ tier C" was wrong.** The kernel has no
+cross-lane reduction; each lane computes one output cell with the same
+operation sequence as the scalar loop. The result is bit-identical —
+demonstrated under gcc and clang, in both update modes, and combined with 16
+threads. Conditions: no FMA, a real division. See SPEC §8.1.
 
-**Ergebnis:** Diffusionspass **4.6× schneller** (AVX-512), gesamt 1.21–1.31×
-bei einem Thread. Aber: AVX2 mit halber Lane-Zahl erreicht 4.18× — die
-Verdopplung der Vektorbreite bringt nur 11 %, der Stencil ist
-bandbreitengebunden. Und zusammen mit acht Threads bringt SIMD **gar nichts**
-mehr, weil beide dieselbe Ressource angreifen.
+**Result:** the diffusion pass is 4.5× faster (AVX-512), 1.25× overall on one
+thread. But AVX2 at half the lane count reaches 4.3× — doubling the vector
+width buys only 10–18 %, because the stencil is bandwidth-bound. And combined
+with eight threads, SIMD buys **nothing** at all, because both attack the same
+resource.
 
-Der Agenten-Pass bleibt skalar: die Deposits mehrerer Agenten pro Vektor in
-dieselbe Zelle bräuchten Konfliktauflösung, und das wäre dann echt Stufe C.
+The agent pass stays scalar: several agents per vector depositing into the same
+cell would need conflict resolution, and that really would be tier C.
 
 ---
 
 ## Phase 8 — GPU ✅ (CUDA + OpenGL)
 
-| Weg | Status |
+| Route | Status |
 |---|---|
-| CUDA | ✅ **Konformitätsstufe A**, 99x gegen einen CPU-Kern |
-| GLSL 4.3 Compute | ✅ Stufe A auf llvmpipe, ~2 ULP daneben auf D3D12/NVIDIA |
-| WGSL via wgpu-native | ❌ nicht gangbar, siehe unten |
+| CUDA | ✅ **conformance tier A**, 100× against one CPU core |
+| GLSL 4.3 compute | ✅ tier A on llvmpipe, ~2 ULP off on D3D12/NVIDIA |
+| WGSL via wgpu-native | ❌ not viable, see below |
 
-**Der ursprünglich empfohlene Weg funktioniert unter WSL2 nicht.** Vulkan sieht
-die NVIDIA-GPU nicht: die ICD-Dateien unter `/usr/lib/wsl/drivers/` zeigen auf
-`nvoglv64.dll`, also Windows-Treiber, die aus Linux nicht ladbar sind. Damit
-fällt wgpu-native aus, und die WGSL-Idee „eine Shaderquelle für alles" mit ihr.
+**The originally recommended route does not work under WSL2.** Vulkan does not
+see the NVIDIA GPU: the ICD files under `/usr/lib/wsl/drivers/` point at
+`nvoglv64.dll`, i.e. Windows drivers that cannot be loaded from Linux. That
+rules out wgpu-native, and with it the WGSL idea of "one shader source for
+everything".
 
-Gangbar sind stattdessen zwei Wege, beide implementiert:
+Two routes are viable instead, and both are implemented:
 
-* **CUDA** — nur NVIDIA, aber unter WSL2 offiziell unterstützt und der
-  schnellste. Das Toolkit hier (12.0) kennt Blackwell nicht; Kompilieren nach
-  PTX für `compute_90` und JIT durch den Treiber funktioniert.
-* **OpenGL 4.3 Compute** — erreicht die RTX 5080 über Mesas D3D12-Backend
-  (`GALLIUM_DRIVER=d3d12 MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA`) und läuft
-  aus jeder Sprache, die einen GL-Kontext bekommt. Damit näher am
-  ursprünglichen Ziel als wgpu es gewesen wäre.
+* **CUDA** — NVIDIA only, but officially supported under WSL2 and the fastest.
+  The toolkit here (12.0) does not know Blackwell; compiling to PTX for
+  `compute_90` and letting the driver JIT works.
+* **OpenGL 4.3 compute** — reaches the RTX 5080 through Mesa's D3D12 backend
+  (`GALLIUM_DRIVER=d3d12 MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA`) and runs from
+  any language that can get a GL context. That is closer to the original goal
+  than wgpu would have been.
 
-**Die Annahme „Klasse G ist zwangsläufig Stufe C" war falsch** — jedenfalls für
-CUDA. Nötig sind `-fmad=false`, korrekt gerundete Division und ganzzahlige
-Deposit-Atomics statt `atomicAdd(float*)`. Details in SPEC §8.2 und
-[RESULTS.md §6](RESULTS.md#7-gpu-klasse-g).
-
-Offen: ein Host in einer zweiten Sprache (der GL-Weg macht das billig), eine
-Determinismus-Analyse für weitere Treiber, und eine Wiederholung auf nativem
-Linux-GL statt über die D3D12-Übersetzung.
+**The assumption "class G is necessarily tier C" was wrong** — for CUDA at
+least. It needs `-fmad=false`, correctly rounded division and integer deposit
+atomics instead of `atomicAdd(float*)`. Details in SPEC §8.2 and
+[RESULTS.md §8](RESULTS.md#8-gpu-class-g).
 
 ---
 
-## Phase 9 — Auswertung ✅
+## Phase 9 — Evaluation ✅
 
-[`docs/RESULTS.md`](RESULTS.md) ist von chronologisch auf thematisch umgebaut:
-eine Gesamttabelle über alle Klassen vorn, danach je ein Abschnitt pro Klasse,
-Footprint, negative Ergebnisse und eine Liste der Stellen, an denen Spec oder
-Buildplan von Messungen widerlegt wurden.
+[`docs/RESULTS.md`](RESULTS.md) is organised thematically rather than
+chronologically: an overall table across all classes first, then one section
+per class, footprint, negative results, and a list of the places where the spec
+or this build plan was refuted by measurement.
 
-`bench/charts.py` erzeugt vier SVGs nach `docs/charts/` — Sprachvergleich,
-Compiler-Matrix, Skalierung, Klassenübersicht. Handgeschriebenes SVG statt
-matplotlib: der Rest des Repos baut mit nichts außer den getesteten
-Toolchains, und ein Diagrammgenerator ist ein schlechter Grund für die erste
-Python-Abhängigkeit. Nebeneffekt: die Ausgabe ist diffbar, was zählt, wenn die
-Diagramme eingecheckt sind.
+`bench/charts.py` generates SVGs into `docs/charts/`. Hand-written SVG rather
+than matplotlib: the rest of the repo builds with nothing but the toolchains
+under test, and a chart generator is a poor reason for the first Python
+dependency. Side effect: the output is diffable, which matters when the charts
+are checked in.
 
 ```bash
 python3 bench/charts.py
 ```
 
-**Nachtrag.** Die Zahlen im Dokument waren über ein Dutzend Sitzungen an
-verschiedenen Tagen entstanden — innerhalb einer Reihe unkritisch, über Reihen
-hinweg still irreführend, und das Dokument zog mehrere Vergleiche über Reihen
-hinweg. Es gibt jetzt
+**Addendum.** The numbers in the document had accumulated over a dozen sessions
+on different days — harmless within a series, quietly misleading across series,
+and the document drew several cross-series comparisons. There is now
 
 ```bash
-scripts/stage-wsl.sh && bench/full-run.sh
+bench/full-run.sh
 ```
 
-was alle Klassen in einem Zug nach `results/run-<datum>/` misst und
-Toolchain-Versionen und Commit daneben schreibt, plus `bench/tables.py`, das
-die Markdown-Tabellen daraus erzeugt. Alle Zahlen in RESULTS.md stammen seitdem
-aus einem Lauf.
-
-Offen geblieben: die Heatmap-Darstellung der Compiler-Matrix (die sortierte
-Balkenliste liest sich besser, weil die interessanten Paare nicht benachbart
-sind) und „Zeilen Code pro Sprache" als eigene Metrik — der Vergleich steht
-nur dort, wo er etwas aussagt (C vs. C++ in Klasse P).
+which measures every class in one go into `results/run-<date>/` and writes the
+toolchain versions and the commit alongside, plus `bench/tables.py` which
+generates the markdown tables from it. Every number in RESULTS.md has come from
+one run since.
 
 ---
 
-## Bewusst außerhalb des Scope
+## Phase 10 — Scale and a second GPU host ✅
 
-Damit das Projekt endlich wird:
+- ✅ A `huge` preset (8192², 16.8 M agents) — because `medium` does not
+  saturate an RTX 5080, which makes the measured speedup a lower bound rather
+  than an answer.
+- ✅ A second GLSL host, in Python, over the same shader source. Both hosts
+  print an FNV-32 of their compiled shader; they agree, so class G demonstrably
+  measures the driver rather than the host language.
+- ✅ `bench/preflight.sh` — report what a machine can actually measure before a
+  two-hour run discovers it.
 
-- Weitere Sprachen (Go, Zig, Java, C#) — die Spec macht Ports trivial, aber
-  die Matrix ist schon groß genug.
-- Distributed / Multi-Node.
-- Anderes Physarum-Modell (mehrere Spezies, Nahrungsquellen, 3D). Reizvoll,
-  aber eine andere Simulation und damit eine andere Spec.
+The phase also produced the worst bug in the project so far:
+`glDispatchCompute` is limited to 65 535 workgroups per dimension, `medium`
+needs 65 536, and the driver reports nothing. The diffusion pass simply did not
+run, and the resulting number was plausible. See
+[RESULTS.md §12](RESULTS.md#12-where-i-was-wrong).
+
+---
+
+## Phase 11 — More languages, more of class V, and a HUD ✅
+
+- ✅ **Go** — tier A. Notable because the ban on FMA is enforced by the
+  language rather than a flag: `acc + float32(4.0*src[i])` forbids the fusion
+  because the conversion is a guaranteed rounding point. Wins class P.
+- ✅ **Swift** — tier A, and needs nothing at all: it does not contract by
+  default.
+- ✅ **Free-threaded CPython** — the class P pool grew a `threads` backend, so
+  3.12-with-GIL and 3.14t-without can be measured against each other with
+  everything else held fixed. [RESULTS.md §6](RESULTS.md#6-what-the-gil-costs-cpython-314t).
+- ✅ **Hand-written AVX-512** — `impl/asm/sb_diffuse_avx512.S`, a different
+  memory strategy rather than a transliteration of the intrinsics.
+  [RESULTS.md §7](RESULTS.md#7-simd-and-hand-written-assembly-class-v).
+- ✅ **HUD and keyboard control** on six native frontends plus the browser, out
+  of one shared bitmap font.
+
+---
+
+## Open
+
+- **A native Linux GL driver.** The GL numbers include Mesa's D3D12
+  translation; constant throughput across four orders of magnitude says that
+  layer, not the GPU, is the bottleneck.
+- **Class R at a grid size that saturates the GPU.**
+- **Why Go wins class P.** The explanation in RESULTS §5 is plausible and
+  unmeasured, and that category has a poor record.
+- **A Lean port.** Probed and viable; blocked on which of three near-identical
+  array idioms the compiler turns into a destructive update.
+- **The HUD in Haskell, Perl and Python.** The 5×7 font is deliberately data in
+  a header so a port can adopt it.
+- **`numba`** as a third Python data point.
+- **CI.** `.github/workflows/` builds the C reference and runs the conformance
+  gate on every push; extending it to more toolchains is a matter of runner
+  minutes, not design.
+
+## Deliberately out of scope
+
+So that the project can end:
+
+- Still more languages (Zig, Java, C#). The spec makes ports cheap — Go and
+  Swift took an afternoon each — but the matrix is large enough that each new
+  one costs more in measurement time than it adds in insight.
+- Distributed / multi-node.
+- A different Physarum model (multiple species, food sources, 3D). Appealing,
+  but a different simulation and therefore a different spec.

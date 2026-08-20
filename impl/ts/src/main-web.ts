@@ -37,21 +37,21 @@ interface Control {
 }
 
 const CONTROLS: Control[] = [
-  { id: "sensorDist",  label: "Sensor-Distanz", min: 1, max: 40, stepSize: 0.5,
+  { id: "sensorDist",  label: "Sensor distance", min: 1, max: 40, stepSize: 0.5,
     get: c => c.sensorDist, set: (c, v) => (c.sensorDist = Math.fround(v)) },
-  { id: "sensorSteps", label: "Sensor-Winkel",  min: 4, max: 360, stepSize: 4,
+  { id: "sensorSteps", label: "Sensor angle",  min: 4, max: 360, stepSize: 4,
     get: c => c.sensorSteps, set: (c, v) => (c.sensorSteps = v | 0),
     fmt: v => `${((v / 1440) * 360).toFixed(1)}°` },
   { id: "rotSteps",    label: "Rotation",       min: 4, max: 360, stepSize: 4,
     get: c => c.rotSteps, set: (c, v) => (c.rotSteps = v | 0),
     fmt: v => `${((v / 1440) * 360).toFixed(1)}°` },
-  { id: "step",        label: "Schrittweite",   min: 0.1, max: 5, stepSize: 0.1,
+  { id: "step",        label: "Step length",   min: 0.1, max: 5, stepSize: 0.1,
     get: c => c.step, set: (c, v) => (c.step = Math.fround(v)) },
   { id: "deposit",     label: "Deposit",        min: 0.5, max: 50, stepSize: 0.5,
     get: c => c.deposit, set: (c, v) => (c.deposit = Math.fround(v)) },
   { id: "decay",       label: "Decay",          min: 0.5, max: 0.999, stepSize: 0.002,
     get: c => c.decay, set: (c, v) => (c.decay = Math.fround(v)) },
-  { id: "agents",      label: "Agenten",        min: 1024, max: 1048576, stepSize: 1024,
+  { id: "agents",      label: "Agents",        min: 1024, max: 1048576, stepSize: 1024,
     get: c => c.agents, set: (c, v) => (c.agents = v | 0), reinit: true,
     fmt: v => v >= 1024 ? `${Math.round(v / 1024)}k` : `${v}` },
 ];
@@ -124,7 +124,7 @@ function buildUI(): void {
 
   document.getElementById("pause")!.addEventListener("click", (e) => {
     running = !running;
-    (e.target as HTMLButtonElement).textContent = running ? "Pause" : "Weiter";
+    (e.target as HTMLButtonElement).textContent = running ? "Pause" : "Resume";
   });
   document.getElementById("reset")!.addEventListener("click", () => rebuild());
   document.getElementById("reseed")!.addEventListener("click", () => {
@@ -185,7 +185,7 @@ document.getElementById("hashBtn")!.addEventListener("click", showHash);
  */
 
 function setPauseLabel(): void {
-  document.getElementById("pause")!.textContent = running ? "Pause" : "Weiter";
+  document.getElementById("pause")!.textContent = running ? "Pause" : "Resume";
 }
 
 /** Nudge a slider by n steps and fire its input handler, so the keyboard and

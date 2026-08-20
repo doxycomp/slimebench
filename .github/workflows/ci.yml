@@ -1,0 +1,158 @@
+# CI for slimebench.
+#
+# What this checks is deliberately not "does it build". The claim this project
+# makes is that nine languages compute bit-identical results, and the only
+# useful gate is whether that is still true. So the main job runs the same
+# conformance suite `bench/run.py conformance` runs locally, over every target
+# a GitHub runner can host without a toolchain install.
+#
+# Not covered here, and covered by a local `bench/preflight.sh` instead:
+# Haskell, Swift, CUDA, GLSL and the windowed frontends. GHC and Swift are
+# minutes of install per run, and the GPU and window targets need hardware a
+# runner does not have. A green CI therefore means "the portable half still
+# agrees"; it does not replace a full local run.
+#
+# Performance is deliberately NOT measured here. A shared runner varies by more
+# than most of the effects in docs/RESULTS.md, and a benchmark you cannot trust
+# is worse than no benchmark.
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  conformance:
+    name: conformance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 22+ for `--experimental-strip-types`; the runner default is older.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install numpy
+        run: python3 -m pip install --quiet numpy
+
+      - name: Toolchain versions
+        run: |
+          gcc --version | head -1
+          g++ --version | head -1
+          go version
+          rustc --version
+          node --version
+          perl --version | sed -n 2p
+
+      # The portable subset. Every one of these is bit-exact against the C
+      # reference, so a divergence here is a real regression rather than a
+      # platform difference.
+      - name: Conformance
+        run: |
+          python3 bench/run.py conformance --targets \
+            c,cpp,rust,ts,go,python-numpy,python-pure-strict,perl-strict
+
+  conformance-clang:
+    name: conformance (clang)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # A tier-A claim that only holds under gcc is not a tier-A claim. Only C
+      # and C++ have a second compiler; the other targets have one toolchain
+      # each and are covered by the job above.
+      - name: Conformance, clang only
+        run: |
+          clang --version | head -1
+          python3 bench/run.py conformance --compilers clang,clang++ --targets c,cpp
+
+  generated:
+    name: generated files are in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Three generators write source that is committed: the trig table into
+      # every language, the GLSL shaders into a C header, and the Rust copy of
+      # the bitmap font. Committed generated output drifts from its generator
+      # the first time someone edits the output by hand, and nothing notices.
+      # This job notices.
+      - name: Re-run the generators
+        run: |
+          python3 spec/tools/gen_dirtable.py
+          python3 spec/tools/gen_rust_font.py
+          python3 impl/glcompute/gen_shaders.py
+
+      - name: Working tree must be unchanged
+        run: |
+          if ! git diff --quiet; then
+            echo "::error::A generator produced output differing from the committed files."
+            echo "Run the three generators locally and commit the result."
+            git --no-pager diff --stat
+            git --no-pager diff
+            exit 1
+          fi
+
+  scripts:
+    name: shell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # `bash -n` only catches syntax, but these scripts drive hour-long
+      # measurement runs, and a syntax error found at minute fifty costs an
+      # hour of machine time.
+      - name: Syntax
+        run: |
+          fail=0
+          for f in $(git ls-files '*.sh'); do
+            bash -n "$f" || { echo "::error file=$f::bash -n failed"; fail=1; }
+          done
+          exit $fail
+
+      # Advisory for now: shellcheck has never been run over this tree, and a
+      # gate whose first run is red teaches people to ignore the gate. Promote
+      # this to blocking once the existing findings are triaged.
+      - name: shellcheck (advisory)
+        continue-on-error: true
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          shellcheck --severity=warning $(git ls-files '*.sh')
+
+  python:
+    name: python harness compiles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Byte-compile every module
+        run: python3 -m compileall -q bench spec/tools impl/python impl/pygl
+
+  rust:
+    name: rust tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Covers the bitmap-font hash that keeps impl/rust/src/hud.rs in step
+      # with impl/c/sb_font.h, and the overlay draw invariants.
+      - name: cargo test
+        working-directory: impl/rust
+        run: cargo test --release
