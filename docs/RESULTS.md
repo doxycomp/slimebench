@@ -514,18 +514,43 @@ ahead of C++ (551) and C (550) — from a 12 % single-thread deficit against C.
 It is also the only language whose `binned` curve still falls at 32 threads;
 C, C++, Haskell, Rust and Swift bottom out at 16 or turn back up after it.
 
-The shape of the curve says where it comes from: at T=4 Go is *well behind* C
-(1442 against 1112 ms), and at T=32 it is ahead. The advantage therefore grows
-with the number of participants, which points at synchronisation rather than
-the compute kernel — six barriers per tick times 32 workers is 192 wakeups, and
-Go's barrier is a `sync.Cond` over a mutex, parking waiting goroutines in the
-runtime scheduler where C uses `futex` and C++ `std::condition_variable`.
+The shape of the curve says where to look: at T=4 Go is *well behind* C
+(1442 against 1112 ms) and at T=32 it is ahead, so the advantage grows with the
+number of participants — synchronisation, not the compute kernel.
 
-> That is the plausible explanation, not the measured one. Establishing it
-> would mean swapping the barriers between implementations, or instrumenting
-> the wait time per phase; both are open. Per §12 of this document, unmeasured
-> performance explanations are the category in which I have been reliably
-> wrong.
+**That was a hypothesis, and it has now been measured.** Both implementations
+report the same work/barrier split under `SLIMEBENCH_PHASE_STATS=1`; three runs
+each, `medium`/100, T=32, `binned`, ms per tick, goroutine/thread 0:
+
+| | C | Go |
+|---|---|---|
+| work | 2.10 – 2.19 | 2.04 – 2.32 |
+| barrier | **3.23 – 3.31** | **2.67 – 2.84** |
+| barrier share of the tick | 61 % | 56 % |
+
+**The compute work is indistinguishable** — the two ranges overlap, and a
+single sample that appeared to show Go doing 10 % more did not survive
+repetition. **The barrier is not**: Go's is consistently around 17 % cheaper,
+outside the run-to-run spread of either.
+
+The difference concentrates in one phase. `prefix` is the step where worker 0
+computes the offset table alone and the other 31 wait:
+
+| Phase | C barrier | Go barrier |
+|---|---:|---:|
+| prefix | 0.530 | **0.210** |
+| agents | 1.068 | 0.680 |
+| merge | 0.657 | 0.878 |
+
+Go is 2.5× cheaper on the most one-sided wait in the tick and *loses* on
+`merge`, where all 32 workers arrive at roughly the same moment. That is the
+shape one would expect if parking a waiter in a user-space scheduler is cheap
+and waking a thundering herd of them is not — but that second half is now the
+hypothesis, and it is labelled as one.
+
+What the measurement settles is narrower and firmer than the original claim:
+Go wins class P at 32 threads because its barrier costs less, not because its
+kernel is faster.
 
 ### Determinism
 
@@ -1099,6 +1124,7 @@ was.
 | After `preflight.sh` says "18 present, 0 missing", everything is there | Go and Swift were not on the run's PATH and were silently skipped. preflight did not check them — which is precisely its job. |
 | Ten failed conformance cases mean ten cases diverge | They meant the program never started. One target carried a placeholder nothing expanded; then `resolve_exe` used `Path.resolve()` and pointed past the virtualenv at the base interpreter, which cannot see numpy. Both times the harness reported "divergence" instead of "not executable". |
 | Lean is blocked on which array idiom the compiler makes destructive | They all are. At 7.9 ns per element on an 8 M array a copying `set!` would be years of work, so the arithmetic refuted the question before any experiment did. Lean's arrays are copy-on-write with refcounting and a write loop is O(n) (§2). |
+| Give C a better barrier and it catches Go | It does not. `SLIMEBENCH_BARRIER=hybrid` measures 651 ms at T=32 against `pthread`'s 641 and Go's 584 — the three barrier implementations C already has are within 2 % of each other, so the gap is not something a different C barrier closes (§5). |
 | Putting a toolchain on PATH is harmless | Swift's toolchain ships clang 21. Prepended, it would have shadowed the system clang 18, and the compiler matrix would have gone on printing "clang". |
 
 One pattern: **every guess about performance that I did not measure was
@@ -1135,9 +1161,10 @@ instead of "divergence" ten times. A tool that reports *wrong* where it means
   linearly — but at `medium` that would be hours per data point. (The
   free-threaded CPython has arrived and is measured in §6; what remains open is
   only the pure interpreter without numpy.)
-- **Why Go wins class P.** Swap the barriers between implementations, or
-  instrument the wait time per phase. The explanation in §5 is plausible and
-  unmeasured, and that category has a poor record in §12.
+- **Why Go's barrier is cheaper, phase by phase.** §5 now measures *that* it
+  is, and locates the gap in `prefix`. Why parking 31 waiters in a user-space
+  scheduler beats `futex` there while losing on `merge` is the next question,
+  and answering it means counting wakeups rather than timing them.
 - **Class P for Lean — measured, and the answer is no.** Not "unknown" any
   more: three ownership shapes, all bit-exact, best 1.27× end to end against
   8–9× elsewhere (§2). What remains genuinely open is whether an FFI escape to

@@ -19,6 +19,8 @@
 package sim
 
 import (
+	"fmt"
+	"io"
 	"os"
 	"sync"
 	"time"
@@ -78,6 +80,7 @@ type pool struct {
 	reduce   Reduce
 	adaptive bool
 	bar      *barrier
+	stats    *phaseStats
 
 	aidx    []int32
 	sorted  []int32
@@ -227,10 +230,71 @@ func (p *pool) rebalance() {
 	}
 }
 
+// Phase accounting, the same shape impl/c reports under the same environment
+// variable. Off by default: reading the clock twice per phase per worker is
+// twelve extra syscall-free reads per tick, which is small but not nothing,
+// and a measurement run should not pay for its own instrumentation.
+//
+// Only worker 0 records, as in C. The others would report the same phases with
+// different wait times, and averaging them would hide exactly the imbalance
+// the numbers are for.
+type phaseStats struct {
+	on      bool
+	work    [6]time.Duration
+	barrier [6]time.Duration
+	ticks   int
+}
+
+var phaseNames = [6]string{"agents", "prefix", "scatter", "deposit", "merge", "diffuse"}
+
+func newPhaseStats() *phaseStats {
+	return &phaseStats{on: os.Getenv("SLIMEBENCH_PHASE_STATS") == "1"}
+}
+
+func (ps *phaseStats) report(w io.Writer, nthreads int) {
+	if !ps.on || ps.ticks == 0 {
+		return
+	}
+	n := float64(ps.ticks)
+	var tw, tb time.Duration
+	fmt.Fprintf(w, "phase breakdown (goroutine 0), ms/tick:\n")
+	fmt.Fprintf(w, "  %-10s %8s %9s %9s %7s\n", "phase", "work", "barrier", "sum", "share")
+	var total time.Duration
+	for i := range phaseNames {
+		total += ps.work[i] + ps.barrier[i]
+	}
+	for i, name := range phaseNames {
+		wms := float64(ps.work[i].Nanoseconds()) / 1e6 / n
+		bms := float64(ps.barrier[i].Nanoseconds()) / 1e6 / n
+		share := 0.0
+		if total > 0 {
+			share = float64((ps.work[i] + ps.barrier[i]).Nanoseconds()) / float64(total.Nanoseconds()) * 100
+		}
+		fmt.Fprintf(w, "  %-10s %8.3f %9.3f %9.3f %6.1f%%\n", name, wms, bms, wms+bms, share)
+		tw += ps.work[i]
+		tb += ps.barrier[i]
+	}
+	twms := float64(tw.Nanoseconds()) / 1e6 / n
+	tbms := float64(tb.Nanoseconds()) / 1e6 / n
+	pct := 0.0
+	if twms+tbms > 0 {
+		pct = tbms / (twms + tbms) * 100
+	}
+	fmt.Fprintf(w, "  %-10s %8.3f %9.3f %9.3f  barriers are %.1f%% of the tick\n",
+		"total", twms, tbms, twms+tbms, pct)
+	fmt.Fprintf(w, "  barrier: sync.Cond over a mutex, %d goroutines\n", nthreads)
+}
+
 // runTick is one tick, run by every worker. Six barriers for `binned`,
 // matching the C reference's five phase barriers plus its handshake. The
 // rebalance overlaps the diffusion pass, which does not read ybucket.
 func (p *pool) runTick(tid int) {
+	// The instrumented and uninstrumented paths are separate so the hot one
+	// carries no branch per phase.
+	if p.stats.on && tid == 0 {
+		p.runTickInstrumented()
+		return
+	}
 	if p.reduce == Binned {
 		p.agentsBinned(tid)
 		p.bar.wait()
@@ -266,6 +330,46 @@ func (p *pool) runTick(tid int) {
 	p.bar.wait()
 }
 
+// runTickInstrumented is runTick for worker 0 with a clock read around every
+// phase and every barrier. Same order, same calls.
+func (p *pool) runTickInstrumented() {
+	const tid = 0
+	ps := p.stats
+	phase := func(i int, f func()) {
+		a := time.Now()
+		f()
+		b := time.Now()
+		p.bar.wait()
+		c := time.Now()
+		ps.work[i] += b.Sub(a)
+		ps.barrier[i] += c.Sub(b)
+	}
+
+	if p.reduce == Binned {
+		phase(0, func() { p.agentsBinned(tid) })
+		phase(1, func() { p.prefixBinned() })
+		phase(2, func() { p.scatterBinned(tid) })
+		phase(3, func() { p.depositBinned(tid) })
+		phase(4, func() { p.mergeBinned(tid) })
+		if p.adaptive {
+			p.rebalance()
+		}
+	} else {
+		phase(0, func() { p.agentsPrivate(tid) })
+		phase(4, func() { p.mergePrivate(tid) })
+	}
+
+	a := time.Now()
+	ylo, yhi := split(p.height, p.t, tid)
+	p.s.DiffuseRows(ylo, yhi)
+	ps.work[5] += time.Since(a)
+	p.bar.wait()
+
+	p.s.SwapBuffers()
+	p.bar.wait()
+	ps.ticks++
+}
+
 // Run is the result of a class-P run.
 type Run struct {
 	MsTotal float64
@@ -292,6 +396,7 @@ func RunParallel(s *Sim, warmup, ticks uint32) (*Run, error) {
 		log2w: s.log2w, deposit: c.Deposit, reduce: c.Reduce,
 		adaptive: binned && os.Getenv("SLIMEBENCH_NO_REBALANCE") == "",
 		bar:      newBarrier(t),
+		stats:    newPhaseStats(),
 		aidx:     make([]int32, c.Agents),
 	}
 	if binned {
@@ -346,5 +451,8 @@ func RunParallel(s *Sim, warmup, ticks uint32) (*Run, error) {
 	// The phases interleave, so an agent/diffuse split would be meaningless.
 	s.NsAgents = int64(ms * 1e6)
 	s.NsDiff = 0
+	// Warmup ticks are counted too, which is why the report divides by its own
+	// tick counter rather than by `ticks`.
+	p.stats.report(os.Stderr, t)
 	return &Run{MsTotal: ms, TickMs: tickMs}, nil
 }
