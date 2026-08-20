@@ -429,7 +429,7 @@ def chart_scaling_langs() -> None:
             series.append((names[lang], colours[lang], pts))
     if series:
         line_chart(OUT / "scaling-langs.svg",
-                   "Class P: the same design in seven languages",
+                   "Class P: the same design in nine languages",
                    "2048x2048, 100 ticks, deferred, binned. Perl at 512x512 -- "
                    "medium would be hours. 16 physical cores, 32 logical.",
                    series, "threads / processes", "speedup vs 1", ideal=True)

@@ -91,16 +91,16 @@ def sec_crosslang(d: pathlib.Path) -> str:
                 str(round(r["max_rss_kb"] / 1024)) if r.get("max_rss_kb") else "—",
             ])
         out.append(f"### §2 class S, `--update {upd}`\n")
-        out.append(table(["#", "Sprache", "Profil", "Konf.", "ms/Tick", "rel.", "RSS MiB"],
+        out.append(table(["#", "Language", "Profile", "Tier", "ms/tick", "rel.", "RSS MiB"],
                          body, "rlrcrrr"))
         hashes = {(r["grid_hash"], r["agent_hash"])
                   for r in rows if r.get("conformance_class") == "A"}
         n_a = sum(1 for r in rows if r.get("conformance_class") == "A")
         if len(hashes) == 1:
             g, a = hashes.pop()
-            out.append(f"\n{n_a}/{n_a} Stufe-A-Läufe: `{g} / {a}` ✓\n\n")
+            out.append(f"\n{n_a} of {n_a} tier-A runs: `{g} / {a}` ✓\n\n")
         else:
-            out.append(f"\n**{len(hashes)} verschiedene Stufe-A-Hashes** ✗ "
+            out.append(f"\n**{len(hashes)} different tier-A hashes** ✗ "
                        f"{sorted(hashes)}\n\n")
     return "".join(out)
 
@@ -129,7 +129,7 @@ def sec_footprint(d: pathlib.Path) -> str:
                      fnum(sz / 1024) if sz else "— (interpretiert)",
                      str(round(r["max_rss_kb"] / 1024)) if r.get("max_rss_kb") else "—"])
     return ("### §9 Footprint\n"
-            + table(["Sprache", "Binär KiB (gestrippt)", "RSS MiB"], body) + "\n")
+            + table(["Language", "Binary KiB (stripped)", "RSS MiB"], body) + "\n")
 
 
 def sec_compilers(d: pathlib.Path) -> str:
@@ -144,7 +144,7 @@ def sec_compilers(d: pathlib.Path) -> str:
              if (r.get("stripped_bytes") or r.get("binary_bytes")) else "—"]
             for r in rows]
     return ("### §3 compiler matrix, 1024×1024, 300 Ticks\n"
-            + table(["Sprache", "Compiler", "Profil", "Konf.", "ms", "rel.", "Binär KiB"],
+            + table(["Language", "Compiler", "Profile", "Tier", "ms", "rel.", "Binary KiB"],
                     body, "llrcrrr") + "\n")
 
 
@@ -169,7 +169,7 @@ def sec_parallel(d: pathlib.Path) -> str:
         by[r["lang_label"]][(r["threads"], strat)] = r["ms_total"]
 
     threads = [1, 2, 4, 8, 16, 32]
-    out = ["### §5 class P, Thread-Sweep\n"]
+    out = ["### §5 class P, thread sweep (ms)\n"]
     for strat in ("binned", "private", "replicated"):
         body = []
         for lang, d2 in by.items():
@@ -183,7 +183,7 @@ def sec_parallel(d: pathlib.Path) -> str:
             body.append([lang] + cells + [f"{base / bestv:.1f}×"])
         if body:
             out.append(f"\n**{strat}**\n")
-            out.append(table(["Sprache"] + [f"T={t}" for t in threads] + ["Speedup"], body))
+            out.append(table(["Language"] + [f"T={t}" for t in threads] + ["Speedup"], body))
     return "".join(out) + "\n"
 
 
@@ -196,7 +196,8 @@ def sec_kernels(d: pathlib.Path) -> str:
     rows = load(d, "V-asm-kernels.jsonl")
     if not rows:
         return ""
-    names = {"no-simd": "skalar", "simd": "Intrinsics", "asm": "Assembly"}
+    names = {"no-simd": "scalar loop", "simd": "intrinsics",
+             "asm": "hand-written assembly"}
     order = ["no-simd", "simd", "asm"]
     ccs = sorted({r["cc"] for r in rows})
     by = {(r["cc"], r["kernel"]): r for r in rows}
@@ -222,9 +223,10 @@ def sec_kernels(d: pathlib.Path) -> str:
     hashes = {r["grid_hash"] for r in rows}
     note = ""
     if len(hashes) == 1:
-        note = f"\nAlle drei Kerne, beide Compiler, ein Grid-Hash: `{hashes.pop()}`\n"
-    return (f"### §6b Diffusionskerne, `{preset}` {w}²\n"
-            + table(["Kern"] + [f"{c} ms" for c in ccs] + [f"{c} rel." for c in ccs],
+        note = ("\nAll three kernels, both compilers, one grid hash: "
+                f"`{hashes.pop()}`\n")
+    return (f"### §6b diffusion kernels, `{preset}` {w}², diffusion pass only\n"
+            + table(["Kernel"] + [f"{c} (ms)" for c in ccs] + [f"{c} rel." for c in ccs],
                     body)
             + note + "\n")
 
@@ -248,12 +250,12 @@ def sec_gil(d: pathlib.Path) -> str:
 
     out = []
     preset = rows[0]["preset"]
-    out.append(f"### §5b CPython, GIL gegen Free-Threading, `{preset}`\n")
-    out.append("\nEin Thread: "
+    out.append(f"### §5b CPython, GIL against free-threading, `{preset}`\n")
+    out.append("\nOne thread: "
                + ", ".join(f"{names[i]} {fnum(base[i])} ms" for i in interps)
-               + ". Die Interpreter tragen numpy 2.5.2 bzw. 1.26.4, dieses Paar "
-                 "ist also konfundiert und sagt nichts über die Kosten des "
-                 "Free-Threading aus.\n\n")
+               + ". The interpreters carry numpy 2.5.2 and 1.26.4 respectively, "
+                 "so that pair is confounded and says nothing about what "
+                 "free-threading costs.\n\n")
 
     for red in ("binned", "private"):
         cols, body = [], []
@@ -270,15 +272,15 @@ def sec_gil(d: pathlib.Path) -> str:
                              if m else "—")
             body.append([f"T={t}"] + cells)
         if body:
-            out.append(f"\n**{red}** — ms, in Klammern der Speedup gegen "
-                       "denselben Interpreter bei einem Thread\n\n")
-            be_de = {"threads": "Threads", "processes": "Prozesse"}
-            out.append(table([""] + [f"{names[i]} {be_de[be]}" for i, be in cols], body))
+            out.append(f"\n**{red}** — ms, with the speedup against the same "
+                       "interpreter at one thread in brackets\n\n")
+            be_en = {"threads": "threads", "processes": "processes"}
+            out.append(table([""] + [f"{names[i]} {be_en[be]}" for i, be in cols], body))
 
     hashes = {(r["grid_hash"], r["agent_hash"]) for r in rows}
     if len(hashes) == 1:
         g, a = hashes.pop()
-        out.append(f"\nAlle {len(rows)} Läufe: Grid `{g}`, Agenten `{a}`.\n")
+        out.append(f"\nAll {len(rows)} runs: grid `{g}`, agents `{a}`.\n")
     return "".join(out) + "\n"
 
 
@@ -299,7 +301,7 @@ def sec_gpu(d: pathlib.Path) -> str:
     note = ""
     if len(shaders) == 1:
         note = f"\nShader-Hash in allen GL-Hosts identisch: `{shaders.pop()}`\n"
-    return ("### §7 class G, alle Presets, 100 Ticks\n"
+    return ("### §7 class G, every preset, 100 ticks (ms)\n"
             + table(["Host"] + presets, body) + note + "\n")
 
 
@@ -322,7 +324,7 @@ def sec_render(d: pathlib.Path) -> str:
                               for k in (("sdl2", True), ("sdl2", False),
                                         ("raylib", True), ("raylib", False))])
     return ("### §8 class R, 1024×1024, `--freeze-sim`\n"
-            + table(["Sprache", "SDL2 llvmpipe", "SDL2 RTX 5080",
+            + table(["Language", "SDL2 llvmpipe", "SDL2 RTX 5080",
                      "raylib llvmpipe", "raylib RTX 5080"], body) + "\n")
 
 
