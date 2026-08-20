@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 380" width="760" height="380" role="img" aria-label="Class P: the same design in seven languages">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 380" width="760" height="380" role="img" aria-label="Class P: the same design in nine languages">
 
   <style>
     .bg    { fill: none; }
@@ -18,7 +18,7 @@
     }
   </style>
 
-<text x="16" y="22" class="ttl">Class P: the same design in seven languages</text>
+<text x="16" y="22" class="ttl">Class P: the same design in nine languages</text>
 <text x="16" y="39" class="sub">2048x2048, 100 ticks, deferred, binned. Perl at 512x512 -- medium would be hours. 16 physical cores, 32 logical.</text>
 <line x1="62" y1="334.0" x2="610" y2="334.0" class="grid"/>
 <text x="54" y="338.0" class="lbl-s" text-anchor="end">0</text>
