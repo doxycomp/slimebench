@@ -16,7 +16,7 @@
 # bridge the build times and binary sizes measure the bridge. On native Linux
 # staging is unnecessary.
 #
-# Roughly 90 minutes. Each phase writes its own .jsonl as it finishes, so an
+# Roughly two hours. Each phase writes its own .jsonl as it finishes, so an
 # interrupted run still leaves usable output.
 
 set -u
@@ -105,6 +105,12 @@ python3 bench/run.py bench --preset small --ticks 300 --reps 3 \
   --targets c-simd,cpp-simd,rust-simd \
   --out "$OUT/G-simd.jsonl" || true
 
+# The four-way kernel comparison, reported as ms_diffuse: the agent pass is
+# identical in all of them and would dilute the difference. Needs AVX-512 and
+# ASM=1; the script says so and writes nothing if either is missing.
+phase "class V, diffusion kernels: scalar / intrinsics / assembly"
+bench/asm-kernels.sh "$OUT/V-asm-kernels.jsonl" medium 100 || true
+
 # ---- 4. class P ----------------------------------------------------------
 # One thread sweep per language. Perl runs at `tiny`: `medium` there is hours,
 # and the shape of its curve is the datapoint, not a cross-language absolute.
@@ -142,6 +148,12 @@ psweep ts      medium 100 binned private -- node --experimental-strip-types --no
 psweep python  medium 100 binned private -- python3 impl/python/slimebench_numpy.py
 psweep perl    tiny    20 ""              -- perl impl/perl/slimebench.pl
 
+# The free-threading experiment: {GIL, no-GIL} x {threads, processes} x T,
+# everything else held fixed. Skipped with a note if no free-threaded
+# interpreter is installed -- the GIL half alone is not the measurement.
+phase "class P, CPython free-threading matrix"
+bench/gil-matrix.sh "$OUT/P-gil-matrix.jsonl" small 100 || true
+
 # ---- 5. class G ----------------------------------------------------------
 phase "class G, every preset"
 : > "$OUT/H-gpu.jsonl"
@@ -178,7 +190,14 @@ render() { # lang label cmd...
   local lang=$1 label=$2; shift 2
   local n=200; [ "$lang" = perl ] && n=20
   local j
-  j=$(timeout 900 "$@" --preset small --ticks "$n" --freeze-sim --json 2>/dev/null \
+  # --json already turns the HUD off everywhere it exists; passing --no-hud
+  # as well makes that explicit in the command line, so a frame that drew
+  # an overlay could not be mistaken for one of these numbers. Only the
+  # three languages that have a HUD accept the flag -- SPEC-1 section 10
+  # says the others must reject it, and they do.
+  local -a hud=()
+  case "$lang" in c|cpp|rust) hud=(--no-hud);; esac
+  j=$(timeout 900 "$@" --preset small --ticks "$n" --freeze-sim --json "${hud[@]}" 2>/dev/null \
       | grep -m1 '^{') || { echo "  $label FAILED"; return; }
   [ -z "$j" ] && { echo "  $label no json"; return; }
   echo "$j" | RL="$RLABEL" python3 -c "

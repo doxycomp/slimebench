@@ -21,7 +21,7 @@ pub const GLYPH_W: usize = 5;
 pub const GLYPH_H: usize = 7;
 
 /// The glyph table, generated from impl/c/sb_font.h by
-/// scratchpad/gen_rust_font.py -- see the test at the bottom of this file.
+/// spec/tools/gen_rust_font.py -- see the test at the bottom of this file.
 /// Seven rows of five characters per glyph, '#' set and '.' clear.
 #[rustfmt::skip]
 static FONT: [&[u8; 35]; 57] = [
@@ -414,6 +414,25 @@ mod tests {
         }
         assert_eq!(h, FONT_HASH, "glyph table changed; regenerate from sb_font.h");
         assert_eq!(FONT.len(), FONT_CHARS.len());
+    }
+
+    /// The C side is checked by dumping a PGM and looking at it. Rust gets an
+    /// assertion instead: the overlay must darken the panel and set some
+    /// foreground pixels inside it, and touch nothing outside.
+    #[test]
+    fn draw_writes_a_panel_and_nothing_below_it() {
+        let mut cfg = Config::default();
+        cfg.width = 512;
+        cfg.height = 512;
+        let mut g = vec![160u8; (cfg.width * cfg.height) as usize];
+        let mut h = Hud::new("rust / test", true);
+        h.tick = 42;
+        draw(&h, &cfg, &mut g, 100.0);
+
+        let row = |y: usize| &g[y * cfg.width as usize..(y + 1) * cfg.width as usize];
+        assert!(row(4).iter().any(|&v| v == FG), "no text in the panel");
+        assert!(row(4).iter().any(|&v| v == 40), "panel not darkened");
+        assert!(row(400).iter().all(|&v| v == 160), "wrote outside the panel");
     }
 
     #[test]

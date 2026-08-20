@@ -42,11 +42,14 @@ fn sdl_action(k: Keycode) -> Action {
         Keycode::Tab => Action::Hud,
         Keycode::F1 => Action::Help,
         other => {
-            let n = other as i32;
-            if (0..128).contains(&n) {
-                hud::action_for_char(n as u8 as char)
-            } else {
-                Action::None
+            // Keycode has no numeric cast in rust-sdl2; its Display impl is
+            // the SDL key name, which for a printable key is that character.
+            let name = other.name();
+            let mut chars = name.chars();
+            match (chars.next(), chars.next()) {
+                (Some(c), None) if c.is_ascii() => hud::action_for_char(c),
+                _ if name == "Space" => hud::action_for_char(' '),
+                _ => Action::None,
             }
         }
     }

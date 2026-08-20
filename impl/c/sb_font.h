@@ -95,7 +95,7 @@ static const char SB_GLYPH_MISSING[] =
  * of this table and the same constant; sb_hud_init() compares them at startup
  * so an edit on either side is caught the first time a window opens, rather
  * than as one wrong pixel in a HUD nobody screenshots. Regenerate the Rust
- * side with scratchpad/gen_rust_font.py after changing a glyph here. */
+ * side with spec/tools/gen_rust_font.py after changing a glyph here. */
 #define SB_FONT_HASH 0x6856D243u
 
 static inline uint32_t sb_font_hash(void) {
