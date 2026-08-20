@@ -1,0 +1,1328 @@
+==> writing to results/run-20260820-0330
+date        2026-08-20T03:30:13+02:00
+host        Linux 6.18.33.2-microsoft-standard-WSL2 x86_64
+cpu         AMD Ryzen 9 9950X3D 16-Core Processor
+cores       32 logical
+mem         46 GiB
+gcc         13
+clang       18.1.3
+rustc       1.97.1
+ghc         9.10.3
+node        v25.5.0
+python      3.12.3
+perl        v5.38.2
+nvcc        V12.0.140
+gl          D3D12 (WSL)
+display     yes
+commit      41bdcc0
+
+
+=== class S, all languages, 256x256 ===
+warning: repo lives on the Windows filesystem (/mnt/c/Users/pw/git/slimebench/.claude/worktrees/physarum-benchmarking-suite-377fb5).
+         Build and I/O timings will be dominated by the 9p bridge.
+         For real numbers use scripts/stage-wsl.sh first.
+
+-- c/gcc/o0
+   rep 1/3: 88.1 ms  18.6 MAUPS  rss 17.9 MiB
+   rep 2/3: 87.0 ms  18.8 MAUPS  rss 17.9 MiB
+   rep 3/3: 87.5 ms  18.7 MAUPS  rss 17.9 MiB
+-- c/gcc/o2
+   rep 1/3: 21.8 ms  75.2 MAUPS  rss 17.9 MiB
+   rep 2/3: 21.6 ms  75.7 MAUPS  rss 17.9 MiB
+   rep 3/3: 22.0 ms  74.4 MAUPS  rss 17.9 MiB
+-- c/gcc/o3
+   rep 1/3: 22.1 ms  74.2 MAUPS  rss 17.9 MiB
+   rep 2/3: 22.0 ms  74.3 MAUPS  rss 17.9 MiB
+   rep 3/3: 22.3 ms  73.3 MAUPS  rss 17.9 MiB
+-- c/gcc/o3-native
+   rep 1/3: 25.1 ms  65.2 MAUPS  rss 17.9 MiB
+   rep 2/3: 24.8 ms  66.2 MAUPS  rss 17.9 MiB
+   rep 3/3: 25.0 ms  65.6 MAUPS  rss 17.9 MiB
+-- c/gcc/o3-native-lto
+   rep 1/3: 25.2 ms  65.0 MAUPS  rss 17.9 MiB
+   rep 2/3: 25.7 ms  63.8 MAUPS  rss 17.9 MiB
+   rep 3/3: 24.8 ms  66.0 MAUPS  rss 17.9 MiB
+-- c/gcc/ofast-native
+   rep 1/3: 23.8 ms  68.9 MAUPS  rss 17.9 MiB
+   rep 2/3: 23.9 ms  68.4 MAUPS  rss 17.9 MiB
+   rep 3/3: 23.7 ms  69.3 MAUPS  rss 17.9 MiB
+-- c/clang/o0
+   rep 1/3: 71.4 ms  22.9 MAUPS  rss 17.9 MiB
+   rep 2/3: 69.8 ms  23.5 MAUPS  rss 17.9 MiB
+   rep 3/3: 71.1 ms  23.1 MAUPS  rss 17.9 MiB
+-- c/clang/o2
+   rep 1/3: 23.6 ms  69.6 MAUPS  rss 17.9 MiB
+   rep 2/3: 23.6 ms  69.4 MAUPS  rss 17.9 MiB
+   rep 3/3: 23.7 ms  69.2 MAUPS  rss 17.9 MiB
+-- c/clang/o3
+   rep 1/3: 23.4 ms  70.1 MAUPS  rss 17.9 MiB
+   rep 2/3: 23.6 ms  69.4 MAUPS  rss 17.9 MiB
+   rep 3/3: 23.2 ms  70.5 MAUPS  rss 17.9 MiB
+-- c/clang/o3-native
+   rep 1/3: 19.6 ms  83.8 MAUPS  rss 17.9 MiB
+   rep 2/3: 20.5 ms  79.8 MAUPS  rss 17.9 MiB
+   rep 3/3: 19.8 ms  82.9 MAUPS  rss 17.9 MiB
+-- c/clang/o3-native-lto
+   rep 1/3: 19.4 ms  84.5 MAUPS  rss 17.9 MiB
+   rep 2/3: 19.5 ms  83.8 MAUPS  rss 17.9 MiB
+   rep 3/3: 19.6 ms  83.7 MAUPS  rss 17.9 MiB
+-- c/clang/ofast-native
+   rep 1/3: 30.2 ms  54.2 MAUPS  rss 17.9 MiB
+   rep 2/3: 29.9 ms  54.7 MAUPS  rss 17.9 MiB
+   rep 3/3: 30.2 ms  54.3 MAUPS  rss 17.9 MiB
+-- c-sdl2: skipped (not headless-capable)
+-- c-simd/gcc/o3-v3
+   rep 1/3: 17.9 ms  91.4 MAUPS  rss 17.9 MiB
+   rep 2/3: 17.9 ms  91.3 MAUPS  rss 17.9 MiB
+   rep 3/3: 18.8 ms  87.2 MAUPS  rss 17.9 MiB
+-- c-simd/gcc/o3-native
+   rep 1/3: 20.2 ms  81.2 MAUPS  rss 17.9 MiB
+   rep 2/3: 20.7 ms  79.0 MAUPS  rss 17.9 MiB
+   rep 3/3: 20.1 ms  81.6 MAUPS  rss 17.9 MiB
+-- c-simd/clang/o3-v3
+   rep 1/3: 18.0 ms  91.1 MAUPS  rss 17.9 MiB
+   rep 2/3: 17.9 ms  91.7 MAUPS  rss 17.9 MiB
+   rep 3/3: 17.6 ms  92.9 MAUPS  rss 17.9 MiB
+-- c-simd/clang/o3-native
+   rep 1/3: 14.9 ms  110.1 MAUPS  rss 17.9 MiB
+   rep 2/3: 14.9 ms  109.7 MAUPS  rss 17.9 MiB
+   rep 3/3: 15.0 ms  108.9 MAUPS  rss 17.9 MiB
+-- c-pgo/gcc/o3-native-pgo
+   BUILD FAILED
+      ==> [1/3] instrumented build
+      In file included from sb_parallel.c:20:
+      sb_barrier.h: In function ‘sb_futex_wake_all’:
+      sb_barrier.h:78:5: warning: implicit declaration of function ‘syscall’ [-Wimplicit-function-declaration]
+         78 |     syscall(SYS_futex, (uint32_t *)addr, FUTEX_WAKE_PRIVATE, INT32_MAX, NULL, NULL, 0);
+            |     ^~~~~~~
+      /usr/bin/ld: /tmp/ccbOXoG1.o: in function `sb_tick':
+      sb_core.c:(.text+0x1c80): undefined reference to `sb_diffuse_rows_simd'
+      /usr/bin/ld: sb_core.c:(.text+0x1df0): undefined reference to `sb_diffuse_rows_asm'
+      /usr/bin/ld: /tmp/cc4v4jWN.o: in function `sb_emit_json':
+      sb_cli.c:(.text+0x3b8): undefined reference to `sb_simd_name'
+      /usr/bin/ld: sb_cli.c:(.text+0x438): undefined reference to `sb_asm_name'
+      /usr/bin/ld: /tmp/cc4v4jWN.o: in function `sb_parse_args':
+      sb_cli.c:(.text+0x8dd): undefined reference to `sb_asm_available'
+      /usr/bin/ld: /tmp/ccey8gzX.o: in function `worker_main':
+      sb_parallel.c:(.text+0x2176): undefined reference to `sb_diffuse_rows_simd'
+      /usr/bin/ld: sb_parallel.c:(.text+0x300f): undefined reference to `sb_diffuse_rows_asm'
+      collect2: error: ld returned 1 exit status
+-- c-pgo/clang/o3-native-pgo
+   BUILD FAILED
+      ==> [1/3] instrumented build
+      In file included from sb_parallel.c:20:
+      ./sb_barrier.h:78:5: error: call to undeclared function 'syscall'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+         78 |     syscall(SYS_futex, (uint32_t *)addr, FUTEX_WAKE_PRIVATE, INT32_MAX, NULL, NULL, 0);
+            |     ^
+      ./sb_barrier.h:82:5: error: call to undeclared function 'syscall'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+         82 |     syscall(SYS_futex, (uint32_t *)addr, FUTEX_WAIT_PRIVATE, expect, NULL, NULL, 0);
+            |     ^
+      2 errors generated.
+-- c-par-binned: skipped (does not implement --update serial)
+-- c-par-private: skipped (does not implement --update serial)
+-- c-raylib: skipped (not headless-capable)
+-- cpp/g++/o0
+   rep 1/3: 95.9 ms  17.1 MAUPS  rss 17.9 MiB
+   rep 2/3: 100.7 ms  16.3 MAUPS  rss 17.9 MiB
+   rep 3/3: 97.2 ms  16.9 MAUPS  rss 17.9 MiB
+-- cpp/g++/o2
+   rep 1/3: 25.0 ms  65.4 MAUPS  rss 17.9 MiB
+   rep 2/3: 24.6 ms  66.7 MAUPS  rss 17.9 MiB
+   rep 3/3: 24.9 ms  65.8 MAUPS  rss 17.9 MiB
+-- cpp/g++/o3
+   rep 1/3: 22.1 ms  74.3 MAUPS  rss 17.9 MiB
+   rep 2/3: 22.6 ms  72.6 MAUPS  rss 17.9 MiB
+   rep 3/3: 22.9 ms  71.5 MAUPS  rss 17.9 MiB
+-- cpp/g++/o3-native
+   rep 1/3: 23.6 ms  69.4 MAUPS  rss 17.9 MiB
+   rep 2/3: 23.2 ms  70.5 MAUPS  rss 17.9 MiB
+   rep 3/3: 23.5 ms  69.6 MAUPS  rss 17.9 MiB
+-- cpp/g++/o3-native-lto
+   rep 1/3: 29.1 ms  56.3 MAUPS  rss 17.9 MiB
+   rep 2/3: 28.6 ms  57.4 MAUPS  rss 17.9 MiB
+   rep 3/3: 28.0 ms  58.5 MAUPS  rss 17.9 MiB
+-- cpp/g++/ofast-native
+   rep 1/3: 22.0 ms  74.4 MAUPS  rss 17.9 MiB
+   rep 2/3: 21.8 ms  75.0 MAUPS  rss 17.9 MiB
+   rep 3/3: 21.6 ms  75.7 MAUPS  rss 17.9 MiB
+-- cpp/clang++/o0
+   rep 1/3: 91.1 ms  18.0 MAUPS  rss 17.9 MiB
+   rep 2/3: 89.9 ms  18.2 MAUPS  rss 17.9 MiB
+   rep 3/3: 88.3 ms  18.6 MAUPS  rss 17.9 MiB
+-- cpp/clang++/o2
+   rep 1/3: 26.6 ms  61.6 MAUPS  rss 17.9 MiB
+   rep 2/3: 26.1 ms  62.7 MAUPS  rss 17.9 MiB
+   rep 3/3: 25.6 ms  64.0 MAUPS  rss 17.9 MiB
+-- cpp/clang++/o3
+   rep 1/3: 25.7 ms  63.7 MAUPS  rss 17.9 MiB
+   rep 2/3: 25.3 ms  64.8 MAUPS  rss 17.9 MiB
+   rep 3/3: 25.4 ms  64.4 MAUPS  rss 17.9 MiB
+-- cpp/clang++/o3-native
+   rep 1/3: 22.0 ms  74.6 MAUPS  rss 17.9 MiB
+   rep 2/3: 24.5 ms  66.9 MAUPS  rss 17.9 MiB
+   rep 3/3: 21.5 ms  76.1 MAUPS  rss 17.9 MiB
+-- cpp/clang++/o3-native-lto
+   rep 1/3: 23.3 ms  70.3 MAUPS  rss 17.9 MiB
+   rep 2/3: 22.7 ms  72.2 MAUPS  rss 17.9 MiB
+   rep 3/3: 22.6 ms  72.4 MAUPS  rss 17.9 MiB
+-- cpp/clang++/ofast-native
+   rep 1/3: 32.6 ms  50.2 MAUPS  rss 17.9 MiB
+   rep 2/3: 33.6 ms  48.7 MAUPS  rss 17.9 MiB
+   rep 3/3: 32.8 ms  50.0 MAUPS  rss 17.9 MiB
+-- cpp-simd/g++/o3-v3
+   rep 1/3: 17.9 ms  91.5 MAUPS  rss 17.9 MiB
+   rep 2/3: 17.8 ms  91.9 MAUPS  rss 17.9 MiB
+   rep 3/3: 18.4 ms  88.9 MAUPS  rss 17.9 MiB
+-- cpp-simd/g++/o3-native
+   rep 1/3: 18.6 ms  88.3 MAUPS  rss 17.9 MiB
+   rep 2/3: 19.0 ms  86.1 MAUPS  rss 17.9 MiB
+   rep 3/3: 19.0 ms  86.2 MAUPS  rss 17.9 MiB
+-- cpp-simd/clang++/o3-v3
+   rep 1/3: 19.6 ms  83.7 MAUPS  rss 17.9 MiB
+   rep 2/3: 19.6 ms  83.4 MAUPS  rss 17.9 MiB
+   rep 3/3: 19.7 ms  83.2 MAUPS  rss 17.9 MiB
+-- cpp-simd/clang++/o3-native
+   rep 1/3: 17.1 ms  95.9 MAUPS  rss 17.9 MiB
+   rep 2/3: 17.9 ms  91.6 MAUPS  rss 17.9 MiB
+   rep 3/3: 17.1 ms  95.8 MAUPS  rss 17.9 MiB
+-- rust-simd/cargo/release-native
+   rep 1/3: 23.8 ms  69.0 MAUPS  rss 17.9 MiB
+   rep 2/3: 23.1 ms  70.8 MAUPS  rss 17.9 MiB
+   rep 3/3: 23.3 ms  70.2 MAUPS  rss 17.9 MiB
+-- rust-simd/cargo/release-native-unchecked
+   rep 1/3: 22.8 ms  71.9 MAUPS  rss 17.9 MiB
+   rep 2/3: 23.2 ms  70.6 MAUPS  rss 17.9 MiB
+   rep 3/3: 23.0 ms  71.3 MAUPS  rss 17.9 MiB
+-- rust-par-binned: skipped (does not implement --update serial)
+-- rust-par-private: skipped (does not implement --update serial)
+-- cpp-par-binned: skipped (does not implement --update serial)
+-- cpp-par-private: skipped (does not implement --update serial)
+-- cpp-sdl2: skipped (not headless-capable)
+-- cpp-raylib: skipped (not headless-capable)
+-- rust/cargo/release
+   rep 1/3: 29.3 ms  55.9 MAUPS  rss 17.9 MiB
+   rep 2/3: 30.0 ms  54.6 MAUPS  rss 17.9 MiB
+   rep 3/3: 29.2 ms  56.0 MAUPS  rss 17.9 MiB
+-- rust/cargo/release-unchecked
+   rep 1/3: 27.5 ms  59.5 MAUPS  rss 17.9 MiB
+   rep 2/3: 27.6 ms  59.4 MAUPS  rss 17.9 MiB
+   rep 3/3: 28.2 ms  58.1 MAUPS  rss 17.9 MiB
+-- rust/cargo/release-native
+   rep 1/3: 30.0 ms  54.7 MAUPS  rss 17.9 MiB
+   rep 2/3: 29.6 ms  55.3 MAUPS  rss 17.9 MiB
+   rep 3/3: 29.8 ms  55.0 MAUPS  rss 17.9 MiB
+-- rust/cargo/release-native-unchecked
+   rep 1/3: 27.6 ms  59.4 MAUPS  rss 17.9 MiB
+   rep 2/3: 27.1 ms  60.5 MAUPS  rss 17.9 MiB
+   rep 3/3: 26.5 ms  61.9 MAUPS  rss 17.9 MiB
+-- rust/cargo/release-native-lto-unchecked
+   rep 1/3: 26.6 ms  61.6 MAUPS  rss 17.9 MiB
+   rep 2/3: 26.7 ms  61.4 MAUPS  rss 17.9 MiB
+   rep 3/3: 26.6 ms  61.7 MAUPS  rss 17.9 MiB
+-- ts/node/default
+   rep 1/3: 78.3 ms  20.9 MAUPS  rss 80.7 MiB
+   rep 2/3: 77.7 ms  21.1 MAUPS  rss 81.1 MiB
+   rep 3/3: 76.4 ms  21.4 MAUPS  rss 80.3 MiB
+-- python-numpy: skipped (does not implement --update serial)
+-- python-numpy-ft: skipped (does not implement --update serial)
+-- python-pure/python3/default
+   rep 1/3: 3676.5 ms  0.4 MAUPS  rss 17.9 MiB
+   rep 2/3: 3692.5 ms  0.4 MAUPS  rss 17.9 MiB
+   rep 3/3: 3643.0 ms  0.4 MAUPS  rss 17.9 MiB
+-- python-pure-strict/python3/default
+   rep 1/3: 8125.2 ms  0.2 MAUPS  rss 17.9 MiB
+   rep 2/3: 8339.3 ms  0.2 MAUPS  rss 17.9 MiB
+   rep 3/3: 8245.4 ms  0.2 MAUPS  rss 17.9 MiB
+-- perl/perl/default
+   rep 1/3: 3653.7 ms  0.4 MAUPS  rss 22.0 MiB
+   rep 2/3: 3571.1 ms  0.5 MAUPS  rss 21.8 MiB
+   rep 3/3: 3614.3 ms  0.5 MAUPS  rss 22.0 MiB
+-- perl-strict/perl/default
+   rep 1/3: 12002.9 ms  0.1 MAUPS  rss 22.2 MiB
+   rep 2/3: 11858.3 ms  0.1 MAUPS  rss 22.3 MiB
+   rep 3/3: 11664.0 ms  0.1 MAUPS  rss 22.0 MiB
+-- haskell/ghc/o1
+   rep 1/3: 60.7 ms  27.0 MAUPS  rss 17.9 MiB
+   rep 2/3: 60.6 ms  27.1 MAUPS  rss 17.9 MiB
+   rep 3/3: 60.9 ms  26.9 MAUPS  rss 17.9 MiB
+-- haskell/ghc/o2
+   rep 1/3: 32.1 ms  51.1 MAUPS  rss 17.9 MiB
+   rep 2/3: 32.0 ms  51.2 MAUPS  rss 17.9 MiB
+   rep 3/3: 32.2 ms  50.9 MAUPS  rss 17.9 MiB
+-- haskell/ghc/o2-llvm
+   rep 1/3: 24.0 ms  68.2 MAUPS  rss 17.9 MiB
+   rep 2/3: 24.7 ms  66.4 MAUPS  rss 17.9 MiB
+   rep 3/3: 24.9 ms  65.8 MAUPS  rss 17.9 MiB
+-- haskell-vector: skipped (does not implement --update serial)
+-- haskell-par-binned: skipped (does not implement --update serial)
+-- haskell-par-private: skipped (does not implement --update serial)
+-- python-par-binned: skipped (does not implement --update serial)
+-- python-par-private: skipped (does not implement --update serial)
+-- perl-par: skipped (does not implement --update serial)
+-- perl-par-strict: skipped (does not implement --update serial)
+-- rust-sdl2: skipped (not headless-capable)
+-- rust-raylib: skipped (not headless-capable)
+-- haskell-sdl2: skipped (not headless-capable)
+-- haskell-raylib: skipped (not headless-capable)
+-- python-pygame: skipped (not headless-capable)
+-- python-raylib: skipped (not headless-capable)
+-- perl-sdl2: skipped (not headless-capable)
+-- perl-raylib: skipped (not headless-capable)
+-- go/go/default
+   rep 1/3: 27.4 ms  59.8 MAUPS  rss 17.9 MiB
+   rep 2/3: 27.4 ms  59.9 MAUPS  rss 17.9 MiB
+   rep 3/3: 27.5 ms  59.6 MAUPS  rss 17.9 MiB
+-- go/go/nobounds
+   rep 1/3: 27.5 ms  59.6 MAUPS  rss 17.9 MiB
+   rep 2/3: 26.7 ms  61.4 MAUPS  rss 17.9 MiB
+   rep 3/3: 27.4 ms  59.7 MAUPS  rss 17.9 MiB
+-- go-par-binned: skipped (does not implement --update serial)
+-- go-par-private: skipped (does not implement --update serial)
+-- swift/swift/release
+   rep 1/3: 26.4 ms  62.1 MAUPS  rss 18.7 MiB
+   rep 2/3: 26.5 ms  61.9 MAUPS  rss 18.8 MiB
+   rep 3/3: 26.6 ms  61.5 MAUPS  rss 18.7 MiB
+-- swift/swift/unchecked
+   rep 1/3: 24.3 ms  67.5 MAUPS  rss 18.8 MiB
+   rep 2/3: 24.0 ms  68.2 MAUPS  rss 18.7 MiB
+   rep 3/3: 24.1 ms  68.1 MAUPS  rss 18.6 MiB
+-- swift-par-binned: skipped (does not implement --update serial)
+-- swift-par-private: skipped (does not implement --update serial)
+-- cuda: skipped (does not implement --update serial)
+-- pygl: skipped (does not implement --update serial)
+-- glcompute: skipped (does not implement --update serial)
+-- ts-par-binned: skipped (does not implement --update serial)
+-- ts-par-private: skipped (does not implement --update serial)
+
+wrote results/run-20260820-0330/A-crosslang-serial.jsonl
+
+| # | Sprache | Backend | Compiler | Profil | Konf. | ms total | ms/tick | Agent % | MAUPS | rel. | RSS MiB | Binär KiB | Build s |
+|---|---|---|---|---|:-:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | C | simd/scalar+simd-avx512f | clang | o3-native | A | 15 | 0.134 | 92 | 110.1 | 1.00x | 18 | 54 | 0.0 |
+| 2 | C++ | simd/scalar+simd-avx512f | clang++ | o3-native | A | 17 | 0.156 | 93 | 95.9 | 1.15x | 18 | 63 | 0.0 |
+| 3 | C | simd/scalar+simd-avx2 | clang | o3-v3 | A | 18 | 0.160 | 93 | 92.9 | 1.18x | 18 | 54 | 0.0 |
+| 4 | C++ | simd/scalar+simd-avx2 | g++ | o3-v3 | A | 18 | 0.165 | 93 | 91.9 | 1.20x | 18 | 74 | 0.0 |
+| 5 | C | simd/scalar+simd-avx2 | gcc | o3-v3 | A | 18 | 0.166 | 93 | 91.4 | 1.20x | 18 | 62 | 0.0 |
+| 6 | C++ | simd/scalar+simd-avx512f | g++ | o3-native | A | 19 | 0.170 | 94 | 88.3 | 1.25x | 18 | 74 | 0.0 |
+| 7 | C | headless/scalar | clang | o3-native-lto | A | 19 | 0.179 | 72 | 84.5 | 1.30x | 18 | 54 | 0.0 |
+| 8 | C | headless/scalar | clang | o3-native | A | 20 | 0.181 | 72 | 83.8 | 1.31x | 18 | 54 | 0.0 |
+| 9 | C++ | simd/scalar+simd-avx2 | clang++ | o3-v3 | A | 20 | 0.178 | 93 | 83.7 | 1.31x | 18 | 63 | 0.0 |
+| 10 | C | simd/scalar+simd-avx512f | gcc | o3-native | A | 20 | 0.187 | 94 | 81.6 | 1.35x | 18 | 62 | 0.0 |
+| 11 | C++ | headless/scalar | clang++ | o3-native | A | 22 | 0.200 | 75 | 76.1 | 1.45x | 18 | 63 | 0.0 |
+| 12 | C | headless/scalar | gcc | o2 | A | 22 | 0.202 | 75 | 75.7 | 1.45x | 18 | 50 | 0.0 |
+| 13 | C++ | headless/scalar | g++ | ofast-native | C | 22 | 0.200 | 72 | 75.7 | 1.45x | 18 | 74 | 0.0 |
+| 14 | C | headless/scalar | gcc | o3 | A | 22 | 0.205 | 75 | 74.3 | 1.48x | 18 | 58 | 0.0 |
+| 15 | C++ | headless/scalar | g++ | o3 | A | 22 | 0.207 | 75 | 74.3 | 1.48x | 18 | 70 | 0.0 |
+| 16 | C++ | headless/scalar | clang++ | o3-native-lto | A | 23 | 0.210 | 76 | 72.4 | 1.52x | 18 | 63 | 0.0 |
+| 17 | Rust | simd/unchecked+simd-avx512f | cargo | release-native-unchecked | A | 23 | 0.206 | 94 | 71.9 | 1.53x | 18 | 475 | 0.1 |
+| 18 | Rust | simd/safe+simd-avx512f | cargo | release-native | A | 23 | 0.213 | 94 | 70.8 | 1.55x | 18 | 476 | 0.2 |
+| 19 | C | headless/scalar | clang | o3 | A | 23 | 0.216 | 77 | 70.5 | 1.56x | 18 | 50 | 0.0 |
+| 20 | C++ | headless/scalar | g++ | o3-native | A | 23 | 0.218 | 76 | 70.5 | 1.56x | 18 | 74 | 0.0 |
+| 21 | C | headless/scalar | clang | o2 | A | 24 | 0.221 | 77 | 69.6 | 1.58x | 18 | 50 | 0.0 |
+| 22 | C | headless/scalar | gcc | ofast-native | C | 24 | 0.220 | 75 | 69.3 | 1.59x | 18 | 62 | 0.0 |
+| 23 | Swift | headless/scalar | swift | unchecked | A | 24 | 0.225 | 79 | 68.2 | 1.61x | 19 | 96 | 0.9 |
+| 24 | Haskell | headless/scalar | ghc | o2-llvm | A | 24 | 0.212 | 78 | 68.2 | 1.61x | 18 | 2860 | 0.5 |
+| 25 | C++ | headless/scalar | g++ | o2 | A | 25 | 0.231 | 77 | 66.7 | 1.65x | 18 | 62 | 0.0 |
+| 26 | C | headless/scalar | gcc | o3-native | A | 25 | 0.231 | 76 | 66.2 | 1.66x | 18 | 62 | 0.0 |
+| 27 | C | headless/scalar | gcc | o3-native-lto | A | 25 | 0.232 | 76 | 66.0 | 1.67x | 18 | 54 | 0.0 |
+| 28 | C++ | headless/scalar | clang++ | o3 | A | 25 | 0.236 | 78 | 64.8 | 1.70x | 18 | 59 | 0.0 |
+| 29 | C++ | headless/scalar | clang++ | o2 | A | 26 | 0.240 | 79 | 64.0 | 1.72x | 18 | 59 | 0.0 |
+| 30 | Swift | headless/scalar | swift | release | A | 26 | 0.249 | 79 | 62.1 | 1.77x | 19 | 100 | 1.2 |
+| 31 | Rust | headless/unchecked | cargo | release-native-unchecked | A | 26 | 0.247 | 80 | 61.9 | 1.78x | 18 | 475 | 0.1 |
+| 32 | Rust | headless/unchecked | cargo | release-native-lto-unchecked | A | 27 | 0.248 | 80 | 61.7 | 1.78x | 18 | 442 | 0.1 |
+| 33 | Go | headless/scalar | go | nobounds | A | 27 | 0.250 | 64 | 61.4 | 1.79x | 18 | 1552 | 0.5 |
+| 34 | Go | headless/scalar | go | default | A | 27 | 0.258 | 67 | 59.9 | 1.84x | 18 | 1592 | 0.5 |
+| 35 | Rust | headless/unchecked | cargo | release-unchecked | A | 28 | 0.260 | 80 | 59.5 | 1.85x | 18 | 468 | 0.1 |
+| 36 | C++ | headless/scalar | g++ | o3-native-lto | A | 28 | 0.266 | 71 | 58.5 | 1.88x | 18 | 66 | 0.0 |
+| 37 | Rust | headless/safe | cargo | release | A | 29 | 0.279 | 74 | 56.0 | 1.96x | 18 | 471 | 0.1 |
+| 38 | Rust | headless/safe | cargo | release-native | A | 30 | 0.277 | 74 | 55.3 | 1.99x | 18 | 476 | 0.1 |
+| 39 | C | headless/scalar | clang | ofast-native | C | 30 | 0.283 | 46 | 54.7 | 2.01x | 18 | 54 | 0.0 |
+| 40 | Haskell | headless/scalar | ghc | o2 | A | 32 | 0.295 | 64 | 51.2 | 2.15x | 18 | 2832 | 6.1 |
+| 41 | C++ | headless/scalar | clang++ | ofast-native | C | 33 | 0.310 | 49 | 50.2 | 2.19x | 18 | 63 | 0.0 |
+| 42 | Haskell | headless/scalar | ghc | o1 | A | 61 | 0.579 | 50 | 27.1 | 4.07x | 18 | 2779 | 5.8 |
+| 43 | C | headless/scalar | clang | o0 | A | 70 | 0.682 | 58 | 23.5 | 4.69x | 18 | 54 | 0.0 |
+| 44 | TypeScript | node/scalar | node | default | A | 76 | 0.636 | 55 | 21.4 | 5.13x | 80 | – | 0.0 |
+| 45 | C | headless/scalar | gcc | o0 | A | 87 | 0.855 | 56 | 18.8 | 5.84x | 18 | 114 | 0.0 |
+| 46 | C++ | headless/scalar | clang++ | o0 | A | 88 | 0.871 | 66 | 18.6 | 5.93x | 18 | 155 | 0.0 |
+| 47 | C++ | headless/scalar | g++ | o0 | A | 96 | 0.944 | 60 | 17.1 | 6.44x | 18 | 166 | 0.0 |
+| 48 | Perl | headless/plain | perl | default | B | 3571 | 35.392 | 40 | 0.5 | 239.87x | 22 | – | 0.0 |
+| 49 | Python | pure/pure | python3 | default | B | 3643 | 36.164 | 37 | 0.4 | 244.70x | 18 | – | 0.0 |
+| 50 | Python | pure-strict/pure-strict | python3 | default | A | 8125 | 80.799 | 35 | 0.2 | 545.76x | 18 | – | 0.0 |
+| 51 | Perl | strict-f32/strict-f32 | perl | default | A | 11664 | 116.084 | 34 | 0.1 | 783.46x | 22 | – | 0.0 |
+
+### Hash-Konsens
+- `custom/serial` Stufe A: **0x9E8B1688/0x0E6A2341** — alle 45 Läufe identisch.
+- `custom/serial` Stufe B: 2 Ergebnisse (erwartet — Stufe B rechnet in Doubles, siehe SPEC 7.2):
+    - `0x5BD59FCA/0x7D92A19E` — Perl/perl/default
+    - `0xE7965204/0xF2572095` — Python/python3/default
+- `custom/serial` Stufe C: 2 Ergebnisse (erwartet — fast-math ist nicht bit-reproduzierbar):
+    - `0x19054A6C/0x0E6A2341` — C/clang/ofast-native, C++/clang++/ofast-native
+    - `0xAF625F3B/0x0E6A2341` — C++/g++/ofast-native, C/gcc/ofast-native
+
+Fehlgeschlagen: c-pgo/gcc/o3-native-pgo (build-failed), c-pgo/clang/o3-native-pgo (build-failed)
+warning: repo lives on the Windows filesystem (/mnt/c/Users/pw/git/slimebench/.claude/worktrees/physarum-benchmarking-suite-377fb5).
+         Build and I/O timings will be dominated by the 9p bridge.
+         For real numbers use scripts/stage-wsl.sh first.
+
+-- c/gcc/o0
+   rep 1/3: 96.4 ms  17.0 MAUPS  rss 17.9 MiB
+   rep 2/3: 92.4 ms  17.7 MAUPS  rss 17.9 MiB
+   rep 3/3: 93.4 ms  17.6 MAUPS  rss 17.9 MiB
+-- c/gcc/o2
+   rep 1/3: 22.8 ms  71.9 MAUPS  rss 17.9 MiB
+   rep 2/3: 22.9 ms  71.5 MAUPS  rss 17.9 MiB
+   rep 3/3: 23.0 ms  71.2 MAUPS  rss 17.9 MiB
+-- c/gcc/o3
+   rep 1/3: 21.9 ms  74.7 MAUPS  rss 17.9 MiB
+   rep 2/3: 21.9 ms  74.8 MAUPS  rss 17.9 MiB
+   rep 3/3: 21.7 ms  75.4 MAUPS  rss 17.9 MiB
+-- c/gcc/o3-native
+   rep 1/3: 24.7 ms  66.2 MAUPS  rss 17.9 MiB
+   rep 2/3: 24.5 ms  66.8 MAUPS  rss 17.9 MiB
+   rep 3/3: 24.8 ms  65.9 MAUPS  rss 17.9 MiB
+-- c/gcc/o3-native-lto
+   rep 1/3: 24.4 ms  67.0 MAUPS  rss 17.9 MiB
+   rep 2/3: 24.8 ms  66.2 MAUPS  rss 17.9 MiB
+   rep 3/3: 24.8 ms  66.1 MAUPS  rss 17.9 MiB
+-- c/gcc/ofast-native
+   rep 1/3: 23.6 ms  69.4 MAUPS  rss 17.9 MiB
+   rep 2/3: 23.6 ms  69.4 MAUPS  rss 17.9 MiB
+   rep 3/3: 23.9 ms  68.4 MAUPS  rss 17.9 MiB
+-- c/clang/o0
+   rep 1/3: 76.3 ms  21.5 MAUPS  rss 17.9 MiB
+   rep 2/3: 76.1 ms  21.5 MAUPS  rss 17.9 MiB
+   rep 3/3: 76.0 ms  21.6 MAUPS  rss 17.9 MiB
+-- c/clang/o2
+   rep 1/3: 23.2 ms  70.7 MAUPS  rss 17.9 MiB
+   rep 2/3: 23.9 ms  68.5 MAUPS  rss 17.9 MiB
+   rep 3/3: 23.3 ms  70.4 MAUPS  rss 17.9 MiB
+-- c/clang/o3
+   rep 1/3: 23.5 ms  69.8 MAUPS  rss 17.9 MiB
+   rep 2/3: 24.2 ms  67.8 MAUPS  rss 17.9 MiB
+   rep 3/3: 23.9 ms  68.5 MAUPS  rss 17.9 MiB
+-- c/clang/o3-native
+   rep 1/3: 19.4 ms  84.5 MAUPS  rss 17.9 MiB
+   rep 2/3: 19.4 ms  84.3 MAUPS  rss 17.9 MiB
+   rep 3/3: 19.4 ms  84.3 MAUPS  rss 17.9 MiB
+-- c/clang/o3-native-lto
+   rep 1/3: 19.8 ms  82.9 MAUPS  rss 17.9 MiB
+   rep 2/3: 19.6 ms  83.8 MAUPS  rss 17.9 MiB
+   rep 3/3: 20.7 ms  79.3 MAUPS  rss 17.9 MiB
+-- c/clang/ofast-native
+   rep 1/3: 30.0 ms  54.7 MAUPS  rss 17.9 MiB
+   rep 2/3: 30.0 ms  54.7 MAUPS  rss 17.9 MiB
+   rep 3/3: 30.1 ms  54.4 MAUPS  rss 17.9 MiB
+-- c-sdl2: skipped (not headless-capable)
+-- c-simd/gcc/o3-v3
+   rep 1/3: 17.8 ms  92.2 MAUPS  rss 17.9 MiB
+   rep 2/3: 18.0 ms  91.1 MAUPS  rss 17.9 MiB
+   rep 3/3: 18.4 ms  89.2 MAUPS  rss 17.9 MiB
+-- c-simd/gcc/o3-native
+   rep 1/3: 20.1 ms  81.6 MAUPS  rss 17.9 MiB
+   rep 2/3: 19.9 ms  82.5 MAUPS  rss 17.9 MiB
+   rep 3/3: 19.6 ms  83.5 MAUPS  rss 17.9 MiB
+-- c-simd/clang/o3-v3
+   rep 1/3: 17.6 ms  93.0 MAUPS  rss 17.9 MiB
+   rep 2/3: 17.5 ms  93.4 MAUPS  rss 17.9 MiB
+   rep 3/3: 17.5 ms  93.8 MAUPS  rss 17.9 MiB
+-- c-simd/clang/o3-native
+   rep 1/3: 15.4 ms  106.7 MAUPS  rss 17.9 MiB
+   rep 2/3: 15.6 ms  105.0 MAUPS  rss 17.9 MiB
+   rep 3/3: 15.4 ms  106.7 MAUPS  rss 17.9 MiB
+-- c-pgo/gcc/o3-native-pgo
+   BUILD FAILED
+      ==> [1/3] instrumented build
+      In file included from sb_parallel.c:20:
+      sb_barrier.h: In function ‘sb_futex_wake_all’:
+      sb_barrier.h:78:5: warning: implicit declaration of function ‘syscall’ [-Wimplicit-function-declaration]
+         78 |     syscall(SYS_futex, (uint32_t *)addr, FUTEX_WAKE_PRIVATE, INT32_MAX, NULL, NULL, 0);
+            |     ^~~~~~~
+      /usr/bin/ld: /tmp/ccwxJRur.o: in function `sb_tick':
+      sb_core.c:(.text+0x1c80): undefined reference to `sb_diffuse_rows_simd'
+      /usr/bin/ld: sb_core.c:(.text+0x1df0): undefined reference to `sb_diffuse_rows_asm'
+      /usr/bin/ld: /tmp/ccsaE3gJ.o: in function `sb_emit_json':
+      sb_cli.c:(.text+0x3b8): undefined reference to `sb_simd_name'
+      /usr/bin/ld: sb_cli.c:(.text+0x438): undefined reference to `sb_asm_name'
+      /usr/bin/ld: /tmp/ccsaE3gJ.o: in function `sb_parse_args':
+      sb_cli.c:(.text+0x8dd): undefined reference to `sb_asm_available'
+      /usr/bin/ld: /tmp/ccBzrvVH.o: in function `worker_main':
+      sb_parallel.c:(.text+0x2176): undefined reference to `sb_diffuse_rows_simd'
+      /usr/bin/ld: sb_parallel.c:(.text+0x300f): undefined reference to `sb_diffuse_rows_asm'
+      collect2: error: ld returned 1 exit status
+-- c-pgo/clang/o3-native-pgo
+   BUILD FAILED
+      ==> [1/3] instrumented build
+      In file included from sb_parallel.c:20:
+      ./sb_barrier.h:78:5: error: call to undeclared function 'syscall'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+         78 |     syscall(SYS_futex, (uint32_t *)addr, FUTEX_WAKE_PRIVATE, INT32_MAX, NULL, NULL, 0);
+            |     ^
+      ./sb_barrier.h:82:5: error: call to undeclared function 'syscall'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+         82 |     syscall(SYS_futex, (uint32_t *)addr, FUTEX_WAIT_PRIVATE, expect, NULL, NULL, 0);
+            |     ^
+      2 errors generated.
+-- c-par-binned/gcc/o3-native
+   rep 1/3: 23.7 ms  69.2 MAUPS  rss 17.9 MiB
+   rep 2/3: 23.7 ms  69.1 MAUPS  rss 17.9 MiB
+   rep 3/3: 23.8 ms  68.8 MAUPS  rss 17.9 MiB
+-- c-par-binned/clang/o3-native
+   rep 1/3: 19.6 ms  83.5 MAUPS  rss 17.9 MiB
+   rep 2/3: 19.8 ms  82.7 MAUPS  rss 17.9 MiB
+   rep 3/3: 19.8 ms  82.8 MAUPS  rss 17.9 MiB
+-- c-par-private/gcc/o3-native
+   rep 1/3: 24.1 ms  68.1 MAUPS  rss 17.9 MiB
+   rep 2/3: 24.5 ms  66.8 MAUPS  rss 17.9 MiB
+   rep 3/3: 24.2 ms  67.8 MAUPS  rss 17.9 MiB
+-- c-par-private/clang/o3-native
+   rep 1/3: 19.4 ms  84.5 MAUPS  rss 17.9 MiB
+   rep 2/3: 19.3 ms  85.1 MAUPS  rss 17.9 MiB
+   rep 3/3: 19.4 ms  84.4 MAUPS  rss 17.9 MiB
+-- c-raylib: skipped (not headless-capable)
+-- cpp/g++/o0
+   rep 1/3: 110.4 ms  14.8 MAUPS  rss 17.9 MiB
+   rep 2/3: 109.7 ms  14.9 MAUPS  rss 17.9 MiB
+   rep 3/3: 112.3 ms  14.6 MAUPS  rss 17.9 MiB
+-- cpp/g++/o2
+   rep 1/3: 23.9 ms  68.6 MAUPS  rss 17.9 MiB
+   rep 2/3: 24.2 ms  67.7 MAUPS  rss 17.9 MiB
+   rep 3/3: 24.0 ms  68.1 MAUPS  rss 17.9 MiB
+-- cpp/g++/o3
+   rep 1/3: 21.6 ms  75.9 MAUPS  rss 17.9 MiB
+   rep 2/3: 21.2 ms  77.3 MAUPS  rss 17.9 MiB
+   rep 3/3: 21.2 ms  77.1 MAUPS  rss 17.9 MiB
+-- cpp/g++/o3-native
+   rep 1/3: 21.8 ms  75.3 MAUPS  rss 17.9 MiB
+   rep 2/3: 21.9 ms  75.0 MAUPS  rss 17.9 MiB
+   rep 3/3: 21.9 ms  74.9 MAUPS  rss 17.9 MiB
+-- cpp/g++/o3-native-lto
+   rep 1/3: 26.7 ms  61.4 MAUPS  rss 17.9 MiB
+   rep 2/3: 26.3 ms  62.3 MAUPS  rss 17.9 MiB
+   rep 3/3: 26.5 ms  61.9 MAUPS  rss 17.9 MiB
+-- cpp/g++/ofast-native
+   rep 1/3: 20.7 ms  79.3 MAUPS  rss 17.9 MiB
+   rep 2/3: 20.7 ms  79.2 MAUPS  rss 17.9 MiB
+   rep 3/3: 20.5 ms  80.1 MAUPS  rss 17.9 MiB
+-- cpp/clang++/o0
+   rep 1/3: 103.1 ms  15.9 MAUPS  rss 17.9 MiB
+   rep 2/3: 103.4 ms  15.8 MAUPS  rss 17.9 MiB
+   rep 3/3: 102.8 ms  15.9 MAUPS  rss 17.9 MiB
+-- cpp/clang++/o2
+   rep 1/3: 25.1 ms  65.2 MAUPS  rss 17.9 MiB
+   rep 2/3: 24.8 ms  65.9 MAUPS  rss 17.9 MiB
+   rep 3/3: 24.9 ms  65.7 MAUPS  rss 17.9 MiB
+-- cpp/clang++/o3
+   rep 1/3: 24.7 ms  66.3 MAUPS  rss 17.9 MiB
+   rep 2/3: 24.5 ms  67.0 MAUPS  rss 17.9 MiB
+   rep 3/3: 25.6 ms  64.0 MAUPS  rss 17.9 MiB
+-- cpp/clang++/o3-native
+   rep 1/3: 20.9 ms  78.4 MAUPS  rss 17.9 MiB
+   rep 2/3: 21.5 ms  76.4 MAUPS  rss 17.9 MiB
+   rep 3/3: 20.7 ms  79.1 MAUPS  rss 17.9 MiB
+-- cpp/clang++/o3-native-lto
+   rep 1/3: 21.8 ms  75.0 MAUPS  rss 17.9 MiB
+   rep 2/3: 21.3 ms  76.7 MAUPS  rss 17.9 MiB
+   rep 3/3: 22.1 ms  74.2 MAUPS  rss 17.9 MiB
+-- cpp/clang++/ofast-native
+   rep 1/3: 31.5 ms  52.1 MAUPS  rss 17.9 MiB
+   rep 2/3: 30.7 ms  53.3 MAUPS  rss 17.9 MiB
+   rep 3/3: 31.6 ms  51.8 MAUPS  rss 17.9 MiB
+-- cpp-simd/g++/o3-v3
+   rep 1/3: 16.9 ms  97.1 MAUPS  rss 17.9 MiB
+   rep 2/3: 17.0 ms  96.4 MAUPS  rss 17.9 MiB
+   rep 3/3: 17.0 ms  96.5 MAUPS  rss 17.9 MiB
+-- cpp-simd/g++/o3-native
+   rep 1/3: 17.6 ms  92.9 MAUPS  rss 17.9 MiB
+   rep 2/3: 17.9 ms  91.5 MAUPS  rss 17.9 MiB
+   rep 3/3: 17.5 ms  93.5 MAUPS  rss 17.9 MiB
+-- cpp-simd/clang++/o3-v3
+   rep 1/3: 19.3 ms  84.7 MAUPS  rss 17.9 MiB
+   rep 2/3: 19.2 ms  85.2 MAUPS  rss 17.9 MiB
+   rep 3/3: 18.9 ms  86.7 MAUPS  rss 17.9 MiB
+-- cpp-simd/clang++/o3-native
+   rep 1/3: 16.7 ms  98.0 MAUPS  rss 17.9 MiB
+   rep 2/3: 16.9 ms  97.2 MAUPS  rss 17.9 MiB
+   rep 3/3: 17.5 ms  93.7 MAUPS  rss 17.9 MiB
+-- rust-simd/cargo/release-native
+   rep 1/3: 22.5 ms  73.0 MAUPS  rss 17.9 MiB
+   rep 2/3: 22.6 ms  72.3 MAUPS  rss 17.9 MiB
+   rep 3/3: 22.6 ms  72.3 MAUPS  rss 17.9 MiB
+-- rust-simd/cargo/release-native-unchecked
+   rep 1/3: 21.6 ms  75.9 MAUPS  rss 17.9 MiB
+   rep 2/3: 21.8 ms  75.3 MAUPS  rss 17.9 MiB
+   rep 3/3: 21.8 ms  75.3 MAUPS  rss 17.9 MiB
+-- rust-par-binned/cargo/release-native-unchecked
+   rep 1/3: 26.1 ms  62.8 MAUPS  rss 17.9 MiB
+   rep 2/3: 25.6 ms  64.0 MAUPS  rss 17.9 MiB
+   rep 3/3: 25.9 ms  63.3 MAUPS  rss 17.9 MiB
+-- rust-par-private/cargo/release-native-unchecked
+   rep 1/3: 28.2 ms  58.1 MAUPS  rss 17.9 MiB
+   rep 2/3: 27.2 ms  60.3 MAUPS  rss 17.9 MiB
+   rep 3/3: 26.9 ms  61.0 MAUPS  rss 17.9 MiB
+-- cpp-par-binned/g++/o3-native
+   rep 1/3: 22.1 ms  74.2 MAUPS  rss 17.9 MiB
+   rep 2/3: 22.4 ms  73.3 MAUPS  rss 17.9 MiB
+   rep 3/3: 22.2 ms  73.9 MAUPS  rss 17.9 MiB
+-- cpp-par-binned/clang++/o3-native
+   rep 1/3: 21.4 ms  76.6 MAUPS  rss 17.9 MiB
+   rep 2/3: 21.3 ms  76.8 MAUPS  rss 17.9 MiB
+   rep 3/3: 21.7 ms  75.5 MAUPS  rss 17.9 MiB
+-- cpp-par-private/g++/o3-native
+   rep 1/3: 22.7 ms  72.2 MAUPS  rss 17.9 MiB
+   rep 2/3: 22.7 ms  72.2 MAUPS  rss 17.9 MiB
+   rep 3/3: 22.1 ms  74.3 MAUPS  rss 17.9 MiB
+-- cpp-par-private/clang++/o3-native
+   rep 1/3: 21.5 ms  76.1 MAUPS  rss 17.9 MiB
+   rep 2/3: 21.0 ms  78.0 MAUPS  rss 17.9 MiB
+   rep 3/3: 21.7 ms  75.5 MAUPS  rss 17.9 MiB
+-- cpp-sdl2: skipped (not headless-capable)
+-- cpp-raylib: skipped (not headless-capable)
+-- rust/cargo/release
+   rep 1/3: 29.0 ms  56.6 MAUPS  rss 17.9 MiB
+   rep 2/3: 28.5 ms  57.4 MAUPS  rss 17.9 MiB
+   rep 3/3: 28.7 ms  57.2 MAUPS  rss 17.9 MiB
+-- rust/cargo/release-unchecked
+   rep 1/3: 28.4 ms  57.7 MAUPS  rss 17.9 MiB
+   rep 2/3: 28.3 ms  57.9 MAUPS  rss 17.9 MiB
+   rep 3/3: 28.1 ms  58.3 MAUPS  rss 17.9 MiB
+-- rust/cargo/release-native
+   rep 1/3: 30.1 ms  54.4 MAUPS  rss 17.9 MiB
+   rep 2/3: 29.8 ms  55.0 MAUPS  rss 17.9 MiB
+   rep 3/3: 29.3 ms  55.9 MAUPS  rss 17.9 MiB
+-- rust/cargo/release-native-unchecked
+   rep 1/3: 26.7 ms  61.4 MAUPS  rss 17.9 MiB
+   rep 2/3: 26.0 ms  62.9 MAUPS  rss 17.9 MiB
+   rep 3/3: 26.0 ms  63.0 MAUPS  rss 17.9 MiB
+-- rust/cargo/release-native-lto-unchecked
+   rep 1/3: 26.8 ms  61.1 MAUPS  rss 17.9 MiB
+   rep 2/3: 26.5 ms  61.8 MAUPS  rss 17.9 MiB
+   rep 3/3: 26.9 ms  60.9 MAUPS  rss 17.9 MiB
+-- ts/node/default
+   rep 1/3: 87.7 ms  18.7 MAUPS  rss 80.9 MiB
+   rep 2/3: 78.2 ms  21.0 MAUPS  rss 81.1 MiB
+   rep 3/3: 88.1 ms  18.6 MAUPS  rss 81.3 MiB
+-- python-numpy/python3/default
+   rep 1/3: 110.5 ms  14.8 MAUPS  rss 38.9 MiB
+   rep 2/3: 115.8 ms  14.1 MAUPS  rss 39.3 MiB
+   rep 3/3: 109.7 ms  14.9 MAUPS  rss 39.4 MiB
+-- python-numpy-ft/python3.14t/default
+   RUN FAILED (exit 127)
+      [Errno 2] No such file or directory: '{python314t}'
+-- python-pure/python3/default
+   rep 1/3: 4155.5 ms  0.4 MAUPS  rss 17.9 MiB
+   rep 2/3: 4159.9 ms  0.4 MAUPS  rss 17.9 MiB
+   rep 3/3: 4124.6 ms  0.4 MAUPS  rss 17.9 MiB
+-- python-pure-strict/python3/default
+   rep 1/3: 8326.4 ms  0.2 MAUPS  rss 17.9 MiB
+   rep 2/3: 8652.0 ms  0.2 MAUPS  rss 17.9 MiB
+   rep 3/3: 8519.9 ms  0.2 MAUPS  rss 17.9 MiB
+-- perl/perl/default
+   rep 1/3: 4437.4 ms  0.4 MAUPS  rss 29.8 MiB
+   rep 2/3: 4283.7 ms  0.4 MAUPS  rss 29.5 MiB
+   rep 3/3: 4215.9 ms  0.4 MAUPS  rss 29.7 MiB
+-- perl-strict/perl/default
+   rep 1/3: 12282.4 ms  0.1 MAUPS  rss 24.0 MiB
+   rep 2/3: 12812.3 ms  0.1 MAUPS  rss 24.0 MiB
+   rep 3/3: 12274.2 ms  0.1 MAUPS  rss 23.8 MiB
+-- haskell/ghc/o1
+   rep 1/3: 70.7 ms  23.2 MAUPS  rss 17.9 MiB
+   rep 2/3: 72.1 ms  22.7 MAUPS  rss 17.9 MiB
+   rep 3/3: 70.5 ms  23.3 MAUPS  rss 17.9 MiB
+-- haskell/ghc/o2
+   rep 1/3: 33.6 ms  48.7 MAUPS  rss 17.9 MiB
+   rep 2/3: 33.0 ms  49.6 MAUPS  rss 17.9 MiB
+   rep 3/3: 34.0 ms  48.2 MAUPS  rss 17.9 MiB
+-- haskell/ghc/o2-llvm
+   rep 1/3: 25.6 ms  64.1 MAUPS  rss 17.9 MiB
+   rep 2/3: 26.7 ms  61.4 MAUPS  rss 17.9 MiB
+   rep 3/3: 26.0 ms  63.0 MAUPS  rss 17.9 MiB
+-- haskell-vector/ghc/o2-vector
+   rep 1/3: 70.6 ms  23.2 MAUPS  rss 22.3 MiB
+   rep 2/3: 73.1 ms  22.4 MAUPS  rss 22.5 MiB
+   rep 3/3: 72.4 ms  22.6 MAUPS  rss 22.5 MiB
+-- haskell-vector/ghc/o2-llvm-vector
+   rep 1/3: 58.1 ms  28.2 MAUPS  rss 22.1 MiB
+   rep 2/3: 56.4 ms  29.0 MAUPS  rss 22.2 MiB
+   rep 3/3: 56.4 ms  29.0 MAUPS  rss 22.5 MiB
+-- haskell-par-binned/ghc/o2-llvm
+   rep 1/3: 25.7 ms  63.9 MAUPS  rss 17.9 MiB
+   rep 2/3: 26.5 ms  61.7 MAUPS  rss 17.9 MiB
+   rep 3/3: 26.9 ms  60.9 MAUPS  rss 17.9 MiB
+-- haskell-par-private/ghc/o2-llvm
+   rep 1/3: 25.9 ms  63.2 MAUPS  rss 17.9 MiB
+   rep 2/3: 26.9 ms  61.0 MAUPS  rss 17.9 MiB
+   rep 3/3: 25.4 ms  64.6 MAUPS  rss 17.9 MiB
+-- python-par-binned/python3/default
+   rep 1/3: 113.6 ms  14.4 MAUPS  rss 38.7 MiB
+   rep 2/3: 106.1 ms  15.4 MAUPS  rss 39.2 MiB
+   rep 3/3: 110.6 ms  14.8 MAUPS  rss 39.5 MiB
+-- python-par-private/python3/default
+   rep 1/3: 110.9 ms  14.8 MAUPS  rss 38.8 MiB
+   rep 2/3: 105.0 ms  15.6 MAUPS  rss 38.9 MiB
+   rep 3/3: 107.8 ms  15.2 MAUPS  rss 39.0 MiB
+-- perl-par/perl/default
+   rep 1/3: 4183.1 ms  0.4 MAUPS  rss 29.8 MiB
+   rep 2/3: 4219.4 ms  0.4 MAUPS  rss 29.7 MiB
+   rep 3/3: 4292.2 ms  0.4 MAUPS  rss 29.7 MiB
+-- perl-par-strict/perl/default
+   rep 1/3: 12735.7 ms  0.1 MAUPS  rss 24.3 MiB
+   rep 2/3: 12331.4 ms  0.1 MAUPS  rss 24.0 MiB
+   rep 3/3: 12435.0 ms  0.1 MAUPS  rss 23.9 MiB
+-- rust-sdl2: skipped (not headless-capable)
+-- rust-raylib: skipped (not headless-capable)
+-- haskell-sdl2: skipped (not headless-capable)
+-- haskell-raylib: skipped (not headless-capable)
+-- python-pygame: skipped (not headless-capable)
+-- python-raylib: skipped (not headless-capable)
+-- perl-sdl2: skipped (not headless-capable)
+-- perl-raylib: skipped (not headless-capable)
+-- go/go/default
+   rep 1/3: 30.7 ms  53.4 MAUPS  rss 17.9 MiB
+   rep 2/3: 30.8 ms  53.2 MAUPS  rss 17.9 MiB
+   rep 3/3: 30.2 ms  54.2 MAUPS  rss 17.9 MiB
+-- go/go/nobounds
+   rep 1/3: 29.4 ms  55.7 MAUPS  rss 17.9 MiB
+   rep 2/3: 29.8 ms  55.0 MAUPS  rss 17.9 MiB
+   rep 3/3: 29.5 ms  55.5 MAUPS  rss 17.9 MiB
+-- go-par-binned/go/default
+   rep 1/3: 30.0 ms  54.6 MAUPS  rss 17.9 MiB
+   rep 2/3: 30.3 ms  54.1 MAUPS  rss 17.9 MiB
+   rep 3/3: 29.4 ms  55.7 MAUPS  rss 17.9 MiB
+-- go-par-private/go/default
+   rep 1/3: 30.6 ms  53.5 MAUPS  rss 17.9 MiB
+   rep 2/3: 30.3 ms  54.1 MAUPS  rss 17.9 MiB
+   rep 3/3: 29.8 ms  55.0 MAUPS  rss 17.9 MiB
+-- swift/swift/release
+   rep 1/3: 28.7 ms  57.2 MAUPS  rss 19.2 MiB
+   rep 2/3: 28.8 ms  56.8 MAUPS  rss 19.1 MiB
+   rep 3/3: 28.9 ms  56.6 MAUPS  rss 19.1 MiB
+-- swift/swift/unchecked
+   rep 1/3: 27.7 ms  59.1 MAUPS  rss 19.0 MiB
+   rep 2/3: 27.8 ms  59.0 MAUPS  rss 18.7 MiB
+   rep 3/3: 27.6 ms  59.4 MAUPS  rss 19.1 MiB
+-- swift-par-binned/swift/release
+   rep 1/3: 28.9 ms  56.6 MAUPS  rss 18.9 MiB
+   rep 2/3: 29.7 ms  55.2 MAUPS  rss 18.9 MiB
+   rep 3/3: 30.6 ms  53.5 MAUPS  rss 18.8 MiB
+-- swift-par-private/swift/release
+   rep 1/3: 29.1 ms  56.3 MAUPS  rss 18.9 MiB
+   rep 2/3: 28.9 ms  56.6 MAUPS  rss 18.8 MiB
+   rep 3/3: 29.7 ms  55.2 MAUPS  rss 19.2 MiB
+-- cuda/nvcc/default
+   rep 1/3: 5.2 ms  312.8 MAUPS  rss 114.2 MiB
+   rep 2/3: 5.3 ms  307.6 MAUPS  rss 114.4 MiB
+   rep 3/3: 5.5 ms  299.3 MAUPS  rss 114.0 MiB
+-- pygl/python3/default
+   rep 1/3: 135.2 ms  12.1 MAUPS  rss 160.7 MiB
+   rep 2/3: 129.8 ms  12.6 MAUPS  rss 161.1 MiB
+   rep 3/3: 130.9 ms  12.5 MAUPS  rss 160.9 MiB
+-- glcompute/gcc/default
+   rep 1/3: 120.5 ms  13.6 MAUPS  rss 103.4 MiB
+   rep 2/3: 118.5 ms  13.8 MAUPS  rss 103.1 MiB
+   rep 3/3: 119.7 ms  13.7 MAUPS  rss 103.4 MiB
+-- ts-par-binned/node/default
+   rep 1/3: 91.6 ms  17.9 MAUPS  rss 81.1 MiB
+   rep 2/3: 85.9 ms  19.1 MAUPS  rss 80.4 MiB
+   rep 3/3: 86.9 ms  18.9 MAUPS  rss 80.2 MiB
+-- ts-par-private/node/default
+   rep 1/3: 89.6 ms  18.3 MAUPS  rss 81.1 MiB
+   rep 2/3: 88.4 ms  18.5 MAUPS  rss 80.6 MiB
+   rep 3/3: 86.2 ms  19.0 MAUPS  rss 81.4 MiB
+
+wrote results/run-20260820-0330/A-crosslang-deferred.jsonl
+
+| # | Sprache | Backend | Compiler | Profil | Konf. | ms total | ms/tick | Agent % | MAUPS | rel. | RSS MiB | Binär KiB | Build s |
+|---|---|---|---|---|:-:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | CUDA | cuda/sm_120 | nvcc | default | A | 5 | 0.042 | – | 312.8 | 1.00x | 114 | 2259 | 0.0 |
+| 2 | C | simd/scalar+simd-avx512f | clang | o3-native | A | 15 | 0.139 | 90 | 106.7 | 2.93x | 18 | 54 | 0.0 |
+| 3 | C++ | simd/scalar+simd-avx512f | clang++ | o3-native | A | 17 | 0.155 | 92 | 98.0 | 3.19x | 18 | 63 | 0.0 |
+| 4 | C++ | simd/scalar+simd-avx2 | g++ | o3-v3 | A | 17 | 0.158 | 91 | 97.1 | 3.22x | 18 | 74 | 0.0 |
+| 5 | C | simd/scalar+simd-avx2 | clang | o3-v3 | A | 17 | 0.162 | 91 | 93.8 | 3.34x | 18 | 54 | 0.0 |
+| 6 | C++ | simd/scalar+simd-avx512f | g++ | o3-native | A | 18 | 0.164 | 93 | 93.5 | 3.35x | 18 | 74 | 0.0 |
+| 7 | C | simd/scalar+simd-avx2 | gcc | o3-v3 | A | 18 | 0.167 | 91 | 92.2 | 3.39x | 18 | 62 | 0.0 |
+| 8 | C++ | simd/scalar+simd-avx2 | clang++ | o3-v3 | A | 19 | 0.176 | 92 | 86.7 | 3.61x | 18 | 63 | 0.0 |
+| 9 | C | pthreads/private/scalar | clang | o3-native | A | 19 | 0.178 | 71 | 85.1 | 3.67x | 18 | 54 | 0.0 |
+| 10 | C | headless/scalar | clang | o3-native | A | 19 | 0.181 | 71 | 84.5 | 3.70x | 18 | 54 | 0.0 |
+| 11 | C | headless/scalar | clang | o3-native-lto | A | 20 | 0.181 | 71 | 83.8 | 3.73x | 18 | 54 | 0.0 |
+| 12 | C | pthreads/binned/scalar | clang | o3-native | A | 20 | 0.183 | 70 | 83.5 | 3.75x | 18 | 54 | 0.0 |
+| 13 | C | simd/scalar+simd-avx512f | gcc | o3-native | A | 20 | 0.184 | 93 | 83.5 | 3.75x | 18 | 62 | 0.0 |
+| 14 | C++ | headless/scalar | g++ | ofast-native | C | 20 | 0.193 | 71 | 80.1 | 3.90x | 18 | 74 | 0.0 |
+| 15 | C++ | headless/scalar | clang++ | o3-native | A | 21 | 0.195 | 74 | 79.1 | 3.95x | 18 | 63 | 0.0 |
+| 16 | C++ | std-thread/private/scalar | clang++ | o3-native | A | 21 | 0.197 | 74 | 78.0 | 4.01x | 18 | 63 | 0.0 |
+| 17 | C++ | headless/scalar | g++ | o3 | A | 21 | 0.202 | 73 | 77.3 | 4.05x | 18 | 70 | 0.0 |
+| 18 | C++ | std-thread/binned/scalar | clang++ | o3-native | A | 21 | 0.199 | 74 | 76.8 | 4.07x | 18 | 63 | 0.0 |
+| 19 | C++ | headless/scalar | clang++ | o3-native-lto | A | 21 | 0.201 | 75 | 76.7 | 4.08x | 18 | 63 | 0.0 |
+| 20 | Rust | simd/unchecked+simd-avx512f | cargo | release-native-unchecked | A | 22 | 0.200 | 93 | 75.9 | 4.12x | 18 | 475 | 0.1 |
+| 21 | C | headless/scalar | gcc | o3 | A | 22 | 0.205 | 73 | 75.4 | 4.15x | 18 | 58 | 0.0 |
+| 22 | C++ | headless/scalar | g++ | o3-native | A | 22 | 0.206 | 75 | 75.3 | 4.16x | 18 | 74 | 0.0 |
+| 23 | C++ | std-thread/private/scalar | g++ | o3-native | A | 22 | 0.212 | 75 | 74.3 | 4.21x | 18 | 74 | 0.0 |
+| 24 | C++ | std-thread/binned/scalar | g++ | o3-native | A | 22 | 0.210 | 75 | 74.2 | 4.22x | 18 | 74 | 0.0 |
+| 25 | Rust | simd/safe+simd-avx512f | cargo | release-native | A | 22 | 0.210 | 93 | 73.0 | 4.29x | 18 | 476 | 0.1 |
+| 26 | C | headless/scalar | gcc | o2 | A | 23 | 0.215 | 70 | 71.9 | 4.35x | 18 | 50 | 0.0 |
+| 27 | C | headless/scalar | clang | o2 | A | 23 | 0.219 | 75 | 70.7 | 4.43x | 18 | 50 | 0.0 |
+| 28 | C | headless/scalar | clang | o3 | A | 23 | 0.222 | 76 | 69.8 | 4.48x | 18 | 50 | 0.0 |
+| 29 | C | headless/scalar | gcc | ofast-native | C | 24 | 0.221 | 74 | 69.4 | 4.51x | 18 | 62 | 0.0 |
+| 30 | C | pthreads/binned/scalar | gcc | o3-native | A | 24 | 0.226 | 75 | 69.2 | 4.52x | 18 | 62 | 0.0 |
+| 31 | C++ | headless/scalar | g++ | o2 | A | 24 | 0.230 | 71 | 68.6 | 4.56x | 18 | 62 | 0.0 |
+| 32 | C | pthreads/private/scalar | gcc | o3-native | A | 24 | 0.227 | 75 | 68.1 | 4.59x | 18 | 62 | 0.0 |
+| 33 | C | headless/scalar | gcc | o3-native-lto | A | 24 | 0.232 | 75 | 67.0 | 4.67x | 18 | 54 | 0.0 |
+| 34 | C++ | headless/scalar | clang++ | o3 | A | 24 | 0.231 | 77 | 67.0 | 4.67x | 18 | 59 | 0.0 |
+| 35 | C | headless/scalar | gcc | o3-native | A | 25 | 0.234 | 75 | 66.8 | 4.68x | 18 | 62 | 0.0 |
+| 36 | C++ | headless/scalar | clang++ | o2 | A | 25 | 0.237 | 77 | 65.9 | 4.74x | 18 | 59 | 0.0 |
+| 37 | Haskell | forkOn/private/scalar | ghc | o2-llvm | A | 25 | 0.230 | 73 | 64.6 | 4.84x | 18 | 2860 | 0.5 |
+| 38 | Haskell | headless/scalar | ghc | o2-llvm | A | 26 | 0.230 | 73 | 64.1 | 4.88x | 18 | 2860 | 0.5 |
+| 39 | Rust | scope/binned/unchecked | cargo | release-native-unchecked | A | 26 | 0.241 | 78 | 64.0 | 4.89x | 18 | 475 | 0.1 |
+| 40 | Haskell | forkOn/binned/scalar | ghc | o2-llvm | A | 26 | 0.232 | 73 | 63.9 | 4.90x | 18 | 2860 | 0.5 |
+| 41 | Rust | headless/unchecked | cargo | release-native-unchecked | A | 26 | 0.245 | 79 | 63.0 | 4.97x | 18 | 475 | 0.1 |
+| 42 | C++ | headless/scalar | g++ | o3-native-lto | A | 26 | 0.253 | 69 | 62.3 | 5.02x | 18 | 66 | 0.0 |
+| 43 | Rust | headless/unchecked | cargo | release-native-lto-unchecked | A | 27 | 0.251 | 79 | 61.8 | 5.06x | 18 | 442 | 0.1 |
+| 44 | Rust | scope/private/unchecked | cargo | release-native-unchecked | A | 27 | 0.255 | 79 | 61.0 | 5.13x | 18 | 475 | 0.1 |
+| 45 | Swift | headless/scalar | swift | unchecked | A | 28 | 0.266 | 77 | 59.4 | 5.27x | 19 | 96 | 0.6 |
+| 46 | Rust | headless/unchecked | cargo | release-unchecked | A | 28 | 0.267 | 79 | 58.3 | 5.37x | 18 | 468 | 0.1 |
+| 47 | Rust | headless/safe | cargo | release | A | 29 | 0.271 | 73 | 57.4 | 5.44x | 18 | 471 | 0.1 |
+| 48 | Swift | headless/scalar | swift | release | A | 29 | 0.277 | 78 | 57.2 | 5.47x | 19 | 100 | 0.6 |
+| 49 | Swift | threads/private/scalar | swift | release | A | 29 | 0.279 | 78 | 56.6 | 5.52x | 19 | 100 | 0.6 |
+| 50 | Swift | threads/binned/scalar | swift | release | A | 29 | 0.278 | 78 | 56.6 | 5.53x | 19 | 100 | 0.6 |
+| 51 | Rust | headless/safe | cargo | release-native | A | 29 | 0.279 | 73 | 55.9 | 5.60x | 18 | 476 | 0.1 |
+| 52 | Go | headless/scalar | go | nobounds | A | 29 | 0.277 | 61 | 55.7 | 5.61x | 18 | 1552 | 0.5 |
+| 53 | Go | goroutines/binned/scalar | go | default | A | 29 | 0.279 | 61 | 55.7 | 5.61x | 18 | 1592 | 0.5 |
+| 54 | Go | goroutines/private/scalar | go | default | A | 30 | 0.280 | 63 | 55.0 | 5.68x | 18 | 1592 | 0.5 |
+| 55 | C | headless/scalar | clang | ofast-native | C | 30 | 0.286 | 46 | 54.7 | 5.72x | 18 | 54 | 0.0 |
+| 56 | Go | headless/scalar | go | default | A | 30 | 0.290 | 62 | 54.2 | 5.77x | 18 | 1592 | 0.5 |
+| 57 | C++ | headless/scalar | clang++ | ofast-native | C | 31 | 0.295 | 49 | 53.3 | 5.87x | 18 | 63 | 0.0 |
+| 58 | Haskell | headless/scalar | ghc | o2 | A | 33 | 0.310 | 60 | 49.6 | 6.30x | 18 | 2832 | 0.3 |
+| 59 | Haskell | idiomatic/vector | ghc | o2-llvm-vector | A | 56 | 0.459 | – | 29.0 | 10.77x | 22 | 6257 | 8.3 |
+| 60 | Haskell | headless/scalar | ghc | o1 | A | 70 | 0.685 | 42 | 23.3 | 13.45x | 18 | 2779 | 0.3 |
+| 61 | Haskell | idiomatic/vector | ghc | o2-vector | A | 71 | 0.611 | – | 23.2 | 13.47x | 22 | 6253 | 7.4 |
+| 62 | C | headless/scalar | clang | o0 | A | 76 | 0.745 | 53 | 21.6 | 14.51x | 18 | 54 | 0.0 |
+| 63 | TypeScript | node/scalar | node | default | A | 78 | 0.671 | 47 | 21.0 | 14.93x | 81 | – | 0.0 |
+| 64 | TypeScript | worker/binned/scalar | node | default | A | 86 | 0.699 | 52 | 19.1 | 16.39x | 80 | – | 0.0 |
+| 65 | TypeScript | worker/private/scalar | node | default | A | 86 | 0.722 | 54 | 19.0 | 16.46x | 81 | – | 0.0 |
+| 66 | C | headless/scalar | gcc | o0 | A | 92 | 0.910 | 53 | 17.7 | 17.64x | 18 | 114 | 0.0 |
+| 67 | C++ | headless/scalar | clang++ | o0 | A | 103 | 1.014 | 55 | 15.9 | 19.63x | 18 | 155 | 0.0 |
+| 68 | Python | mp/private/numpy | python3 | default | A | 105 | 1.005 | 62 | 15.6 | 20.04x | 39 | – | 0.0 |
+| 69 | Python | mp/binned/numpy | python3 | default | A | 106 | 1.006 | 60 | 15.4 | 20.25x | 39 | – | 0.0 |
+| 70 | Python | numpy/numpy | python3 | default | A | 110 | 1.039 | 61 | 14.9 | 20.95x | 39 | – | 0.0 |
+| 71 | C++ | headless/scalar | g++ | o0 | A | 110 | 1.084 | 50 | 14.9 | 20.95x | 18 | 166 | 0.0 |
+| 72 | GLSL | gl43/llvmpipe (LLVM 20.1.2, 256 bits) | gcc | default | B | 118 | 1.103 | – | 13.8 | 22.61x | 103 | 38 | 0.0 |
+| 73 | Python | gl43/llvmpipe (LLVM 20.1.2, 256 bits) | python3 | default | A | 130 | 1.233 | – | 12.6 | 24.78x | 161 | – | 0.0 |
+| 74 | Python | pure/pure | python3 | default | B | 4125 | 40.864 | 33 | 0.4 | 787.34x | 18 | – | 0.0 |
+| 75 | Perl | fork/replicated/plain | perl | default | B | 4183 | 41.721 | 42 | 0.4 | 798.52x | 30 | – | 0.0 |
+| 76 | Perl | headless/plain | perl | default | B | 4216 | 41.992 | 41 | 0.4 | 804.77x | 29 | – | 0.0 |
+| 77 | Python | pure-strict/pure-strict | python3 | default | A | 8326 | 82.911 | 33 | 0.2 | 1589.43x | 18 | – | 0.0 |
+| 78 | Perl | strict-f32/strict-f32 | perl | default | A | 12274 | 122.079 | 32 | 0.1 | 2343.04x | 24 | – | 0.0 |
+| 79 | Perl | fork/replicated-strict/strict-f32 | perl | default | A | 12331 | 122.556 | 33 | 0.1 | 2353.96x | 24 | – | 0.0 |
+
+### Hash-Konsens
+- `custom/deferred` Stufe A: **0xAAB0115C/0x328E3716** — alle 71 Läufe identisch.
+- `custom/deferred` Stufe B: 3 Ergebnisse (erwartet — Stufe B rechnet in Doubles, siehe SPEC 7.2):
+    - `0x5AEE6C59/0x0D802A6D` — Perl/perl/default, Perl/perl/default
+    - `0xAAB0115C/0x328E3716` — GLSL/gcc/default
+    - `0xB53DCC29/0x91D0422F` — Python/python3/default
+- `custom/deferred` Stufe C: 2 Ergebnisse (erwartet — fast-math ist nicht bit-reproduzierbar):
+    - `0x934DF551/0x328E3716` — C/clang/ofast-native, C++/clang++/ofast-native
+    - `0xDD729B0B/0x328E3716` — C++/g++/ofast-native, C/gcc/ofast-native
+
+Fehlgeschlagen: c-pgo/gcc/o3-native-pgo (build-failed), c-pgo/clang/o3-native-pgo (build-failed), python-numpy-ft/python3.14t/default (run-failed)
+
+=== compiler matrix, 1024x1024, 300 ticks ===
+warning: repo lives on the Windows filesystem (/mnt/c/Users/pw/git/slimebench/.claude/worktrees/physarum-benchmarking-suite-377fb5).
+         Build and I/O timings will be dominated by the 9p bridge.
+         For real numbers use scripts/stage-wsl.sh first.
+
+-- c/gcc/o0
+   rep 1/3: 4340.5 ms  18.1 MAUPS  rss 17.9 MiB
+   rep 2/3: 4396.6 ms  17.9 MAUPS  rss 17.9 MiB
+   rep 3/3: 4486.9 ms  17.5 MAUPS  rss 17.9 MiB
+-- c/gcc/o2
+   rep 1/3: 1151.0 ms  68.3 MAUPS  rss 17.9 MiB
+   rep 2/3: 1147.8 ms  68.5 MAUPS  rss 17.9 MiB
+   rep 3/3: 1158.8 ms  67.9 MAUPS  rss 17.9 MiB
+-- c/gcc/o3
+   rep 1/3: 1175.9 ms  66.9 MAUPS  rss 17.9 MiB
+   rep 2/3: 1163.0 ms  67.6 MAUPS  rss 17.9 MiB
+   rep 3/3: 1158.5 ms  67.9 MAUPS  rss 17.9 MiB
+-- c/gcc/o3-native
+   rep 1/3: 1274.3 ms  61.7 MAUPS  rss 17.9 MiB
+   rep 2/3: 1296.3 ms  60.7 MAUPS  rss 17.9 MiB
+   rep 3/3: 1399.3 ms  56.2 MAUPS  rss 17.9 MiB
+-- c/gcc/o3-native-lto
+   rep 1/3: 1391.2 ms  56.5 MAUPS  rss 17.9 MiB
+   rep 2/3: 1312.5 ms  59.9 MAUPS  rss 17.9 MiB
+   rep 3/3: 1287.6 ms  61.1 MAUPS  rss 17.9 MiB
+-- c/gcc/ofast-native
+   rep 1/3: 1288.4 ms  61.0 MAUPS  rss 17.9 MiB
+   rep 2/3: 1314.0 ms  59.9 MAUPS  rss 17.9 MiB
+   rep 3/3: 1248.4 ms  63.0 MAUPS  rss 17.9 MiB
+-- c/clang/o0
+   rep 1/3: 3533.1 ms  22.3 MAUPS  rss 17.9 MiB
+   rep 2/3: 3522.5 ms  22.3 MAUPS  rss 17.9 MiB
+   rep 3/3: 3630.8 ms  21.7 MAUPS  rss 17.9 MiB
+-- c/clang/o2
+   rep 1/3: 1306.6 ms  60.2 MAUPS  rss 17.9 MiB
+   rep 2/3: 1314.0 ms  59.8 MAUPS  rss 17.9 MiB
+   rep 3/3: 1291.5 ms  60.9 MAUPS  rss 17.9 MiB
+-- c/clang/o3
+   rep 1/3: 1352.6 ms  58.1 MAUPS  rss 17.9 MiB
+   rep 2/3: 1326.0 ms  59.3 MAUPS  rss 17.9 MiB
+   rep 3/3: 1322.2 ms  59.5 MAUPS  rss 17.9 MiB
+-- c/clang/o3-native
+   rep 1/3: 1092.0 ms  72.0 MAUPS  rss 17.9 MiB
+   rep 2/3: 1091.9 ms  72.0 MAUPS  rss 17.9 MiB
+   rep 3/3: 1085.3 ms  72.5 MAUPS  rss 17.9 MiB
+-- c/clang/o3-native-lto
+   rep 1/3: 1158.3 ms  67.9 MAUPS  rss 17.9 MiB
+   rep 2/3: 1167.8 ms  67.3 MAUPS  rss 17.9 MiB
+   rep 3/3: 1179.6 ms  66.7 MAUPS  rss 17.9 MiB
+-- c/clang/ofast-native
+   rep 1/3: 1669.7 ms  47.1 MAUPS  rss 17.9 MiB
+   rep 2/3: 1651.4 ms  47.6 MAUPS  rss 17.9 MiB
+   rep 3/3: 1643.1 ms  47.9 MAUPS  rss 17.9 MiB
+-- cpp/g++/o0
+   rep 1/3: 4928.3 ms  16.0 MAUPS  rss 18.0 MiB
+   rep 2/3: 4836.9 ms  16.3 MAUPS  rss 18.0 MiB
+   rep 3/3: 4879.8 ms  16.1 MAUPS  rss 18.0 MiB
+-- cpp/g++/o2
+   rep 1/3: 1257.0 ms  62.6 MAUPS  rss 17.9 MiB
+   rep 2/3: 1297.3 ms  60.6 MAUPS  rss 17.9 MiB
+   rep 3/3: 1269.1 ms  62.0 MAUPS  rss 17.9 MiB
+-- cpp/g++/o3
+   rep 1/3: 1159.5 ms  67.8 MAUPS  rss 17.9 MiB
+   rep 2/3: 1170.0 ms  67.2 MAUPS  rss 17.9 MiB
+   rep 3/3: 1150.6 ms  68.3 MAUPS  rss 17.9 MiB
+-- cpp/g++/o3-native
+   rep 1/3: 1216.4 ms  64.7 MAUPS  rss 18.0 MiB
+   rep 2/3: 1305.8 ms  60.2 MAUPS  rss 18.0 MiB
+   rep 3/3: 1271.7 ms  61.8 MAUPS  rss 18.0 MiB
+-- cpp/g++/o3-native-lto
+   rep 1/3: 1409.9 ms  55.8 MAUPS  rss 17.9 MiB
+   rep 2/3: 1371.2 ms  57.4 MAUPS  rss 17.9 MiB
+   rep 3/3: 1368.1 ms  57.5 MAUPS  rss 17.9 MiB
+-- cpp/g++/ofast-native
+   rep 1/3: 1190.3 ms  66.1 MAUPS  rss 18.0 MiB
+   rep 2/3: 1137.2 ms  69.2 MAUPS  rss 18.0 MiB
+   rep 3/3: 1132.3 ms  69.5 MAUPS  rss 18.0 MiB
+-- cpp/clang++/o0
+   rep 1/3: 4412.5 ms  17.8 MAUPS  rss 18.0 MiB
+   rep 2/3: 4511.0 ms  17.4 MAUPS  rss 18.0 MiB
+   rep 3/3: 4544.7 ms  17.3 MAUPS  rss 18.0 MiB
+-- cpp/clang++/o2
+   rep 1/3: 1419.5 ms  55.4 MAUPS  rss 18.0 MiB
+   rep 2/3: 1428.5 ms  55.1 MAUPS  rss 18.0 MiB
+   rep 3/3: 1436.6 ms  54.7 MAUPS  rss 18.0 MiB
+-- cpp/clang++/o3
+   rep 1/3: 1439.7 ms  54.6 MAUPS  rss 18.0 MiB
+   rep 2/3: 1415.3 ms  55.6 MAUPS  rss 18.0 MiB
+   rep 3/3: 1485.3 ms  52.9 MAUPS  rss 18.0 MiB
+-- cpp/clang++/o3-native
+   rep 1/3: 1311.9 ms  59.9 MAUPS  rss 18.0 MiB
+   rep 2/3: 1292.4 ms  60.8 MAUPS  rss 18.0 MiB
+   rep 3/3: 1206.4 ms  65.2 MAUPS  rss 18.0 MiB
+-- cpp/clang++/o3-native-lto
+   rep 1/3: 1247.0 ms  63.1 MAUPS  rss 18.0 MiB
+   rep 2/3: 1247.2 ms  63.1 MAUPS  rss 18.0 MiB
+   rep 3/3: 1217.0 ms  64.6 MAUPS  rss 18.0 MiB
+-- cpp/clang++/ofast-native
+   rep 1/3: 1612.2 ms  48.8 MAUPS  rss 18.0 MiB
+   rep 2/3: 1628.8 ms  48.3 MAUPS  rss 18.0 MiB
+   rep 3/3: 1635.0 ms  48.1 MAUPS  rss 18.0 MiB
+-- rust/cargo/release
+   rep 1/3: 1491.1 ms  52.7 MAUPS  rss 17.9 MiB
+   rep 2/3: 1539.3 ms  51.1 MAUPS  rss 17.9 MiB
+   rep 3/3: 1589.5 ms  49.5 MAUPS  rss 17.9 MiB
+-- rust/cargo/release-unchecked
+   rep 1/3: 1583.4 ms  49.7 MAUPS  rss 17.9 MiB
+   rep 2/3: 1562.1 ms  50.3 MAUPS  rss 17.9 MiB
+   rep 3/3: 1571.9 ms  50.0 MAUPS  rss 17.9 MiB
+-- rust/cargo/release-native
+   rep 1/3: 1660.5 ms  47.4 MAUPS  rss 17.9 MiB
+   rep 2/3: 1664.7 ms  47.2 MAUPS  rss 17.9 MiB
+   rep 3/3: 1647.9 ms  47.7 MAUPS  rss 17.9 MiB
+-- rust/cargo/release-native-unchecked
+   rep 1/3: 1481.3 ms  53.1 MAUPS  rss 17.9 MiB
+   rep 2/3: 1511.7 ms  52.0 MAUPS  rss 17.9 MiB
+   rep 3/3: 1585.6 ms  49.6 MAUPS  rss 17.9 MiB
+-- rust/cargo/release-native-lto-unchecked
+   rep 1/3: 1638.5 ms  48.0 MAUPS  rss 17.9 MiB
+   rep 2/3: 1511.8 ms  52.0 MAUPS  rss 17.9 MiB
+   rep 3/3: 1459.7 ms  53.9 MAUPS  rss 17.9 MiB
+-- haskell/ghc/o1
+   rep 1/3: 2984.6 ms  26.3 MAUPS  rss 28.8 MiB
+   rep 2/3: 2880.7 ms  27.3 MAUPS  rss 28.6 MiB
+   rep 3/3: 2901.8 ms  27.1 MAUPS  rss 28.7 MiB
+-- haskell/ghc/o2
+   rep 1/3: 1652.7 ms  47.6 MAUPS  rss 29.0 MiB
+   rep 2/3: 1650.4 ms  47.7 MAUPS  rss 29.1 MiB
+   rep 3/3: 1639.5 ms  48.0 MAUPS  rss 28.9 MiB
+-- haskell/ghc/o2-llvm
+   rep 1/3: 1319.2 ms  59.6 MAUPS  rss 29.3 MiB
+   rep 2/3: 1303.8 ms  60.3 MAUPS  rss 29.0 MiB
+   rep 3/3: 1313.9 ms  59.9 MAUPS  rss 28.7 MiB
+-- haskell-vector: skipped (does not implement --update serial)
+-- c-pgo/gcc/o3-native-pgo
+   BUILD FAILED
+      ==> [1/3] instrumented build
+      In file included from sb_parallel.c:20:
+      sb_barrier.h: In function ‘sb_futex_wake_all’:
+      sb_barrier.h:78:5: warning: implicit declaration of function ‘syscall’ [-Wimplicit-function-declaration]
+         78 |     syscall(SYS_futex, (uint32_t *)addr, FUTEX_WAKE_PRIVATE, INT32_MAX, NULL, NULL, 0);
+            |     ^~~~~~~
+      /usr/bin/ld: /tmp/ccvwh9fa.o: in function `sb_tick':
+      sb_core.c:(.text+0x1c80): undefined reference to `sb_diffuse_rows_simd'
+      /usr/bin/ld: sb_core.c:(.text+0x1df0): undefined reference to `sb_diffuse_rows_asm'
+      /usr/bin/ld: /tmp/cc0NjtKN.o: in function `sb_emit_json':
+      sb_cli.c:(.text+0x3b8): undefined reference to `sb_simd_name'
+      /usr/bin/ld: sb_cli.c:(.text+0x438): undefined reference to `sb_asm_name'
+      /usr/bin/ld: /tmp/cc0NjtKN.o: in function `sb_parse_args':
+      sb_cli.c:(.text+0x8dd): undefined reference to `sb_asm_available'
+      /usr/bin/ld: /tmp/ccr3nSNb.o: in function `worker_main':
+      sb_parallel.c:(.text+0x2176): undefined reference to `sb_diffuse_rows_simd'
+      /usr/bin/ld: sb_parallel.c:(.text+0x300f): undefined reference to `sb_diffuse_rows_asm'
+      collect2: error: ld returned 1 exit status
+-- c-pgo/clang/o3-native-pgo
+   BUILD FAILED
+      ==> [1/3] instrumented build
+      In file included from sb_parallel.c:20:
+      ./sb_barrier.h:78:5: error: call to undeclared function 'syscall'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+         78 |     syscall(SYS_futex, (uint32_t *)addr, FUTEX_WAKE_PRIVATE, INT32_MAX, NULL, NULL, 0);
+            |     ^
+      ./sb_barrier.h:82:5: error: call to undeclared function 'syscall'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+         82 |     syscall(SYS_futex, (uint32_t *)addr, FUTEX_WAIT_PRIVATE, expect, NULL, NULL, 0);
+            |     ^
+      2 errors generated.
+-- go/go/default
+   rep 1/3: 1460.3 ms  53.9 MAUPS  rss 17.9 MiB
+   rep 2/3: 1461.7 ms  53.8 MAUPS  rss 17.9 MiB
+   rep 3/3: 1485.6 ms  52.9 MAUPS  rss 17.9 MiB
+-- go/go/nobounds
+   rep 1/3: 1494.4 ms  52.6 MAUPS  rss 17.9 MiB
+   rep 2/3: 1475.4 ms  53.3 MAUPS  rss 17.9 MiB
+   rep 3/3: 1399.3 ms  56.2 MAUPS  rss 17.9 MiB
+-- swift/swift/release
+   rep 1/3: 1484.8 ms  53.0 MAUPS  rss 32.2 MiB
+   rep 2/3: 1435.6 ms  54.8 MAUPS  rss 32.1 MiB
+   rep 3/3: 1434.3 ms  54.8 MAUPS  rss 32.4 MiB
+-- swift/swift/unchecked
+   rep 1/3: 1408.6 ms  55.8 MAUPS  rss 32.1 MiB
+   rep 2/3: 1357.7 ms  57.9 MAUPS  rss 32.1 MiB
+   rep 3/3: 1349.9 ms  58.3 MAUPS  rss 32.2 MiB
+
+wrote results/run-20260820-0330/C-compiler-matrix.jsonl
+
+| # | Sprache | Backend | Compiler | Profil | Konf. | ms total | ms/tick | Agent % | MAUPS | rel. | RSS MiB | Binär KiB | Build s |
+|---|---|---|---|---|:-:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | C | headless/scalar | clang | o3-native | A | 1085 | 3.480 | 75 | 72.5 | 1.00x | 18 | 54 | 0.0 |
+| 2 | C++ | headless/scalar | g++ | ofast-native | C | 1132 | 3.652 | 76 | 69.5 | 1.04x | 18 | 74 | 0.0 |
+| 3 | C | headless/scalar | gcc | o2 | A | 1148 | 3.695 | 75 | 68.5 | 1.06x | 18 | 50 | 0.0 |
+| 4 | C++ | headless/scalar | g++ | o3 | A | 1151 | 3.713 | 76 | 68.3 | 1.06x | 18 | 70 | 0.0 |
+| 5 | C | headless/scalar | clang | o3-native-lto | A | 1158 | 3.754 | 75 | 67.9 | 1.07x | 18 | 54 | 0.0 |
+| 6 | C | headless/scalar | gcc | o3 | A | 1159 | 3.722 | 76 | 67.9 | 1.07x | 18 | 58 | 0.0 |
+| 7 | C++ | headless/scalar | clang++ | o3-native | A | 1206 | 3.839 | 77 | 65.2 | 1.11x | 18 | 63 | 0.0 |
+| 8 | C++ | headless/scalar | g++ | o3-native | A | 1216 | 3.909 | 77 | 64.7 | 1.12x | 18 | 74 | 0.0 |
+| 9 | C++ | headless/scalar | clang++ | o3-native-lto | A | 1217 | 3.974 | 78 | 64.6 | 1.12x | 18 | 63 | 0.0 |
+| 10 | C | headless/scalar | gcc | ofast-native | C | 1248 | 3.991 | 78 | 63.0 | 1.15x | 18 | 62 | 0.0 |
+| 11 | C++ | headless/scalar | g++ | o2 | A | 1257 | 4.038 | 78 | 62.6 | 1.16x | 18 | 62 | 0.0 |
+| 12 | C | headless/scalar | gcc | o3-native | A | 1274 | 4.088 | 78 | 61.7 | 1.17x | 18 | 62 | 0.0 |
+| 13 | C | headless/scalar | gcc | o3-native-lto | A | 1288 | 4.145 | 78 | 61.1 | 1.19x | 18 | 54 | 0.0 |
+| 14 | C | headless/scalar | clang | o2 | A | 1292 | 4.154 | 79 | 60.9 | 1.19x | 18 | 50 | 0.0 |
+| 15 | Haskell | headless/scalar | ghc | o2-llvm | A | 1304 | 4.207 | 80 | 60.3 | 1.20x | 29 | 2860 | 0.4 |
+| 16 | C | headless/scalar | clang | o3 | A | 1322 | 4.263 | 79 | 59.5 | 1.22x | 18 | 50 | 0.0 |
+| 17 | Swift | headless/scalar | swift | unchecked | A | 1350 | 4.351 | 81 | 58.3 | 1.24x | 32 | 96 | 0.6 |
+| 18 | C++ | headless/scalar | g++ | o3-native-lto | A | 1368 | 4.433 | 72 | 57.5 | 1.26x | 18 | 66 | 0.0 |
+| 19 | Go | headless/scalar | go | nobounds | A | 1399 | 4.494 | 67 | 56.2 | 1.29x | 18 | 1552 | 0.5 |
+| 20 | C++ | headless/scalar | clang++ | o3 | A | 1415 | 4.564 | 81 | 55.6 | 1.30x | 18 | 59 | 0.0 |
+| 21 | C++ | headless/scalar | clang++ | o2 | A | 1420 | 4.578 | 81 | 55.4 | 1.31x | 18 | 59 | 0.0 |
+| 22 | Swift | headless/scalar | swift | release | A | 1434 | 4.617 | 81 | 54.8 | 1.32x | 32 | 100 | 0.6 |
+| 23 | Rust | headless/unchecked | cargo | release-native-lto-unchecked | A | 1460 | 4.723 | 82 | 53.9 | 1.34x | 18 | 442 | 0.1 |
+| 24 | Go | headless/scalar | go | default | A | 1460 | 4.713 | 69 | 53.9 | 1.35x | 18 | 1592 | 0.5 |
+| 25 | Rust | headless/unchecked | cargo | release-native-unchecked | A | 1481 | 4.792 | 82 | 53.1 | 1.36x | 18 | 475 | 0.1 |
+| 26 | Rust | headless/safe | cargo | release | A | 1491 | 4.853 | 76 | 52.7 | 1.37x | 18 | 471 | 0.1 |
+| 27 | Rust | headless/unchecked | cargo | release-unchecked | A | 1562 | 5.041 | 83 | 50.3 | 1.44x | 18 | 468 | 0.1 |
+| 28 | C++ | headless/scalar | clang++ | ofast-native | C | 1612 | 5.193 | 54 | 48.8 | 1.49x | 18 | 63 | 0.0 |
+| 29 | Haskell | headless/scalar | ghc | o2 | A | 1640 | 5.289 | 66 | 48.0 | 1.51x | 29 | 2832 | 0.3 |
+| 30 | C | headless/scalar | clang | ofast-native | C | 1643 | 5.355 | 50 | 47.9 | 1.51x | 18 | 54 | 0.0 |
+| 31 | Rust | headless/safe | cargo | release-native | A | 1648 | 5.298 | 76 | 47.7 | 1.52x | 18 | 476 | 0.1 |
+| 32 | Haskell | headless/scalar | ghc | o1 | A | 2881 | 9.366 | 54 | 27.3 | 2.65x | 29 | 2779 | 0.3 |
+| 33 | C | headless/scalar | clang | o0 | A | 3522 | 11.532 | 61 | 22.3 | 3.25x | 18 | 54 | 0.0 |
+| 34 | C | headless/scalar | gcc | o0 | A | 4340 | 14.253 | 60 | 18.1 | 4.00x | 18 | 114 | 0.0 |
+| 35 | C++ | headless/scalar | clang++ | o0 | A | 4413 | 14.446 | 68 | 17.8 | 4.07x | 18 | 155 | 0.0 |
+| 36 | C++ | headless/scalar | g++ | o0 | A | 4837 | 15.844 | 63 | 16.3 | 4.46x | 18 | 166 | 0.0 |
+
+### Hash-Konsens
+- `small/serial` Stufe A: **0x4F236CC6/0x4236A1D1** — alle 32 Läufe identisch.
+- `small/serial` Stufe C: 2 Ergebnisse (erwartet — fast-math ist nicht bit-reproduzierbar):
+    - `0x875E525E/0x6BA673E7` — C++/g++/ofast-native, C/gcc/ofast-native
+    - `0xE76BF875/0x6BA673E7` — C++/clang++/ofast-native, C/clang/ofast-native
+
+Fehlgeschlagen: c-pgo/gcc/o3-native-pgo (build-failed), c-pgo/clang/o3-native-pgo (build-failed)
+
+=== class V (SIMD), 1024x1024, 300 ticks ===
+warning: repo lives on the Windows filesystem (/mnt/c/Users/pw/git/slimebench/.claude/worktrees/physarum-benchmarking-suite-377fb5).
+         Build and I/O timings will be dominated by the 9p bridge.
+         For real numbers use scripts/stage-wsl.sh first.
+
+-- c-simd/gcc/o3-v3
+   rep 1/3: 934.5 ms  84.2 MAUPS  rss 17.9 MiB
+   rep 2/3: 935.7 ms  84.1 MAUPS  rss 17.9 MiB
+   rep 3/3: 978.0 ms  80.4 MAUPS  rss 17.9 MiB
+-- c-simd/gcc/o3-native
+   rep 1/3: 1054.4 ms  74.6 MAUPS  rss 17.9 MiB
+   rep 2/3: 1036.6 ms  75.9 MAUPS  rss 17.9 MiB
+   rep 3/3: 1054.5 ms  74.6 MAUPS  rss 17.9 MiB
+-- c-simd/clang/o3-v3
+   rep 1/3: 998.2 ms  78.8 MAUPS  rss 17.9 MiB
+   rep 2/3: 996.9 ms  78.9 MAUPS  rss 17.9 MiB
+   rep 3/3: 1013.6 ms  77.6 MAUPS  rss 17.9 MiB
+-- c-simd/clang/o3-native
+   rep 1/3: 883.9 ms  89.0 MAUPS  rss 17.9 MiB
+   rep 2/3: 870.6 ms  90.3 MAUPS  rss 17.9 MiB
+   rep 3/3: 878.3 ms  89.5 MAUPS  rss 17.9 MiB
+-- cpp-simd/g++/o3-v3
+   rep 1/3: 963.8 ms  81.6 MAUPS  rss 18.0 MiB
+   rep 2/3: 936.2 ms  84.0 MAUPS  rss 18.0 MiB
+   rep 3/3: 927.2 ms  84.8 MAUPS  rss 18.0 MiB
+-- cpp-simd/g++/o3-native
+   rep 1/3: 982.0 ms  80.1 MAUPS  rss 18.0 MiB
+   rep 2/3: 979.3 ms  80.3 MAUPS  rss 18.0 MiB
+   rep 3/3: 1018.7 ms  77.2 MAUPS  rss 18.0 MiB
+-- cpp-simd/clang++/o3-v3
+   rep 1/3: 1206.6 ms  65.2 MAUPS  rss 18.0 MiB
+   rep 2/3: 1140.5 ms  69.0 MAUPS  rss 18.0 MiB
+   rep 3/3: 1135.7 ms  69.2 MAUPS  rss 18.0 MiB
+-- cpp-simd/clang++/o3-native
+   rep 1/3: 970.7 ms  81.0 MAUPS  rss 18.0 MiB
+   rep 2/3: 955.8 ms  82.3 MAUPS  rss 18.0 MiB
+   rep 3/3: 968.5 ms  81.2 MAUPS  rss 18.0 MiB
+-- rust-simd/cargo/release-native
+   rep 1/3: 1232.8 ms  63.8 MAUPS  rss 17.9 MiB
+   rep 2/3: 1246.2 ms  63.1 MAUPS  rss 17.9 MiB
+   rep 3/3: 1219.1 ms  64.5 MAUPS  rss 17.9 MiB
+-- rust-simd/cargo/release-native-unchecked
+   rep 1/3: 1188.1 ms  66.2 MAUPS  rss 17.9 MiB
+   rep 2/3: 1227.7 ms  64.1 MAUPS  rss 17.9 MiB
+   rep 3/3: 1244.7 ms  63.2 MAUPS  rss 17.9 MiB
+
+wrote results/run-20260820-0330/G-simd.jsonl
+
+| # | Sprache | Backend | Compiler | Profil | Konf. | ms total | ms/tick | Agent % | MAUPS | rel. | RSS MiB | Binär KiB | Build s |
+|---|---|---|---|---|:-:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | C | simd/scalar+simd-avx512f | clang | o3-native | A | 871 | 2.757 | 93 | 90.3 | 1.00x | 18 | 54 | 0.0 |
+| 2 | C++ | simd/scalar+simd-avx2 | g++ | o3-v3 | A | 927 | 2.971 | 93 | 84.8 | 1.06x | 18 | 74 | 0.0 |
+| 3 | C | simd/scalar+simd-avx2 | gcc | o3-v3 | A | 935 | 2.981 | 93 | 84.2 | 1.07x | 18 | 62 | 0.0 |
+| 4 | C++ | simd/scalar+simd-avx512f | clang++ | o3-native | A | 956 | 3.038 | 94 | 82.3 | 1.10x | 18 | 63 | 0.0 |
+| 5 | C++ | simd/scalar+simd-avx512f | g++ | o3-native | A | 979 | 3.192 | 95 | 80.3 | 1.12x | 18 | 74 | 0.0 |
+| 6 | C | simd/scalar+simd-avx2 | clang | o3-v3 | A | 997 | 3.204 | 93 | 78.9 | 1.15x | 18 | 54 | 0.0 |
+| 7 | C | simd/scalar+simd-avx512f | gcc | o3-native | A | 1037 | 3.329 | 95 | 75.9 | 1.19x | 18 | 62 | 0.0 |
+| 8 | C++ | simd/scalar+simd-avx2 | clang++ | o3-v3 | A | 1136 | 3.568 | 94 | 69.2 | 1.30x | 18 | 63 | 0.0 |
+| 9 | Rust | simd/unchecked+simd-avx512f | cargo | release-native-unchecked | A | 1188 | 3.791 | 95 | 66.2 | 1.36x | 18 | 475 | 0.1 |
+| 10 | Rust | simd/safe+simd-avx512f | cargo | release-native | A | 1219 | 3.937 | 95 | 64.5 | 1.40x | 18 | 476 | 0.1 |
+
+### Hash-Konsens
+- `small/serial` Stufe A: **0x4F236CC6/0x4236A1D1** — alle 10 Läufe identisch.
+
+=== class V, diffusion kernels: scalar / intrinsics / assembly ===
+  gcc    no-simd   diffuse    452.3 ms   total   4125.8 ms   0x0391F3BD
+  gcc    simd      diffuse    203.5 ms   total   3944.2 ms   0x0391F3BD
+  gcc    asm       diffuse    160.7 ms   total   3562.0 ms   0x0391F3BD
+  clang  no-simd   diffuse    431.4 ms   total   3339.1 ms   0x0391F3BD
+  clang  simd      diffuse    192.3 ms   total   3092.6 ms   0x0391F3BD
+  clang  asm       diffuse    166.9 ms   total   3002.0 ms   0x0391F3BD
+wrote /mnt/c/Users/pw/git/slimebench/.claude/worktrees/physarum-benchmarking-suite-377fb5/results/run-20260820-0330/V-asm-kernels.jsonl
+
+=== Haskell style axis, 1024x1024, 300 ticks ===
+  C reference (clang -O3 -native)      1137.71 ms  0x7A67A29B
+  haskell lowlevel, (!) lookups        2077.14 ms  0x7A67A29B
+  haskell lowlevel, unsafeAt           1420.31 ms  0x7A67A29B
+  haskell idiomatic (vector)           5287.40 ms  0x7A67A29B
+
+=== class P, thread sweep ===
+  c            T=1   binned       4391 ms
+  c            T=2   binned       2101 ms
+  c            T=2   private      2472 ms
+  c            T=4   binned       1112 ms
+  c            T=4   private      1458 ms
+  c            T=8   binned        873 ms
+  c            T=8   private      1173 ms
+  c            T=16  binned        627 ms
+  c            T=16  private      2500 ms
+  c            T=32  binned        550 ms
+  c            T=32  private      5747 ms
+  cpp          T=1   binned       4127 ms
+  cpp          T=2   binned       2083 ms
+  cpp          T=2   private      2319 ms
+  cpp          T=4   binned       1176 ms
+  cpp          T=4   private      1414 ms
+  cpp          T=8   binned        854 ms
+  cpp          T=8   private      1139 ms
+  cpp          T=16  binned        636 ms
+  cpp          T=16  private      2463 ms
+  cpp          T=32  binned        551 ms
+  cpp          T=32  private      5595 ms
+  rust         T=1   binned       5724 ms
+  rust         T=2   binned       2568 ms
+  rust         T=2   private      2760 ms
+  rust         T=4   binned       1594 ms
+  rust         T=4   private      1573 ms
+  rust         T=8   binned        979 ms
+  rust         T=8   private      1272 ms
+  rust         T=16  binned        845 ms
+  rust         T=16  private      2495 ms
+  rust         T=32  binned        993 ms
+  rust         T=32  private      5304 ms
+  haskell      T=1   binned       4861 ms
+  haskell      T=2   binned       2168 ms
+  haskell      T=2   private      1649 ms
+  haskell      T=4   binned       1096 ms
+  haskell      T=4   private      1097 ms
+  haskell      T=8   binned        753 ms
+  haskell      T=8   private      1062 ms
+  haskell      T=16  binned        667 ms
+  haskell      T=16  private      2509 ms
+  haskell      T=32  binned        741 ms
+  haskell      T=32  private      6235 ms
+  ts           T=1   binned      11310 ms
+  ts           T=2   binned       3861 ms
+  ts           T=2   private      6230 ms
+  ts           T=4   binned       2142 ms
+  ts           T=4   private      3594 ms
+  ts           T=8   binned       1475 ms
+  ts           T=8   private      2495 ms
+  ts           T=16  binned       1151 ms
+  ts           T=16  private      2828 ms
+  ts           T=32  binned       1276 ms
+  ts           T=32  private      5803 ms
+  python       T=1   binned       7532 ms
+  python       T=2   binned       5478 ms
+  python       T=2   private      4689 ms
+  python       T=4   binned       3041 ms
+  python       T=4   private      2780 ms
+  python       T=8   binned       1932 ms
+  python       T=8   private      2056 ms
+  python       T=16  binned       1712 ms
+  python       T=16  private      2196 ms
+  python       T=32  binned       2085 ms
+  python       T=32  private      3038 ms
+  go           T=1   binned       4916 ms
+  go           T=2   binned       2115 ms
+  go           T=2   private      1783 ms
+  go           T=4   binned       1442 ms
+  go           T=4   private      1151 ms
+  go           T=8   binned        814 ms
+  go           T=8   private      1132 ms
+  go           T=16  binned        578 ms
+  go           T=16  private      2211 ms
+  go           T=32  binned        516 ms
+  go           T=32  private      5073 ms
+  swift        T=1   binned       5625 ms
+  swift        T=2   binned       2380 ms
+  swift        T=2   private      1828 ms
+  swift        T=4   binned       1787 ms
+  swift        T=4   private      1106 ms
+  swift        T=8   binned        891 ms
+  swift        T=8   private      1087 ms
+  swift        T=16  binned        653 ms
+  swift        T=16  private      2184 ms
+  swift        T=32  binned        845 ms
+  swift        T=32  private      5546 ms
+  perl         T=1                4018 ms
+  perl         T=2                2288 ms
+  perl         T=4                1647 ms
+  perl         T=8                1469 ms
+  perl         T=16               1672 ms
+  perl         T=32               2485 ms
+
+=== class P, CPython free-threading matrix ===
+gil -- 3.12.3 gil=True
+  gil      serial    T=1  scalar       0.0 ms
+  gil      threads   T=2  binned       0.0 ms
+  gil      threads   T=2  private      0.0 ms
+  gil      processes T=2  binned       0.0 ms
+  gil      processes T=2  private      0.0 ms
+  gil      threads   T=4  binned       0.0 ms
+  gil      threads   T=4  private      0.0 ms
+  gil      processes T=4  binned       0.0 ms
+  gil      processes T=4  private      0.0 ms
+  gil      threads   T=8  binned       0.0 ms
+  gil      threads   T=8  private      0.0 ms
+  gil      processes T=8  binned       0.0 ms
+  gil      processes T=8  private      0.0 ms
+  gil      threads   T=16 binned       0.0 ms
+  gil      threads   T=16 private      0.0 ms
+  gil      processes T=16 binned       0.0 ms
+  gil      processes T=16 private      0.0 ms
+nogil -- 3.14.7 gil=False
+  nogil    serial    T=1  scalar       0.0 ms
+  nogil    threads   T=2  binned       0.0 ms
+  nogil    threads   T=2  private      0.0 ms
+  nogil    processes T=2  binned       0.0 ms
+  nogil    processes T=2  private      0.0 ms
+  nogil    threads   T=4  binned       0.0 ms
+  nogil    threads   T=4  private      0.0 ms
+  nogil    processes T=4  binned       0.0 ms
+  nogil    processes T=4  private      0.0 ms
+  nogil    threads   T=8  binned       0.0 ms
+  nogil    threads   T=8  private      0.0 ms
+  nogil    processes T=8  binned       0.0 ms
+  nogil    processes T=8  private      0.0 ms
+  nogil    threads   T=16 binned       0.0 ms
+  nogil    threads   T=16 private      0.0 ms
+  nogil    processes T=16 binned       0.0 ms
+  nogil    processes T=16 private      0.0 ms
+wrote /mnt/c/Users/pw/git/slimebench/.claude/worktrees/physarum-benchmarking-suite-377fb5/results/run-20260820-0330/P-gil-matrix.jsonl
+
+=== class G, every preset ===
+  cuda           tiny           8 ms       3202 MCUPS
+  cuda           small         16 ms       6753 MCUPS
+  cuda           medium        44 ms       9433 MCUPS
+  cuda           large        191 ms       8764 MCUPS
+  cuda           huge        1065 ms       6300 MCUPS
+  gl43 C         tiny         214 ms        122 MCUPS
+  gl43 C         small        660 ms        159 MCUPS
+  gl43 C         medium      2379 ms        176 MCUPS
+  gl43 C         large       9246 ms        181 MCUPS
+  gl43 C         huge       39941 ms        168 MCUPS
+  gl43 Python    tiny         225 ms        116 MCUPS
+  gl43 Python    small        656 ms        160 MCUPS
+  gl43 Python    medium      2391 ms        175 MCUPS
+  gl43 Python    large       9321 ms        180 MCUPS
+  gl43 Python    huge       39956 ms        168 MCUPS
+
+=== class R, both backends, both renderers ===
+  -- llvmpipe (software) --
+  c        sdl2         2.883 ms     346.9 fps
+  c        raylib       2.036 ms     491.1 fps
+  cpp      sdl2         2.861 ms     349.6 fps
+  cpp      raylib       2.027 ms     493.4 fps
+  rust     sdl2         2.695 ms     371.0 fps
+  rust     raylib       1.948 ms     513.3 fps
+  haskell  sdl2         2.682 ms     372.9 fps
+  haskell  raylib       1.927 ms     518.9 fps
+  python   pygame       5.238 ms     190.9 fps
+  python   raylib       4.325 ms     231.2 fps
+  perl     sdl2       110.274 ms       9.1 fps
+  perl     raylib      74.024 ms      13.5 fps
+  -- discrete GPU via Mesa D3D12 --
+  c        sdl2         4.092 ms     244.4 fps
+  c        raylib       1.844 ms     542.4 fps
+  cpp      sdl2         4.177 ms     239.4 fps
+  cpp      raylib       1.825 ms     547.9 fps
+  rust     sdl2         3.950 ms     253.1 fps
+  rust     raylib       1.675 ms     596.9 fps
+  haskell  sdl2         3.995 ms     250.3 fps
+  haskell  raylib       1.821 ms     549.2 fps
+  python   pygame       5.297 ms     188.8 fps
+  python   raylib       4.263 ms     234.6 fps
+  perl     sdl2       119.587 ms       8.4 fps
+  perl     raylib      75.095 ms      13.3 fps
+
+==> done. 360 rows in results/run-20260820-0330
+A-crosslang-deferred.jsonl
+A-crosslang-serial.jsonl
+C-compiler-matrix.jsonl
+G-simd.jsonl
+H-gpu.jsonl
+M-haskell-style.jsonl
+P-gil-matrix.jsonl
+P-parallel.jsonl
+Q-render.jsonl
+V-asm-kernels.jsonl
+environment.txt
+run.log

@@ -43,12 +43,12 @@ Dieselbe Simulation, `medium` (2048², 1 M Agenten), 100 Ticks:
 
 | Klasse | beste Konfiguration | ms | vs. 1 CPU-Kern |
 |---|---|---:|---:|
-| S — ein Thread | C, clang `-O3 -march=native -flto` | 5609 | 1× |
-| P — 32 Threads | C++, `std::jthread`, `binned` | 698 | 8× |
-| G — GPU | CUDA, RTX 5080 | **52** | **108×** |
+| S — ein Thread | C, gcc `-O3 -march=native` | 4391 | 1× |
+| P — 32 Threads | **Go**, `binned` | 516 | **8.5×** |
+| G — GPU | CUDA, RTX 5080 | **44** | **100×** |
 
-Klasse P gibt es in allen sieben Sprachen, alle bit-identisch zum seriellen
-Lauf:
+Klasse P gibt es in allen neun Sprachen, alle bit-identisch zum seriellen
+Lauf — und gewonnen wird sie nicht von C oder C++, sondern von Go:
 
 ![Skalierung über Sprachen](docs/charts/scaling-langs.svg)
 
