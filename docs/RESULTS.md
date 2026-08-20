@@ -1032,6 +1032,7 @@ gehört dokumentiert, sonst liest sich das Projekt fehlerfreier als es war.
 | Ein Binary, das antwortet, ist das Binary, das ich gebaut habe | `cargo build --bins` baut die Rust-Frontends nicht — sie hängen an Cargo-Features. Drei Prüfungen liefen gegen ein altes Executable und bestanden alle. |
 | Ein Skript, das von Hand funktioniert, funktioniert auch im Lauf | Zwei neue Skripte legten ihre Ausgabedatei an, wechselten das Verzeichnis und schrieben danach an einen relativen Pfad ins Nichts. Von Hand mit absolutem Pfad getestet — deshalb überlebte es. |
 | Nach `preflight.sh` „18 present, 0 missing" ist alles da | Go und Swift standen nicht im PATH des Laufs und wurden still übersprungen. preflight prüfte sie nicht — dabei ist genau das seine Aufgabe. |
+| Zehn fehlgeschlagene Konformitätsfälle heißen, dass zehn Fälle abweichen | Sie hießen, dass das Programm nie startete. Ein Target trug einen Platzhalter, den niemand ersetzte; danach zeigte `resolve_exe` per `Path.resolve()` am virtualenv vorbei auf den Basis-Interpreter, der numpy nicht sieht. Beide Male meldete der Harness „divergence“ statt „nicht ausführbar“. |
 | Eine Toolchain in den PATH zu hängen ist harmlos | Swifts Toolchain bringt clang 21 mit. Vorangestellt hätte sie das System-clang 18 verdeckt, und die Compiler-Matrix hätte weiter „clang" geschrieben. |
 
 Ein Muster: **jede Vermutung über Performance, die ich nicht gemessen habe,
@@ -1043,12 +1044,18 @@ Und ein zweites: die beiden schlimmsten Fehler in dieser Liste — das
 eine *plausible Zahl* produzierten. Beide sind nur aufgefallen, weil eine
 Skalierung nicht stimmte, nicht weil etwas kaputt aussah.
 
-Die vier jüngsten Einträge haben das Gegenteil gemeinsam: sie produzierten
+Die fünf jüngsten Einträge haben das Gegenteil gemeinsam: sie produzierten
 **gar keine Zahl**. Eine Phase, die ins Nichts schrieb; zwei Sprachen, die
-übersprungen wurden; ein Binary, das eine alte Frage beantwortete. Fehlende
+übersprungen wurden; ein Binary, das eine alte Frage beantwortete; ein Target,
+das nie startete und dafür zehnmal als „abweichend“ gezählt wurde. Fehlende
 Ausgabe ist leichter zu finden als falsche — aber nur, wenn man nachzählt, was
 dastehen müsste. Die Zeilen pro Datei zu zählen hat in dieser Sitzung drei
 Fehler gefunden, das Lesen der Zahlen keinen.
+
+Eine Lehre daraus steht jetzt im Code statt hier: `run.py` prüft vor jedem
+Target, ob `argv[0]` überhaupt existiert, und sagt „nicht gefunden,
+übersprungen“ statt zehnmal „divergence“. Ein Werkzeug, das *falsch* meldet,
+wo es *gar nicht gelaufen* meint, kostet mehr Zeit als der Fehler selbst.
 
 ---
 
