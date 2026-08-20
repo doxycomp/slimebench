@@ -54,7 +54,7 @@ go 1.25 · swift 6.3.3 · python 3.12.3 (+ 3.14t) · perl 5.38.2 · CUDA 12.0
 
 ## 1. The short version
 
-The same simulation, thirteen implementations in nine languages, from a Perl
+The same simulation, fourteen implementations in ten languages, from a Perl
 interpreter to 84 streaming multiprocessors.
 
 ![Class overview](charts/classes.svg)
@@ -178,6 +178,40 @@ Worth noting:
   relatively more at 256² than at 1024².
 - **RSS is 18 MiB almost everywhere**, because the grid dominates it. The only
   outliers are the runtimes: Node at 80 MiB, numpy at 39.
+
+### Lean 4, measured separately
+
+Lean landed after the series above was recorded. Its numbers are therefore
+**not** in those tables and are not directly comparable to them: pasting a row
+into a generated table would break the one property those tables have. Measured
+on the same machine, same size, same command, immediately after:
+
+| Language | Profile | Tier | ms/tick | vs. C in the table above |
+|---|---:|:-:|---:|---:|
+| Lean 4 | default | A | 1.591 | 8.9× |
+| Lean 4 | o3-native | A | 1.614 | 9.0× |
+
+That places it between TypeScript (3.6×) and pure Python (202×). Three things
+about how it gets there:
+
+**It computes in native `Float32`, and that had to be checked.** Lean's
+`Float32` was verified against `round_f32(f64_op(a,b))` — the identity §7.2 of
+the spec rests on — over 50 000 pairs spanning normals, subnormals and huge
+values, for `+`, `*` and `/`: zero mismatches, and `0.94` gives `0x3F70A3D7`.
+So this is the one scripting-adjacent target that needs no `--strict-f32`
+equivalent.
+
+**Its arrays are copy-on-write, not persistent.** `Array.uset` mutates in place
+at refcount 1 and copies otherwise, so a write loop is O(n). If something else
+still holds the array it copies exactly *once* and the rest of the loop is in
+place again. Confirmed by running the same fill at n and 4n and reading the
+ratio: 3.5, 4.9, 3.8 — not 16.
+
+**The `leanc` optimisation level does nothing.** `-O3 -march=native` measured
+1.5 % slower than the default, which is inside the noise. The generated C is
+dominated by Lean runtime calls, and a C compiler cannot improve those.
+
+The next full run will fold Lean into the tables and this section can go.
 
 ### What bit-exactness costs in the scripting languages
 
@@ -1015,6 +1049,7 @@ was.
 | A script that works by hand works in the run | Two new scripts created their output file, changed directory, and then appended to the same relative path, which by then pointed nowhere. Tested by hand with an absolute path — which is why it survived. |
 | After `preflight.sh` says "18 present, 0 missing", everything is there | Go and Swift were not on the run's PATH and were silently skipped. preflight did not check them — which is precisely its job. |
 | Ten failed conformance cases mean ten cases diverge | They meant the program never started. One target carried a placeholder nothing expanded; then `resolve_exe` used `Path.resolve()` and pointed past the virtualenv at the base interpreter, which cannot see numpy. Both times the harness reported "divergence" instead of "not executable". |
+| Lean is blocked on which array idiom the compiler makes destructive | They all are. At 7.9 ns per element on an 8 M array a copying `set!` would be years of work, so the arithmetic refuted the question before any experiment did. Lean's arrays are copy-on-write with refcounting and a write loop is O(n) (§2). |
 | Putting a toolchain on PATH is harmless | Swift's toolchain ships clang 21. Prepended, it would have shadowed the system clang 18, and the compiler matrix would have gone on printing "clang". |
 
 One pattern: **every guess about performance that I did not measure was
@@ -1054,12 +1089,9 @@ instead of "divergence" ten times. A tool that reports *wrong* where it means
 - **Why Go wins class P.** Swap the barriers between implementations, or
   instrument the wait time per phase. The explanation in §5 is plausible and
   unmeasured, and that category has a poor record in §12.
-- **A Lean port.** Probed and viable: `Float32` exists, `0.94` is
-  `0x3F70A3D7`, and a tail-recursive loop over `FloatArray` manages about 8 ns
-  per cell. What is missing is knowing which of three near-identical array
-  idioms the compiler turns into a destructive update — they differ by a factor
-  of 6. Publishing a number without knowing that would measure the idiom rather
-  than the language, which is exactly the mistake §4 is about.
+- **Class P for Lean.** The port is class S only. Lean has `Task` and
+  `IO.asTask`, so the shape exists; whether a barrier over them is cheap
+  enough to be worth measuring is unknown.
 - **The HUD in Haskell, Perl and Python.** Six frontends have it, six do not.
   The 5×7 font is deliberately data in a header so a port can adopt it; the
   Rust version is generated from the C one and checked against it through a

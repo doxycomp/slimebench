@@ -301,6 +301,28 @@ run, and the resulting number was plausible. See
 
 ---
 
+## Phase 12 — Lean 4 ✅
+
+The tenth language, and the one whose blocker turned out not to exist. The
+open item used to read "blocked on which of three near-identical array idioms
+the compiler turns into a destructive update". The arithmetic refutes it: at
+7.9 ns per element on an 8 M array, a copying `set!` would be years of work.
+Every idiom was already destructive, because Lean's arrays are copy-on-write
+with refcounting.
+
+Three things were measured before a line of the port was written, which is the
+only reason it landed bit-exact on the first run:
+
+- write loops are O(n) — confirmed by running the same fill at n and 4n and
+  reading the ratio, which was 3.5 to 4.9, not 16;
+- `Float32` is IEEE binary32 — 50 000 pairs against `round_f32(f64_op(a,b))`,
+  zero mismatches, and `0.94` gives `0x3F70A3D7`;
+- the representation barely matters — `Array UInt32` of bit patterns, which
+  should have beaten the boxing in `Array Float32`, measured 13.2 against
+  12.8 ns/cell, inside a 25 % run-to-run spread.
+
+Tier A on the full conformance set. 8.9× C at 256², class S only.
+
 ## Open
 
 - **A native Linux GL driver.** The GL numbers include Mesa's D3D12
@@ -309,8 +331,6 @@ run, and the resulting number was plausible. See
 - **Class R at a grid size that saturates the GPU.**
 - **Why Go wins class P.** The explanation in RESULTS §5 is plausible and
   unmeasured, and that category has a poor record.
-- **A Lean port.** Probed and viable; blocked on which of three near-identical
-  array idioms the compiler turns into a destructive update.
 - **The HUD in Haskell, Perl and Python.** The 5×7 font is deliberately data in
   a header so a port can adopt it.
 - **`numba`** as a third Python data point.

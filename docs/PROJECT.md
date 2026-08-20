@@ -1,6 +1,6 @@
 # slimebench — Physarum benchmarking suite
 
-The same simulation, nine languages, two rendering backends, many compilers —
+The same simulation, ten languages, two rendering backends, many compilers —
 and a verification mechanism that proves it really is the same simulation
 running.
 
@@ -48,6 +48,7 @@ impl/
   haskell/           IOUArray in IO, strict throughout, plus an idiomatic port
   go/                goroutines and a hand-built barrier
   swift/             Foundation.Thread, three safety models
+  lean/              Lean 4, tail recursion over Array Float32 (class S)
   ts/                core + Node headless + browser entry point
   web/               HTML5 canvas frontend (generated bundle)
   python/            pure (tier B / --strict-f32) and numpy (deferred only)
@@ -96,7 +97,7 @@ slimebench solves it with four building blocks:
 | **Portable 32-bit PRNG** (SPEC §3) | xoshiro128++ and SplitMix32, pure 32-bit integer arithmetic — directly expressible in JS, Perl, GLSL and WGSL, where 64-bit is expensive or unavailable. |
 | **Checksums** (SPEC §6) | Separate hashes for grid and agents. If only the grid diverges the bug is in the diffusion pass; if both diverge it is in the agent pass. `--hash-every N` binary-searches the first diverging tick. |
 
-**Result:** seven of nine languages — C, C++, Rust, Haskell, Go, Swift,
+**Result:** eight of ten languages — C, C++, Rust, Haskell, Go, Swift, Lean,
 TypeScript and Python/numpy — are bit-exact against the C reference, on the
 grid *and* the agent checksum, across three grid sizes × both update modes ×
 tick counts up to 1000. Python (pure) and Perl reach the same with

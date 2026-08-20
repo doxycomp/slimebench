@@ -460,8 +460,13 @@ the most useful tool there is when porting.
 Grid and agent hash match the reference vectors (`spec/testvectors/`)
 **exactly**.
 
-Expected for: **C, C++, Rust, Haskell, Go, Swift, TypeScript**
+Expected for: **C, C++, Rust, Haskell, Go, Swift, Lean, TypeScript**
 (`Float32Array` + `Math.fround`) and **Python with NumPy** (`float32`).
+
+Lean 4 reaches tier A in native `Float32`, which was not obvious in advance:
+its `Float32` was verified against `round_f32(f64_op(a,b))` -- the same
+identity §7.2 rests on -- over 50 000 pairs for `+`, `*` and `/`, with zero
+mismatches.
 
 ### 7.2 Tier B — numerically equivalent
 
