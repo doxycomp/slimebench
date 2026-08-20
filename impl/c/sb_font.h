@@ -91,6 +91,21 @@ static const char *const SB_FONT_ROWS[] = {
 static const char SB_GLYPH_MISSING[] =
     "#####" "#...#" "#...#" "#...#" "#...#" "#...#" "#####";
 
+/* FNV-1a over the glyph bytes. impl/rust/src/hud.rs carries a generated copy
+ * of this table and the same constant; sb_hud_init() compares them at startup
+ * so an edit on either side is caught the first time a window opens, rather
+ * than as one wrong pixel in a HUD nobody screenshots. Regenerate the Rust
+ * side with scratchpad/gen_rust_font.py after changing a glyph here. */
+#define SB_FONT_HASH 0x6856D243u
+
+static inline uint32_t sb_font_hash(void) {
+    uint32_t h = 0x811C9DC5u;
+    for (int i = 0; SB_FONT_CHARS[i]; i++)
+        for (int j = 0; j < SB_GLYPH_W * SB_GLYPH_H; j++)
+            h = (h ^ (uint32_t)(unsigned char)SB_FONT_ROWS[i][j]) * 0x01000193u;
+    return h;
+}
+
 static inline const char *sb_font_glyph(char c) {
     if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
     for (int i = 0; SB_FONT_CHARS[i]; i++)

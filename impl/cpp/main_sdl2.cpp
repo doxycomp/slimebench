@@ -10,7 +10,19 @@
 #include <vector>
 
 #include "cli.hpp"
+#include "hud.hpp"
 #include "render.hpp"
+
+// SDL keycodes for printable ASCII are the ASCII value, so the shared table
+// covers everything except the three keys that have no character.
+static sb_action sdlAction(SDL_Keycode k) {
+    switch (k) {
+    case SDLK_ESCAPE: return SB_ACT_QUIT;
+    case SDLK_TAB:    return SB_ACT_HUD;
+    case SDLK_F1:     return SB_ACT_HELP;
+    default:          return sb_hud_action_for_char(int(k));
+    }
+}
 
 int main(int argc, char** argv) {
     sb::Config cfg;
@@ -39,22 +51,41 @@ int main(int argc, char** argv) {
     }
 
     std::vector<std::uint8_t> gray(std::size_t(cfg.width) * cfg.height);
+    // sb_hud_apply toggles it through a pointer, so it cannot live in the
+    // bool-typed CliOpts.
+    int freeze_sim = opt.freeze_sim;
     sb::RenderStats stats;
-    bool running = true;
+    sb_hud hud;
+    sb_hud_init(&hud, "c++ / sdl2", opt.want_hud);
+    sb_hud_view view = sb::hudViewOf(sim);
 
-    for (std::uint32_t t = 0; running && t < cfg.ticks; ++t) {
+    for (std::uint32_t t = 0; !hud.want_quit && t < cfg.ticks; ++t) {
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
-            if (e.type == SDL_QUIT) running = false;
-            if (e.type == SDL_KEYDOWN &&
-                (e.key.keysym.sym == SDLK_ESCAPE || e.key.keysym.sym == SDLK_q))
-                running = false;
+            if (e.type == SDL_QUIT) hud.want_quit = 1;
+            if (e.type == SDL_KEYDOWN)
+                sb_hud_apply(&hud, &view, &freeze_sim, &opt.display_max,
+                             sdlAction(e.key.keysym.sym));
         }
+        sb::hudViewInto(view, sim);
+        sb::hudService(hud, sim, view);
 
-        if (!opt.freeze_sim) sim.tick();
+        const std::uint64_t s0 = sb::nowNs();
+        if (!freeze_sim && (!hud.paused || hud.step_once)) {
+            sim.tick();
+            ++hud.tick;
+            hud.step_once = 0;
+        }
+        const double sim_ms = double(sb::nowNs() - s0) / 1e6;
 
         const std::uint64_t r0 = sb::nowNs();
         sim.renderGray(gray.data(), opt.display_max);
+
+        // Timed separately and subtracted below: the overlay is not part of
+        // the grid -> texture -> screen path the class R number reports.
+        const std::uint64_t h0 = sb::nowNs();
+        sb_hud_draw(&hud, &view, gray.data(), opt.display_max);
+        const std::uint64_t hud_ns = sb::nowNs() - h0;
 
         void* pixels = nullptr;
         int pitch = 0;
@@ -73,7 +104,9 @@ int main(int argc, char** argv) {
         SDL_RenderClear(ren);
         SDL_RenderCopy(ren, tex, nullptr, nullptr);
         SDL_RenderPresent(ren);
-        stats.add(sb::nowNs() - r0);
+        const std::uint64_t frame_ns = sb::nowNs() - r0;
+        stats.add(frame_ns - hud_ns);
+        sb_hud_observe(&hud, sim_ms, double(frame_ns - hud_ns) / 1e6);
 
         stats.maybeRetitle([&](const char* title) { SDL_SetWindowTitle(win, title); },
                            "slimebench -- C++ / SDL2");
@@ -84,6 +117,9 @@ int main(int argc, char** argv) {
     SDL_DestroyWindow(win);
     SDL_Quit();
 
-    if (opt.want_json) stats.emitJson("cpp", "sdl2", sim);
+    if (opt.want_json) {
+        std::string backend = std::string("sdl2") + sb_hud_json_suffix(&hud);
+        stats.emitJson("cpp", backend.c_str(), sim);
+    }
     return 0;
 }

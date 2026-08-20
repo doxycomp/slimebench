@@ -10,7 +10,7 @@
 #include <stdlib.h>
 
 #include "sb_cli.h"
-#include "sb_hud.h"
+#include "sb_hud_c.h"
 #include "sb_render.h"
 
 /* SDL keycodes for printable ASCII are the ASCII value, so the shared table
@@ -63,24 +63,18 @@ int main(int argc, char **argv) {
     sb_rs_init(&stats, cfg.ticks == 0xFFFFFFFFu ? 100000 : cfg.ticks);
     sb_hud hud;
     sb_hud_init(&hud, "c / sdl2", opt.want_hud);
+    sb_hud_view view = sb_hud_view_of(&sim);
 
     for (uint32_t t = 0; !hud.want_quit && t < cfg.ticks; t++) {
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) hud.want_quit = 1;
             if (e.type == SDL_KEYDOWN)
-                sb_hud_apply(&hud, &sim, &opt.freeze_sim, &opt.display_max,
+                sb_hud_apply(&hud, &view, &opt.freeze_sim, &opt.display_max,
                              sdl_action(e.key.keysym.sym));
         }
-        if (hud.want_reset) {
-            /* Reinit with the current config, edits included: reset means
-             * "start over with what I have now", not "undo my keypresses". */
-            const sb_config now = sim.cfg;
-            sb_sim_free(&sim);
-            if (sb_sim_init(&sim, &now) != 0) break;
-            hud.want_reset = 0;
-            hud.tick = 0;
-        }
+        sb_hud_view_into(&view, &sim);
+        if (!sb_hud_service(&hud, &sim, &view)) break;
 
         const uint64_t s0 = sb_now_ns();
         if (!opt.freeze_sim && (!hud.paused || hud.step_once)) {
@@ -96,7 +90,7 @@ int main(int argc, char **argv) {
         /* Timed separately and subtracted below: the overlay is not part of
          * the grid -> texture -> screen path the class R number reports. */
         const uint64_t h0 = sb_now_ns();
-        sb_hud_draw(&hud, &sim, gray, opt.display_max);
+        sb_hud_draw(&hud, &view, gray, opt.display_max);
         const uint64_t hud_ns = sb_now_ns() - h0;
 
         void *pixels = NULL;

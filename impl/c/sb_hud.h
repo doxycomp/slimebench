@@ -23,6 +23,13 @@
  * window at all -- the HUD flags the run as EDITED from the first keypress,
  * and sb_hud_json_suffix() makes any JSON emitted afterwards say so too.
  *
+ * ## Shared, not C-specific
+ *
+ * Nothing here knows what a sb_sim is. The HUD reads and writes a plain
+ * sb_hud_view of scalars that the frontend fills from its own config and
+ * copies back afterwards, so the C and C++ ports include this same file
+ * rather than maintaining two drifting copies of a bitmap font.
+ *
  * ## Timing
  *
  * Drawing the overlay is real work and would inflate the class R numbers, so
@@ -36,7 +43,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "sb_core.h"
 #include "sb_font.h"
 
 /* ---- key actions -------------------------------------------------------- */
@@ -85,6 +91,14 @@ static inline sb_action sb_hud_action_for_char(int c) {
 
 /* ---- state -------------------------------------------------------------- */
 
+/* Everything the overlay shows or edits, as scalars. The frontend owns the
+ * real config; this is the window onto it. */
+typedef struct {
+    uint32_t width, height, agents, threads, rot_steps, ndir;
+    float deposit, decay, sensor_dist, step;
+    int deferred;       /* SPEC-1 update mode, for display only */
+} sb_hud_view;
+
 typedef struct {
     int show_hud;
     int show_help;
@@ -92,6 +106,7 @@ typedef struct {
     int step_once;      /* consumed by the frontend: run exactly one tick */
     int want_quit;
     int want_reset;     /* consumed by the frontend: it owns the sim object */
+    int want_hash;      /* consumed by the frontend: only it can hash a grid */
     int edited;         /* a parameter was changed at runtime */
     uint32_t tick;
     double sim_ms;      /* exponentially smoothed, for a readable display */
@@ -103,6 +118,13 @@ static inline void sb_hud_init(sb_hud *h, const char *label, int show) {
     memset(h, 0, sizeof *h);
     h->show_hud = show;
     h->label = label;
+    /* One line rather than an abort: a drifted glyph is a cosmetic bug, and
+     * refusing to open a window over it would be worse than the bug. */
+    const uint32_t fh = sb_font_hash();
+    if (fh != SB_FONT_HASH)
+        fprintf(stderr, "warning: font table is 0x%08X, expected 0x%08X -- "
+                        "impl/rust/src/hud.rs needs regenerating\n",
+                fh, SB_FONT_HASH);
 }
 
 /* A smoothing factor slow enough to read and fast enough to react. */
@@ -117,44 +139,40 @@ static inline float sb_clampf(float v, float lo, float hi) {
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
-/* Applies one action. `display_max` is the frontend's brightness scale. */
-static inline void sb_hud_apply(sb_hud *h, sb_sim *s, int *freeze_sim,
+/* Applies one action to the view. `display_max` is the frontend's brightness
+ * scale; both may be NULL if the frontend has no such notion. */
+static inline void sb_hud_apply(sb_hud *h, sb_hud_view *v, int *freeze_sim,
                                 float *display_max, sb_action a) {
     int edit = 1;
     switch (a) {
     case SB_ACT_NONE:   return;
-    case SB_ACT_QUIT:   h->want_quit = 1;              edit = 0; break;
-    case SB_ACT_PAUSE:  h->paused = !h->paused;        edit = 0; break;
+    case SB_ACT_QUIT:   h->want_quit = 1;                edit = 0; break;
+    case SB_ACT_PAUSE:  h->paused = !h->paused;          edit = 0; break;
     case SB_ACT_STEP:   h->step_once = 1; h->paused = 1; edit = 0; break;
-    case SB_ACT_RESET:  h->want_reset = 1;             edit = 0; break;
-    case SB_ACT_HUD:    h->show_hud = !h->show_hud;    edit = 0; break;
+    case SB_ACT_RESET:  h->want_reset = 1;               edit = 0; break;
+    case SB_ACT_HASH:   h->want_hash = 1;                edit = 0; break;
+    case SB_ACT_HUD:    h->show_hud = !h->show_hud;      edit = 0; break;
     case SB_ACT_HELP:   h->show_help = !h->show_help;
                         if (h->show_help) h->show_hud = 1;
                         edit = 0; break;
     case SB_ACT_FREEZE: if (freeze_sim) *freeze_sim = !*freeze_sim;
                         edit = 0; break;
-    case SB_ACT_HASH:
-        fprintf(stderr, "tick %u grid=0x%08X agents=0x%08X%s\n",
-                h->tick, sb_hash_grid(s), sb_hash_agents(s),
-                h->edited ? "  (EDITED -- not reproducible)" : "");
-        edit = 0;
-        break;
 
     /* Steps are multiplicative where the parameter spans orders of magnitude
      * and additive where it does not. */
-    case SB_ACT_DEPOSIT_DN: s->cfg.deposit = sb_clampf(s->cfg.deposit / 1.25f, 0.001f, 1000.0f); break;
-    case SB_ACT_DEPOSIT_UP: s->cfg.deposit = sb_clampf(s->cfg.deposit * 1.25f, 0.001f, 1000.0f); break;
-    case SB_ACT_DECAY_DN:   s->cfg.decay   = sb_clampf(s->cfg.decay - 0.005f, 0.50f, 1.0f); break;
-    case SB_ACT_DECAY_UP:   s->cfg.decay   = sb_clampf(s->cfg.decay + 0.005f, 0.50f, 1.0f); break;
-    case SB_ACT_SENSOR_DN:  s->cfg.sensor_dist = sb_clampf(s->cfg.sensor_dist - 1.0f, 1.0f, 128.0f); break;
-    case SB_ACT_SENSOR_UP:  s->cfg.sensor_dist = sb_clampf(s->cfg.sensor_dist + 1.0f, 1.0f, 128.0f); break;
-    case SB_ACT_STEPLEN_DN: s->cfg.step    = sb_clampf(s->cfg.step - 0.1f, 0.1f, 16.0f); break;
-    case SB_ACT_STEPLEN_UP: s->cfg.step    = sb_clampf(s->cfg.step + 0.1f, 0.1f, 16.0f); break;
+    case SB_ACT_DEPOSIT_DN: v->deposit = sb_clampf(v->deposit / 1.25f, 0.001f, 1000.0f); break;
+    case SB_ACT_DEPOSIT_UP: v->deposit = sb_clampf(v->deposit * 1.25f, 0.001f, 1000.0f); break;
+    case SB_ACT_DECAY_DN:   v->decay   = sb_clampf(v->decay - 0.005f, 0.50f, 1.0f); break;
+    case SB_ACT_DECAY_UP:   v->decay   = sb_clampf(v->decay + 0.005f, 0.50f, 1.0f); break;
+    case SB_ACT_SENSOR_DN:  v->sensor_dist = sb_clampf(v->sensor_dist - 1.0f, 1.0f, 128.0f); break;
+    case SB_ACT_SENSOR_UP:  v->sensor_dist = sb_clampf(v->sensor_dist + 1.0f, 1.0f, 128.0f); break;
+    case SB_ACT_STEPLEN_DN: v->step    = sb_clampf(v->step - 0.1f, 0.1f, 16.0f); break;
+    case SB_ACT_STEPLEN_UP: v->step    = sb_clampf(v->step + 0.1f, 0.1f, 16.0f); break;
 
     /* Direction indices are integers in [1, NDIR/4]; wrapping them would make
      * a fat-fingered keypress silently reverse the turn. */
-    case SB_ACT_ROT_DN: if (s->cfg.rot_steps > 1u) s->cfg.rot_steps--; break;
-    case SB_ACT_ROT_UP: if (s->cfg.rot_steps < SB_NDIR / 4u) s->cfg.rot_steps++; break;
+    case SB_ACT_ROT_DN: if (v->rot_steps > 1u) v->rot_steps--; break;
+    case SB_ACT_ROT_UP: if (v->rot_steps < v->ndir / 4u) v->rot_steps++; break;
 
     case SB_ACT_BRIGHT_DN: if (display_max) *display_max *= 1.25f; edit = 0; break;
     case SB_ACT_BRIGHT_UP: if (display_max) *display_max /= 1.25f; edit = 0; break;
@@ -240,10 +258,10 @@ static const char *const SB_HUD_HELP[] = {
 
 /* Draws the overlay into the greyscale buffer. Call after sb_render_gray()
  * and before the upload. */
-static inline void sb_hud_draw(const sb_hud *hud, const sb_sim *s,
+static inline void sb_hud_draw(const sb_hud *hud, const sb_hud_view *v,
                                uint8_t *g, float display_max) {
     if (!hud->show_hud) return;
-    const uint32_t w = s->cfg.width, h = s->cfg.height;
+    const uint32_t w = v->width, h = v->height;
     const int sc = sb_hud_scale(w);
     const int lh = (SB_GLYPH_H + 3) * sc;      /* line height */
     const int pad = 4 * sc;
@@ -252,7 +270,7 @@ static inline void sb_hud_draw(const sb_hud *hud, const sb_sim *s,
      * uppercase on lookup, so the HUD reads as caps without a second pass. */
     char line[5][96];
     snprintf(line[0], sizeof line[0], "slimebench  %s  %ux%u  %u agents",
-             hud->label, w, h, s->cfg.agents);
+             hud->label, w, h, v->agents);
     snprintf(line[1], sizeof line[1],
              "tick %u   sim %.2f ms   draw %.2f ms   %.0f fps",
              hud->tick, hud->sim_ms, hud->render_ms,
@@ -260,11 +278,11 @@ static inline void sb_hud_draw(const sb_hud *hud, const sb_sim *s,
                  ? 1000.0 / (hud->sim_ms + hud->render_ms) : 0.0);
     snprintf(line[2], sizeof line[2],
              "deposit %.3f  decay %.3f  sensor %.1f  step %.2f  rot %u",
-             (double)s->cfg.deposit, (double)s->cfg.decay,
-             (double)s->cfg.sensor_dist, (double)s->cfg.step, s->cfg.rot_steps);
+             (double)v->deposit, (double)v->decay,
+             (double)v->sensor_dist, (double)v->step, v->rot_steps);
     snprintf(line[3], sizeof line[3], "update %s  threads %u  bright %.0f",
-             s->cfg.update == SB_UPDATE_DEFERRED ? "deferred" : "serial",
-             s->cfg.threads, (double)display_max);
+             v->deferred ? "deferred" : "serial",
+             v->threads, (double)display_max);
     snprintf(line[4], sizeof line[4], "%s%s   h for help",
              hud->paused ? "paused" : "running",
              hud->edited ? "   edited -- not reproducible" : "");

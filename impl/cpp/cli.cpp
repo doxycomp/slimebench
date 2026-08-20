@@ -114,6 +114,8 @@ int parseArgs(int argc, char** argv, Config& cfg, CliOpts& opt) {
         else if (a == "--freeze-sim") { opt.freeze_sim = true; }
         else if (a == "--simd")       { cfg.simd = true; }
         else if (a == "--no-simd")    { cfg.simd = false; }
+        else if (a == "--hud")        { opt.want_hud = 1; }
+        else if (a == "--no-hud")     { opt.want_hud = 0; }
         else {
             // SPEC-1 section 10: never silently ignore an unknown flag.
             std::fprintf(stderr, "error: unknown argument '%s'\n", argv[i]);
@@ -121,6 +123,7 @@ int parseArgs(int argc, char** argv, Config& cfg, CliOpts& opt) {
             return 2;
         }
     }
+    if (opt.want_hud < 0) opt.want_hud = !opt.want_json;
     return 0;
 }
 

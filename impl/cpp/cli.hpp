@@ -17,6 +17,10 @@ struct CliOpts {
     bool freeze_sim = false;
     std::string dump_grid;
     float display_max = 100.0f;
+    // Overlay in the windowed frontends: on for a human, off under --json
+    // because drawing it is work the class R number should not include.
+    // -1 means "not asked for either way".
+    int want_hud = -1;
 };
 
 // Returns 0 on success, 2 on a usage error (message already on stderr).

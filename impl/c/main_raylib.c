@@ -13,7 +13,7 @@
 #include <stdlib.h>
 
 #include "sb_cli.h"
-#include "sb_hud.h"
+#include "sb_hud_c.h"
 #include "sb_render.h"
 
 int main(int argc, char **argv) {
@@ -49,28 +49,24 @@ int main(int argc, char **argv) {
     sb_rs_init(&stats, cfg.ticks == 0xFFFFFFFFu ? 100000 : cfg.ticks);
     sb_hud hud;
     sb_hud_init(&hud, "c / raylib", opt.want_hud);
+    sb_hud_view view = sb_hud_view_of(&sim);
 
     for (uint32_t t = 0; t < cfg.ticks && !hud.want_quit && !WindowShouldClose();
          t++) {
         /* GetCharPressed drains the character queue; the three non-character
          * keys are polled separately. */
         for (int ch = GetCharPressed(); ch != 0; ch = GetCharPressed())
-            sb_hud_apply(&hud, &sim, &opt.freeze_sim, &opt.display_max,
+            sb_hud_apply(&hud, &view, &opt.freeze_sim, &opt.display_max,
                          sb_hud_action_for_char(ch));
         if (IsKeyPressed(KEY_ESCAPE))
-            sb_hud_apply(&hud, &sim, &opt.freeze_sim, &opt.display_max, SB_ACT_QUIT);
+            sb_hud_apply(&hud, &view, &opt.freeze_sim, &opt.display_max, SB_ACT_QUIT);
         if (IsKeyPressed(KEY_TAB))
-            sb_hud_apply(&hud, &sim, &opt.freeze_sim, &opt.display_max, SB_ACT_HUD);
+            sb_hud_apply(&hud, &view, &opt.freeze_sim, &opt.display_max, SB_ACT_HUD);
         if (IsKeyPressed(KEY_F1))
-            sb_hud_apply(&hud, &sim, &opt.freeze_sim, &opt.display_max, SB_ACT_HELP);
+            sb_hud_apply(&hud, &view, &opt.freeze_sim, &opt.display_max, SB_ACT_HELP);
 
-        if (hud.want_reset) {
-            const sb_config now = sim.cfg;
-            sb_sim_free(&sim);
-            if (sb_sim_init(&sim, &now) != 0) break;
-            hud.want_reset = 0;
-            hud.tick = 0;
-        }
+        sb_hud_view_into(&view, &sim);
+        if (!sb_hud_service(&hud, &sim, &view)) break;
 
         const uint64_t s0 = sb_now_ns();
         if (!opt.freeze_sim && (!hud.paused || hud.step_once)) {
@@ -84,7 +80,7 @@ int main(int argc, char **argv) {
         sb_render_gray(&sim, gray, opt.display_max);
 
         const uint64_t h0 = sb_now_ns();
-        sb_hud_draw(&hud, &sim, gray, opt.display_max);
+        sb_hud_draw(&hud, &view, gray, opt.display_max);
         const uint64_t hud_ns = sb_now_ns() - h0;
 
         UpdateTexture(tex, gray);
