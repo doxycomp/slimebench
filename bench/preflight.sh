@@ -135,6 +135,19 @@ else
   missing=$((missing + 1))
 fi
 
+for tc in javac:openjdk-21-jdk-headless ocamlopt:ocaml-nox gfortran:gfortran; do
+  printf '  %-14s ' "${tc%%:*}"
+  if command -v "${tc%%:*}" >/dev/null 2>&1; then
+    green "yes"; printf '  %s
+' "$(dim "$("${tc%%:*}" --version 2>&1 | head -1 | cut -c1-48)")"
+    ok=$((ok + 1))
+  else
+    red "no "; printf '   %s
+' "$(dim "-> the ${tc%%:*} target; apt install ${tc##*:}")"
+    missing=$((missing + 1))
+  fi
+done
+
 printf '  %-14s ' "numba"
 NB="${SLIMEBENCH_NUMBAPY:-$HOME/opt/numba/bin/python}"
 if [ -x "$NB" ] && "$NB" -c 'import numba, numpy' 2>/dev/null; then

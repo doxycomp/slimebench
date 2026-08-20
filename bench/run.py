@@ -47,18 +47,38 @@ TESTVECTORS = ROOT / "spec" / "testvectors" / "SPEC-1.json"
 # larger sizes where cache behaviour and index wrapping differ.
 CONFORMANCE_SIZES = {
     "micro": ["--width", "128", "--height", "128", "--agents", "4096"],
+    # Same size, one parameter changed, and it is the only case in this suite
+    # that can catch a fused multiply-add.
+    #
+    # The default --step is 1.0, so `cos[d] * step` is exact and an FMA over it
+    # produces the identical value. The sensor multiply by --sensor-dist 9.0 is
+    # inexact, but its result only feeds an int() truncation, where a 1-ULP
+    # difference almost never crosses a cell boundary. The consequence is that
+    # every port in this project passed every case with or without its
+    # contraction flag: gfortran at -ffp-contract=fast emits thirteen f32 FMAs
+    # into the agent pass and still matched the reference on all twenty.
+    #
+    # Sweeping --step made the rule visible -- 1.0 and 2.0 agree, 1.25, 1.3,
+    # 0.7 and 3.7 diverge -- because only a power of two keeps the multiply
+    # exact. 1.3 is not one, so this case fails the moment a port lets its
+    # compiler fuse.
+    "fma": ["--width", "128", "--height", "128", "--agents", "4096",
+            "--step", "1.3"],
     "tiny": ["--preset", "tiny"],
     "small": ["--preset", "small"],
 }
 CONFORMANCE_TICKS = {
     "micro": [1, 10, 100],
+    "fma": [100],
     "tiny": [1, 10, 100, 1000],
     "small": [1, 10, 100],
 }
-# Which sizes a target runs, by its declared conformance_set.
+# Which sizes a target runs, by its declared conformance_set. "fma" is in both:
+# it costs one run at the smallest size and it is the only guard against a
+# whole class of silent divergence.
 CONFORMANCE_SETS = {
-    "micro": ["micro"],
-    "full": ["micro", "tiny", "small"],
+    "micro": ["micro", "fma"],
+    "full": ["micro", "fma", "tiny", "small"],
 }
 UPDATE_MODES = ["serial", "deferred"]
 

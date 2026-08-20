@@ -5,6 +5,14 @@ dist-newstyle/
 *.o
 *.hi
 
+# ocaml: build.sh compiles inside build/, but a bare ocamlopt drops these
+# beside the sources
+*.cmi
+*.cmx
+*.cma
+*.cmxa
+*.mod
+
 # node (package-lock.json IS committed -- reproducible toolchain matters here)
 node_modules/
 
