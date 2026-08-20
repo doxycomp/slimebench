@@ -107,6 +107,32 @@ else
   missing=$((missing + 1))
 fi
 
+# The two capabilities added since this file was written. Both are optional and
+# both are the kind of thing that silently produces a missing phase rather than
+# an error, which is what preflight exists to prevent.
+printf '  %-14s ' "python3.14t"
+FT="${SLIMEBENCH_PY314T:-$HOME/opt/ft314/bin/python}"
+if [ -x "$FT" ] && "$FT" -c 'import sys, numpy; sys.exit(0 if not sys._is_gil_enabled() else 1)' 2>/dev/null; then
+  green "yes"; printf '  %s
+' "$(dim "$("$FT" -c 'import sys;print(sys.version.split()[0])') free-threaded, numpy present")"
+  ok=$((ok + 1))
+else
+  red "no "; printf '   %s
+' "$(dim '-> the no-GIL half of the class P matrix; uv venv --python 3.14t ~/opt/ft314 && uv pip install numpy')"
+  missing=$((missing + 1))
+fi
+
+printf '  %-14s ' "avx512f"
+if grep -qm1 ' avx512f' /proc/cpuinfo 2>/dev/null; then
+  green "yes"; printf '  %s
+' "$(dim 'impl/asm builds and --asm runs')"
+  ok=$((ok + 1))
+else
+  red "no "; printf '   %s
+' "$(dim '-> the hand-written assembly kernel; the class V table loses one column')"
+  missing=$((missing + 1))
+fi
+
 echo
 echo "=== display ==="
 # Class R needs a window. Everything else is happy headless.

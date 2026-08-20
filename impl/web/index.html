@@ -102,6 +102,22 @@
     margin-top: 16px;
   }
   .note code { color: #9fb3c8; }
+  #help {
+    border-top: 1px solid var(--line);
+    margin-top: 12px;
+    padding-top: 10px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  #help table { border-collapse: collapse; width: 100%; }
+  #help td { padding: 2px 0; vertical-align: top; }
+  #help td:first-child {
+    color: var(--accent);
+    white-space: nowrap;
+    padding-right: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+  #help p { margin: 8px 0 0; }
 </style>
 </head>
 <body>
@@ -131,11 +147,29 @@
     <div id="stats">–</div>
     <div id="hash"></div>
 
+    <div id="help" hidden>
+      <table>
+        <tr><td>Leertaste</td><td>Pause / Weiter</td></tr>
+        <tr><td>N</td><td>Ein Tick</td></tr>
+        <tr><td>R</td><td>Reset</td></tr>
+        <tr><td>C</td><td>Prüfsumme</td></tr>
+        <tr><td>H · F1</td><td>Diese Hilfe</td></tr>
+        <tr><td>1 / 2</td><td>Deposit</td></tr>
+        <tr><td>3 / 4</td><td>Decay</td></tr>
+        <tr><td>5 / 6</td><td>Sensor-Distanz</td></tr>
+        <tr><td>7 / 8</td><td>Schrittweite</td></tr>
+        <tr><td>9 / 0</td><td>Rotation</td></tr>
+      </table>
+      <p>Dieselbe Belegung wie in den SDL2- und raylib-Frontends.</p>
+    </div>
+
     <p class="note">
       Derselbe Simulationskern läuft headless unter Node und ist bit-identisch
       mit der C-Referenz. Parameter, die du hier findest, lassen sich 1:1 an
       jede andere Implementierung übergeben:<br><br>
       <code>--sensor-dist 9 --sensor-steps 144 --rot-steps 144 --step 1 --deposit 10 --decay 0.94</code>
+      <br><br><strong>H</strong> zeigt die Tastenbelegung — dieselbe wie in den
+      nativen Frontends.
     </p>
   </aside>
 

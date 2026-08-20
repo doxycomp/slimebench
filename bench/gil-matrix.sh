@@ -15,6 +15,14 @@ TICKS="${3:-100}"
 GIL_PY="${SLIMEBENCH_PY312:-python3}"
 FT_PY="${SLIMEBENCH_PY314T:-$HOME/opt/ft314/bin/python}"
 
+# Resolve before the cd below: full-run.sh passes a path relative to the repo
+# root, and every write here happens after this script has changed directory.
+case "$OUT" in
+  /*) ;;
+  *)  OUT="$PWD/$OUT" ;;
+esac
+mkdir -p "$(dirname "$OUT")"
+
 : > "$OUT"
 cd "$ROOT/impl/python" || exit 1
 

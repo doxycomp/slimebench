@@ -24,6 +24,27 @@ set -u
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 ROOT=$PWD
 
+# A git worktree checked out from Windows carries a .git file holding a
+# Windows path, which git-inside-WSL cannot resolve -- so the manifest recorded
+# "commit unknown" and the series could not be tied to a revision. Translate
+# the drive letter and ask again.
+sb_commit() {
+  local c gd drive
+  c=$(git rev-parse --short HEAD 2>/dev/null) && { echo "$c"; return; }
+  if [ -f .git ]; then
+    gd=$(sed -n 's/^gitdir: //p' .git)
+    gd=${gd//\\//}          # a Windows gitdir may use backslashes
+    case "$gd" in
+      [A-Za-z]:/*)
+        drive=$(printf '%s' "${gd%%:*}" | tr 'A-Z' 'a-z')
+        gd="/mnt/$drive${gd#?:}"
+        ;;
+    esac
+    c=$(git --git-dir="$gd" rev-parse --short HEAD 2>/dev/null) && { echo "$c"; return; }
+  fi
+  echo unknown
+}
+
 OUT=${1:-results/run-$(date +%Y%m%d-%H%M)}
 mkdir -p "$OUT"
 echo "==> writing to $OUT"
@@ -77,7 +98,7 @@ HAVE_DISPLAY=0
   # SLIMEBENCH_COMMIT lets the launcher pass it in: the staged copy has no
   # .git, and a run whose numbers cannot be tied to a revision is a
   # transcript rather than a measurement.
-  echo "commit      ${SLIMEBENCH_COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}"
+  echo "commit      ${SLIMEBENCH_COMMIT:-$(sb_commit)}"
 } | tee "$OUT/environment.txt"
 echo
 
@@ -96,7 +117,7 @@ done
 # ---- 2. compiler matrix --------------------------------------------------
 phase "compiler matrix, 1024x1024, 300 ticks"
 python3 bench/run.py bench --preset small --ticks 300 --reps 3 \
-  --targets c,cpp,rust,haskell,haskell-vector,c-pgo \
+  --targets c,cpp,rust,haskell,haskell-vector,c-pgo,go,swift \
   --out "$OUT/C-compiler-matrix.jsonl" || true
 
 # ---- 3. class V ----------------------------------------------------------
@@ -146,6 +167,8 @@ psweep rust    medium 100 binned private -- impl/rust/build/release-native-unche
 psweep haskell medium 100 binned private -- impl/haskell/build/o2-llvm/slimebench
 psweep ts      medium 100 binned private -- node --experimental-strip-types --no-warnings impl/ts/src/main-node.ts
 psweep python  medium 100 binned private -- python3 impl/python/slimebench_numpy.py
+psweep go      medium 100 binned private -- impl/go/build/nobounds/slimebench
+psweep swift   medium 100 binned private -- impl/swift/build/unchecked/slimebench
 psweep perl    tiny    20 ""              -- perl impl/perl/slimebench.pl
 
 # The free-threading experiment: {GIL, no-GIL} x {threads, processes} x T,

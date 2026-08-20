@@ -1,6 +1,6 @@
 # slimebench
 
-Physarum-Simulation (Schleimpilz) in acht Sprachen — mit einem
+Physarum-Simulation (Schleimpilz) in neun Sprachen — mit einem
 Verifikationsmechanismus, der beweist, dass überall wirklich dieselbe
 Simulation läuft, und einem Harness für Performance- und Footprint-Vergleiche
 über Sprachen, Rendering-Backends und Compiler hinweg.
@@ -13,19 +13,24 @@ Simulation läuft, und einem Harness für Performance- und Footprint-Vergleiche
 
 ## Stand
 
-| Sprache | headless | Klasse P | SDL2 | raylib | Konformität |
-|---|:-:|:-:|:-:|:-:|:-:|
-| C | ✅ | ✅ | ✅ | ✅ | Stufe A (Referenz) |
-| C++ | ✅ | ✅ | ✅ | ✅ | Stufe A |
-| Rust (safe + unchecked) | ✅ | ✅ | ✅ | ✅ | Stufe A |
-| Haskell (2 Stile) | ✅ | ✅ | ✅ | ✅ | Stufe A |
-| TypeScript / Node | ✅ | ✅ | — | — | Stufe A |
-| TypeScript / Canvas | — | — | ✅ Browser | — | Stufe A |
-| Python / numpy | ✅ | ✅ | ✅ pygame | ✅ | Stufe A, nur `deferred` |
-| Python / pur | ✅ | — | — | — | Stufe B, A mit `--strict-f32` |
-| Perl | ✅ | ✅ | ✅ | ✅ | Stufe B, A mit `--strict-f32` |
+| Sprache | headless | Klasse P | SDL2 | raylib | HUD | Konformität |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| C | ✅ | ✅ | ✅ | ✅ | ✅ | Stufe A (Referenz) |
+| C++ | ✅ | ✅ | ✅ | ✅ | ✅ | Stufe A |
+| Rust (safe + unchecked) | ✅ | ✅ | ✅ | ✅ | ✅ | Stufe A |
+| Haskell (2 Stile) | ✅ | ✅ | ✅ | ✅ | — | Stufe A |
+| Go | ✅ | ✅ | — | — | — | Stufe A |
+| Swift | ✅ | ✅ | — | — | — | Stufe A |
+| TypeScript / Node | ✅ | ✅ | — | — | — | Stufe A |
+| TypeScript / Canvas | — | — | ✅ Browser | — | Regler | Stufe A |
+| Python / numpy | ✅ | ✅ | ✅ pygame | ✅ | — | Stufe A, nur `deferred` |
+| Python / pur | ✅ | — | — | — | — | Stufe B, A mit `--strict-f32` |
+| Perl | ✅ | ✅ | ✅ | ✅ | — | Stufe B, A mit `--strict-f32` |
 
-**Alle acht Sprachen bestehen `bench/run.py conformance`.** Sechs davon
+Dazu zwei GPU-Hosts, die keine eigene Sprache sind: CUDA und GLSL-Compute
+(letzteres von C und von Python aus, aus derselben Shader-Quelle).
+
+**Alle neun Sprachen bestehen `bench/run.py conformance`.** Sieben davon
 bit-exakt gegen die C-Referenz über Grid- *und* Agenten-Prüfsumme, bei
 `micro`/`tiny`/`small` × `serial`/`deferred` × Tick-Ständen {1, 10, 100, 1000}.
 Python und Perl erreichen mit `--strict-f32` ebenfalls Bit-Exaktheit.
@@ -119,6 +124,31 @@ Grafisches C-Frontend (SDL2, läuft unter WSLg):
 make -C impl/c CC=gcc PROFILE=o3-native sdl2 && ./impl/c/build/gcc-o3-native/slimebench-sdl2 --preset browser --render
 ```
 
+Im Fenster liegt ein Overlay mit Tickzähler, Zeiten und allen Parametern.
+`h` zeigt die Tastenbelegung, `Tab` blendet das Overlay aus, `Leertaste`
+pausiert, `n` geht einen Tick weiter, `r` startet neu, `c` schreibt die
+Prüfsummen nach stderr. Die Parameter hängen an Ziffernpaaren statt an
+Buchstabe-plus-Shift, weil SDL2, raylib, GLFW und der Browser den
+Shift-Zustand unterschiedlich melden — `1`/`2` Deposit, `3`/`4` Decay,
+`5`/`6` Sensordistanz, `7`/`8` Schrittweite, `9`/`0` Rotationsschritte.
+
+Sobald ein Parameter verstellt wird, markiert das HUD den Lauf als `EDITED`:
+er verlässt damit die SPEC-1-Konfiguration und seine Prüfsummen reproduzieren
+nichts mehr. Unter `--json` ist das Overlay aus, und seine Zeichenzeit wird
+ohnehin aus der Klasse-R-Messung herausgerechnet.
+
+Handgeschriebenen AVX-512-Diffusionskern statt der Intrinsics (Klasse V):
+
+```bash
+make -C impl/c CC=clang PROFILE=o3-native ASM=1 headless && ./impl/c/build/clang-o3-native-asm/slimebench-headless --preset medium --ticks 100 --update deferred --asm
+```
+
+CPython ohne GIL gegen CPython mit GIL, gleicher Worker, gleiche Phasen:
+
+```bash
+bench/gil-matrix.sh results/P-gil-matrix.jsonl small 100
+```
+
 ## Die interessanten Details
 
 - **Warum es überhaupt bit-exakt sein kann.** `sin`/`cos` sind zwischen glibc,
@@ -154,6 +184,17 @@ make -C impl/c CC=gcc PROFILE=o3-native sdl2 && ./impl/c/build/gcc-o3-native/sli
   [docs/RESULTS.md §3](docs/RESULTS.md#3-compiler).
 - **Warum `-Ofast` bei clang die Hälfte kostet** und bei gcc nur ein paar
   Prozent — dasselbe Flag, dieselbe Schleife, gegenläufige Wirkung.
+- **Was Handassembler noch bringt, wenn die Intrinsics schon da sind.** 12 %,
+  und nicht durch bessere Befehle, sondern durch weniger Ladeoperationen: der
+  Intrinsics-Kern liest jede Zeile dreimal pro Ausgabevektor, der
+  handgeschriebene einmal und erzeugt die verschobenen Sichten mit `VALIGND`.
+  Nebeneffekt: der Torus-Umlauf wird gratis, weil er zu einem `AND` wird.
+  [impl/asm/sb_diffuse_avx512.S](impl/asm/sb_diffuse_avx512.S).
+- **Was der GIL kostet.** Bei gleichem Worker und gleichen Phasen skaliert
+  CPython 3.12 mit Threads nicht bloß nicht — es wird bei 16 Threads
+  *achtmal langsamer* als mit einem. Ohne GIL sind es 3.6×, und Threads
+  schlagen dort Prozesse überall dort, wo die Reduktion viele Phasen hat.
+  [bench/gil-matrix.sh](bench/gil-matrix.sh).
 - **Was alles nicht funktioniert hat.** PGO, die parallele Präfixsumme, der
   Lastausgleich, die reine Spin-Barriere — vier plausible Optimierungen, ein
   brauchbares Ergebnis. Mit Begründung in

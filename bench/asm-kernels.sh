@@ -16,6 +16,14 @@ PRESET="${2:-medium}"
 TICKS="${3:-100}"
 REPS="${REPS:-3}"
 
+# Resolve before the cd below: full-run.sh passes a path relative to the repo
+# root, and every write here happens after this script has changed directory.
+case "$OUT" in
+  /*) ;;
+  *)  OUT="$PWD/$OUT" ;;
+esac
+mkdir -p "$(dirname "$OUT")"
+
 : > "$OUT"
 cd "$ROOT/impl/c" || exit 1
 
