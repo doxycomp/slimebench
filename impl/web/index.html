@@ -130,7 +130,7 @@
     <div id="controls"></div>
 
     <label class="row">
-      <span class="name">Ticks pro Frame</span>
+      <span class="name">Ticks per frame</span>
       <input type="range" id="speed" min="1" max="8" step="1" value="1">
       <span class="val" id="speedVal">1x</span>
     </label>
@@ -138,10 +138,10 @@
     <div class="buttons">
       <button id="pause">Pause</button>
       <button id="reset">Reset</button>
-      <button id="reseed">Neuer Seed</button>
+      <button id="reseed">New seed</button>
     </div>
     <div class="buttons">
-      <button id="hashBtn">Prüfsumme anzeigen</button>
+      <button id="hashBtn">Show checksum</button>
     </div>
 
     <div id="stats">–</div>
@@ -149,27 +149,27 @@
 
     <div id="help" hidden>
       <table>
-        <tr><td>Leertaste</td><td>Pause / Weiter</td></tr>
-        <tr><td>N</td><td>Ein Tick</td></tr>
+        <tr><td>Space</td><td>Pause / resume</td></tr>
+        <tr><td>N</td><td>Single tick</td></tr>
         <tr><td>R</td><td>Reset</td></tr>
-        <tr><td>C</td><td>Prüfsumme</td></tr>
-        <tr><td>H · F1</td><td>Diese Hilfe</td></tr>
+        <tr><td>C</td><td>Checksum</td></tr>
+        <tr><td>H · F1</td><td>This help</td></tr>
         <tr><td>1 / 2</td><td>Deposit</td></tr>
         <tr><td>3 / 4</td><td>Decay</td></tr>
-        <tr><td>5 / 6</td><td>Sensor-Distanz</td></tr>
-        <tr><td>7 / 8</td><td>Schrittweite</td></tr>
-        <tr><td>9 / 0</td><td>Rotation</td></tr>
+        <tr><td>5 / 6</td><td>Sensor distance</td></tr>
+        <tr><td>7 / 8</td><td>Step length</td></tr>
+        <tr><td>9 / 0</td><td>Rotation steps</td></tr>
       </table>
-      <p>Dieselbe Belegung wie in den SDL2- und raylib-Frontends.</p>
+      <p>The same key map as the SDL2 and raylib frontends.</p>
     </div>
 
     <p class="note">
-      Derselbe Simulationskern läuft headless unter Node und ist bit-identisch
-      mit der C-Referenz. Parameter, die du hier findest, lassen sich 1:1 an
-      jede andere Implementierung übergeben:<br><br>
+      The same simulation core runs headless under Node and is bit-identical
+      to the C reference. Any parameter you find here can be handed to every
+      other implementation unchanged:<br><br>
       <code>--sensor-dist 9 --sensor-steps 144 --rot-steps 144 --step 1 --deposit 10 --decay 0.94</code>
-      <br><br><strong>H</strong> zeigt die Tastenbelegung — dieselbe wie in den
-      nativen Frontends.
+      <br><br><strong>H</strong> shows the key map — the same one the native
+      frontends use.
     </p>
   </aside>
 

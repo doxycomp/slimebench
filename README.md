@@ -1,208 +1,219 @@
 # slimebench
 
-Physarum-Simulation (Schleimpilz) in neun Sprachen — mit einem
-Verifikationsmechanismus, der beweist, dass überall wirklich dieselbe
-Simulation läuft, und einem Harness für Performance- und Footprint-Vergleiche
-über Sprachen, Rendering-Backends und Compiler hinweg.
+A Physarum (slime mould) simulation in nine languages — with a verification
+mechanism that proves the same simulation really is running everywhere, and a
+harness for performance and footprint comparisons across languages, rendering
+backends and compilers.
+
+[![CI](https://github.com/doxycomp/slimebench/actions/workflows/ci.yml/badge.svg)](https://github.com/doxycomp/slimebench/actions/workflows/ci.yml)
 
 | | |
 |---|---|
-| **Was es ist** | [docs/PROJECT.md](docs/PROJECT.md) |
-| **Wie es weitergeht** | [docs/BUILDPLAN.md](docs/BUILDPLAN.md) |
-| **Die Regeln** | [spec/SPEC.md](spec/SPEC.md) — normativ |
+| **What it is** | [docs/PROJECT.md](docs/PROJECT.md) |
+| **Where it is going** | [docs/BUILDPLAN.md](docs/BUILDPLAN.md) |
+| **The rules** | [spec/SPEC.md](spec/SPEC.md) — normative |
 
-## Stand
+## Status
 
-| Sprache | headless | Klasse P | SDL2 | raylib | HUD | Konformität |
+| Language | headless | class P | SDL2 | raylib | HUD | Conformance |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|
-| C | ✅ | ✅ | ✅ | ✅ | ✅ | Stufe A (Referenz) |
-| C++ | ✅ | ✅ | ✅ | ✅ | ✅ | Stufe A |
-| Rust (safe + unchecked) | ✅ | ✅ | ✅ | ✅ | ✅ | Stufe A |
-| Haskell (2 Stile) | ✅ | ✅ | ✅ | ✅ | — | Stufe A |
-| Go | ✅ | ✅ | — | — | — | Stufe A |
-| Swift | ✅ | ✅ | — | — | — | Stufe A |
-| TypeScript / Node | ✅ | ✅ | — | — | — | Stufe A |
-| TypeScript / Canvas | — | — | ✅ Browser | — | Regler | Stufe A |
-| Python / numpy | ✅ | ✅ | ✅ pygame | ✅ | — | Stufe A, nur `deferred` |
-| Python / pur | ✅ | — | — | — | — | Stufe B, A mit `--strict-f32` |
-| Perl | ✅ | ✅ | ✅ | ✅ | — | Stufe B, A mit `--strict-f32` |
+| C | ✅ | ✅ | ✅ | ✅ | ✅ | tier A (reference) |
+| C++ | ✅ | ✅ | ✅ | ✅ | ✅ | tier A |
+| Rust (safe + unchecked) | ✅ | ✅ | ✅ | ✅ | ✅ | tier A |
+| Haskell (2 styles) | ✅ | ✅ | ✅ | ✅ | — | tier A |
+| Go | ✅ | ✅ | — | — | — | tier A |
+| Swift | ✅ | ✅ | — | — | — | tier A |
+| TypeScript / Node | ✅ | ✅ | — | — | — | tier A |
+| TypeScript / Canvas | — | — | ✅ browser | — | sliders | tier A |
+| Python / numpy | ✅ | ✅ | ✅ pygame | ✅ | — | tier A, `deferred` only |
+| Python / pure | ✅ | — | — | — | — | tier B, A with `--strict-f32` |
+| Perl | ✅ | ✅ | ✅ | ✅ | — | tier B, A with `--strict-f32` |
 
-Dazu zwei GPU-Hosts, die keine eigene Sprache sind: CUDA und GLSL-Compute
-(letzteres von C und von Python aus, aus derselben Shader-Quelle).
+Plus two GPU hosts that are not languages of their own: CUDA and GLSL compute
+(the latter driven from C and from Python, out of the same shader source).
 
-**Alle neun Sprachen bestehen `bench/run.py conformance`.** Sieben davon
-bit-exakt gegen die C-Referenz über Grid- *und* Agenten-Prüfsumme, bei
-`micro`/`tiny`/`small` × `serial`/`deferred` × Tick-Ständen {1, 10, 100, 1000}.
-Python und Perl erreichen mit `--strict-f32` ebenfalls Bit-Exaktheit.
+**All nine languages pass `bench/run.py conformance`.** Seven of them are
+bit-exact against the C reference on both the grid *and* the agent checksum,
+across `micro`/`tiny`/`small` × `serial`/`deferred` × tick counts
+{1, 10, 100, 1000}. Python and Perl reach bit-exactness with `--strict-f32`.
 
-Messwerte: [docs/RESULTS.md](docs/RESULTS.md).
+Measurements: [docs/RESULTS.md](docs/RESULTS.md).
 
-Dieselbe Simulation, `medium` (2048², 1 M Agenten), 100 Ticks:
+The same simulation, `medium` (2048², 1 M agents), 100 ticks:
 
-![Klassenübersicht](docs/charts/classes.svg)
+![Class overview](docs/charts/classes.svg)
 
-| Klasse | beste Konfiguration | ms | vs. 1 CPU-Kern |
+| Class | best configuration | ms | vs. 1 CPU core |
 |---|---|---:|---:|
-| S — ein Thread | C, gcc `-O3 -march=native` | 4391 | 1× |
-| P — 32 Threads | **Go**, `binned` | 516 | **8.5×** |
+| S — one thread | C, gcc `-O3 -march=native` | 4391 | 1× |
+| P — 32 threads | **Go**, `binned` | 516 | **8.5×** |
 | G — GPU | CUDA, RTX 5080 | **44** | **100×** |
 
-Klasse P gibt es in allen neun Sprachen, alle bit-identisch zum seriellen
-Lauf — und gewonnen wird sie nicht von C oder C++, sondern von Go:
+Class P exists in all nine languages, every one of them bit-identical to the
+serial run — and it is won by neither C nor C++, but by Go:
 
-![Skalierung über Sprachen](docs/charts/scaling-langs.svg)
+![Scaling across languages](docs/charts/scaling-langs.svg)
 
-Alle Zahlen aus **einem** Lauf über die ganze Matrix. Erst prüfen, was die
-Maschine hergibt:
+Every number comes from **one** run over the whole matrix. First check what
+the machine can actually measure:
 
 ```bash
 bench/preflight.sh
 ```
 
-Dann messen — unter WSL2 mit vorherigem Staging aufs Linux-Dateisystem, nativ
-direkt:
+Then measure — on WSL2 after staging onto the Linux filesystem, natively
+straight away:
 
 ```bash
 scripts/stage-wsl.sh && bench/full-run.sh    # WSL2
-bench/full-run.sh                            # natives Linux
+bench/full-run.sh                            # native Linux
 ```
 
-Der Lauf erkennt WSL gegen natives Linux selbst und setzt die
-D3D12-Umgebungsvariablen nur dort, wo sie hingehören; ohne Display überspringt
-er Klasse R, statt eine Zahl zu erfinden.
+The run detects WSL versus native Linux itself and sets the D3D12 environment
+variables only where they belong; with no display it skips class R rather than
+inventing a number.
 
-## Schnellstart
+## Quick start
 
-Kanonische Umgebung ist WSL2 / Ubuntu. Benötigt werden nur `gcc`, `make` und
-`node` — alles Weitere installiert `scripts/setup-wsl.sh` bei Bedarf.
+The canonical environment is WSL2 / Ubuntu. All you need is `gcc`, `make` and
+`node` — `scripts/setup-wsl.sh` installs the rest on demand.
 
-C-Referenz bauen und laufen lassen:
+Build and run the C reference:
 
 ```bash
 make -C impl/c CC=gcc PROFILE=o2 headless && ./impl/c/build/gcc-o2/slimebench-headless --preset small --ticks 600
 ```
 
-Dasselbe in TypeScript, mit identischem Ergebnis:
+The same thing in TypeScript, with an identical result:
 
 ```bash
 node --experimental-strip-types impl/ts/src/main-node.ts --preset small --ticks 600
 ```
 
-Prüfen, dass alle Implementierungen übereinstimmen:
+Check that every implementation agrees:
 
 ```bash
 python3 bench/run.py conformance
 ```
 
-Weitere Toolchains nachinstallieren (phasenweise: `base`, `render`, `rust`, `haskell`, `scripting`, `gpu`):
+CI runs the same gate on every push, over the subset a GitHub runner can host
+without installing a toolchain — C, C++, Rust, Go, TypeScript, Python and Perl,
+under both gcc and clang. It also re-runs the three code generators and fails
+if their output differs from what is committed. It deliberately measures no
+performance: a shared runner varies by more than most of the effects in
+[docs/RESULTS.md](docs/RESULTS.md), and a benchmark you cannot trust is worse
+than no benchmark.
+
+Install further toolchains (in phases: `base`, `render`, `rust`, `haskell`, `scripting`, `gpu`):
 
 ```bash
 scripts/setup-wsl.sh all
 ```
 
-Benchmarken (vom Linux-Dateisystem aus, sonst misst du die 9p-Brücke):
+Benchmark (from the Linux filesystem, or you are measuring the 9p bridge):
 
 ```bash
 scripts/stage-wsl.sh bench --preset medium --reps 3
 ```
 
-Parallel (Klasse P, nur `deferred`) — `binned` ist bit-identisch zum seriellen Lauf:
+Parallel (class P, `deferred` only) — `binned` is bit-identical to the serial run:
 
 ```bash
 ./impl/c/build/gcc-o3-native/slimebench-headless --preset medium --ticks 100 --update deferred --threads 16 --deposit-reduce binned
 ```
 
-Interaktiv im Browser, mit Reglern für alle Parameter:
+Interactive in the browser, with sliders for every parameter:
 
 ```bash
 cd impl/ts && npm install && npm run build:web && python3 -m http.server 8765 --directory ../web
 ```
 
-Grafisches C-Frontend (SDL2, läuft unter WSLg):
+Graphical C frontend (SDL2, runs under WSLg):
 
 ```bash
 make -C impl/c CC=gcc PROFILE=o3-native sdl2 && ./impl/c/build/gcc-o3-native/slimebench-sdl2 --preset browser --render
 ```
 
-Im Fenster liegt ein Overlay mit Tickzähler, Zeiten und allen Parametern.
-`h` zeigt die Tastenbelegung, `Tab` blendet das Overlay aus, `Leertaste`
-pausiert, `n` geht einen Tick weiter, `r` startet neu, `c` schreibt die
-Prüfsummen nach stderr. Die Parameter hängen an Ziffernpaaren statt an
-Buchstabe-plus-Shift, weil SDL2, raylib, GLFW und der Browser den
-Shift-Zustand unterschiedlich melden — `1`/`2` Deposit, `3`/`4` Decay,
-`5`/`6` Sensordistanz, `7`/`8` Schrittweite, `9`/`0` Rotationsschritte.
+The window carries an overlay with a tick counter, timings and every
+parameter. `h` shows the key map, `Tab` hides the overlay, `space` pauses, `n`
+advances one tick, `r` restarts, `c` writes the checksums to stderr.
+Parameters sit on digit pairs rather than letter-plus-shift, because SDL2,
+raylib, GLFW and the browser each report shift state differently — `1`/`2`
+deposit, `3`/`4` decay, `5`/`6` sensor distance, `7`/`8` step length, `9`/`0`
+rotation steps.
 
-Sobald ein Parameter verstellt wird, markiert das HUD den Lauf als `EDITED`:
-er verlässt damit die SPEC-1-Konfiguration und seine Prüfsummen reproduzieren
-nichts mehr. Unter `--json` ist das Overlay aus, und seine Zeichenzeit wird
-ohnehin aus der Klasse-R-Messung herausgerechnet.
+The moment a parameter is changed, the HUD marks the run `EDITED`: it has left
+the SPEC-1 configuration and its checksums no longer reproduce anything. Under
+`--json` the overlay is off, and its drawing time is subtracted from the
+class R measurement in any case.
 
-Handgeschriebenen AVX-512-Diffusionskern statt der Intrinsics (Klasse V):
+Hand-written AVX-512 diffusion kernel instead of the intrinsics (class V):
 
 ```bash
 make -C impl/c CC=clang PROFILE=o3-native ASM=1 headless && ./impl/c/build/clang-o3-native-asm/slimebench-headless --preset medium --ticks 100 --update deferred --asm
 ```
 
-CPython ohne GIL gegen CPython mit GIL, gleicher Worker, gleiche Phasen:
+CPython without the GIL against CPython with it, same worker, same phases:
 
 ```bash
 bench/gil-matrix.sh results/P-gil-matrix.jsonl small 100
 ```
 
-## Die interessanten Details
+## The interesting details
 
-- **Warum es überhaupt bit-exakt sein kann.** `sin`/`cos` sind zwischen glibc,
-  V8 und GPU-Treibern nicht bit-identisch, und Physarum ist chaotisch genug,
-  dass 1 ULP nach 200 Ticks sichtbar wird. Deshalb sind Agentenrichtungen
-  ganzzahlig quantisiert und die Trig-Tabelle wird als u32-Bitmuster in jede
-  Sprache generiert. Details: [SPEC §4](spec/SPEC.md).
-- **Warum JavaScript trotzdem Stufe A schafft.** `Math.fround(f64_op(a,b))` ist
-  für `+ − × ÷` beweisbar identisch mit der f32-Operation, weil `53 ≥ 2·24+2`.
-- **Warum es zwei Update-Modi gibt.** Der Referenzmodus `serial` lässt Agenten
-  die Deposits ihrer Vorgänger im selben Tick sehen — schön, aber prinzipiell
-  nicht deterministisch parallelisierbar. `deferred` löst das und ist die
-  Grundlage aller Parallel-, SIMD- und GPU-Varianten.
-- **Warum numpy nur `deferred` kann.** `serial` hat eine sequenzielle
-  Abhängigkeit durch das Grid, die sich nicht vektorisieren lässt. Die
-  Implementierung lehnt den Modus mit klarer Meldung ab, statt still etwas
-  anderes zu rechnen — siehe Docstring in
+- **Why bit-exactness is possible at all.** `sin`/`cos` are not bit-identical
+  between glibc, V8 and GPU drivers, and Physarum is chaotic enough that 1 ULP
+  shows up within 200 ticks. So agent headings are quantised to integers and
+  the trig table is generated into every language as u32 bit patterns.
+  Details: [SPEC §4](spec/SPEC.md).
+- **Why JavaScript still reaches tier A.** `Math.fround(f64_op(a,b))` is
+  provably identical to the f32 operation for `+ − × ÷`, because `53 ≥ 2·24+2`.
+- **Why there are two update modes.** The reference mode `serial` lets an agent
+  see the deposits of its predecessors within the same tick — faithful, but not
+  deterministically parallelisable even in principle. `deferred` resolves that
+  and is the basis of every parallel, SIMD and GPU variant.
+- **Why numpy can only do `deferred`.** `serial` has a sequential dependency
+  through the grid that cannot be vectorised. The implementation refuses the
+  mode with a clear message rather than quietly computing something else — see
+  the docstring in
   [slimebench_numpy.py](impl/python/slimebench_numpy.py).
-- **Was Bounds-Checking in Rust kostet.** Im Diffusionspass ein Drittel, im
-  Agenten-Pass nichts. Siehe
-  [docs/RESULTS.md §3](docs/RESULTS.md#3-compiler).
-- **Warum SIMD und GPU hier nicht Stufe C sind.** Der vektorisierte Stencil hat
-  keine Cross-Lane-Reduktion, und CUDA zählt Deposits ganzzahlig statt sie in
-  f32 zu addieren. Beides ist bit-exakt gegen die C-Referenz — die Spec hatte
-  ursprünglich das Gegenteil angenommen.
-- **Warum es zwei Reduktionsstrategien für Threads gibt.** Thread-lokale
-  Deposit-Puffer sind nur *je Thread-Zahl* reproduzierbar, nicht bit-identisch
-  zum seriellen Lauf. Die räumlich gebündelte Variante ist es — und ab acht
-  Threads zusätzlich schneller. Siehe [SPEC §5.6](spec/SPEC.md).
-- **Warum `-O2` bei gcc reicht und clang `-march=native` braucht.** Bei `-O2`
-  ist gcc 20 % schneller, mit `-march=native` ist clang 13 % schneller. Wer nur
-  eine Zeile der Matrix ansieht, bekommt die falsche Antwort. Siehe
-  [docs/RESULTS.md §3](docs/RESULTS.md#3-compiler).
-- **Warum `-Ofast` bei clang die Hälfte kostet** und bei gcc nur ein paar
-  Prozent — dasselbe Flag, dieselbe Schleife, gegenläufige Wirkung.
-- **Was Handassembler noch bringt, wenn die Intrinsics schon da sind.** 12 %,
-  und nicht durch bessere Befehle, sondern durch weniger Ladeoperationen: der
-  Intrinsics-Kern liest jede Zeile dreimal pro Ausgabevektor, der
-  handgeschriebene einmal und erzeugt die verschobenen Sichten mit `VALIGND`.
-  Nebeneffekt: der Torus-Umlauf wird gratis, weil er zu einem `AND` wird.
-  [impl/asm/sb_diffuse_avx512.S](impl/asm/sb_diffuse_avx512.S).
-- **Was der GIL kostet.** Bei gleichem Worker und gleichen Phasen skaliert
-  CPython 3.12 mit Threads nicht bloß nicht — es wird bei 16 Threads
-  *achtmal langsamer* als mit einem. Ohne GIL sind es 3.6×, und Threads
-  schlagen dort Prozesse überall dort, wo die Reduktion viele Phasen hat.
-  [bench/gil-matrix.sh](bench/gil-matrix.sh).
-- **Was alles nicht funktioniert hat.** PGO, die parallele Präfixsumme, der
-  Lastausgleich, die reine Spin-Barriere — vier plausible Optimierungen, ein
-  brauchbares Ergebnis. Mit Begründung in
-  [docs/RESULTS.md §9](docs/RESULTS.md#10-was-nicht-funktioniert-hat).
+- **What bounds checking costs in Rust.** A third in the diffusion pass,
+  nothing measurable in the agent pass. See
+  [docs/RESULTS.md §3](docs/RESULTS.md#3-compilers).
+- **Why SIMD and GPU are not tier C here.** The vectorised stencil does no
+  cross-lane reduction, and CUDA counts deposits as integers instead of adding
+  them in f32. Both are bit-exact against the C reference — the spec originally
+  assumed the opposite.
+- **Why there are two reduction strategies for threads.** Thread-local deposit
+  buffers are reproducible only *per thread count*, not bit-identical to the
+  serial run. The spatially binned variant is — and from eight threads onward
+  it is also faster. See [SPEC §5.6](spec/SPEC.md).
+- **Why gcc wins at `-O2` and clang needs `-march=native`.** At `-O2` gcc is
+  11 % faster; with `-march=native` clang is 15 % faster. Read one row of the
+  matrix and you get the wrong answer. See
+  [docs/RESULTS.md §3](docs/RESULTS.md#3-compilers).
+- **Why `-Ofast` costs clang half its speed** while on gcc the effect is small
+  enough to change sign between runs — the same flag, the same loop, and only
+  one of the two compilers is actually affected.
+- **What hand-written assembly still buys once the intrinsics exist.** About
+  11 %, and not through better instructions but through fewer loads: the
+  intrinsics kernel reads each row three times per output vector, the
+  hand-written one reads it once and manufactures the shifted views with
+  `VALIGND`. Side effect: the torus wrap becomes free, because it turns into a
+  single `AND`. [impl/asm/sb_diffuse_avx512.S](impl/asm/sb_diffuse_avx512.S).
+- **What the GIL costs.** With the same worker and the same phases, CPython
+  3.12 with threads does not merely fail to scale — at 16 threads it is
+  **7.3× slower** than with one. Without the GIL the same configuration is
+  2.7× *faster*, and threads then beat processes wherever the reduction has
+  many phases. [bench/gil-matrix.sh](bench/gil-matrix.sh).
+- **Everything that did not work.** PGO, the parallel prefix sum, the load
+  balancer, the pure spin barrier — four plausible optimisations, one usable
+  result. With reasoning in
+  [docs/RESULTS.md §11](docs/RESULTS.md#11-what-did-not-work).
 
-## Herkunft
+## Provenance
 
-Modell nach Jeff Jones (2010), *Characteristics of pattern formation and
-evolution in approximations of Physarum transport networks*. Ausgangspunkt für
-Parameter und Aufbau war
+Model after Jeff Jones (2010), *Characteristics of pattern formation and
+evolution in approximations of Physarum transport networks*. The starting
+point for the parameters and the setup was
 [programmingchaos.dev](https://www.programmingchaos.dev/physarum-simulations-programming-slime-molds/).

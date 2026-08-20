@@ -1,99 +1,102 @@
 # slimebench — Normative Simulation Spec
 
 **Version:** `SPEC-1`
-**Status:** normativ. Jede Implementierung in `impl/` MUSS diesem Dokument entsprechen.
+**Status:** normative. Every implementation in `impl/` MUST conform to this document.
 
-Dieses Dokument definiert das Physarum-Modell so präzise, dass **unabhängige
-Implementierungen in verschiedenen Sprachen bit-identische Ergebnisse liefern**.
-Wo eine Formulierung mehrdeutig wäre, ist die Mehrdeutigkeit hier bewusst aufgelöst
-— auch dort, wo eine andere Auflösung "natürlicher" gewesen wäre.
+This document defines the Physarum model precisely enough that **independent
+implementations in different languages produce bit-identical results**. Where a
+formulation would be ambiguous, the ambiguity is resolved here deliberately —
+including in places where a different resolution would have been "more
+natural".
 
-Schlüsselwörter MUSS / SOLLTE / DARF nach RFC 2119.
-
----
-
-## 0. Warum so pedantisch?
-
-Physarum ist ein **chaotisches** System: Agenten folgen Gradienten, die sie selbst
-erzeugen. Eine Abweichung von 1 ULP in der Sensorauswertung eines einzigen Agenten
-in Tick 3 führt dazu, dass dieser Agent irgendwann anders abbiegt, dadurch woanders
-deponiert, dadurch Nachbaragenten beeinflusst — nach ~50–200 Ticks sind zwei Läufe
-makroskopisch verschieden.
-
-Konsequenz: **"Sieht ähnlich aus" ist kein Korrektheitskriterium.** Ohne bit-exakte
-Verifikation kannst du bei acht Ports nicht unterscheiden zwischen
-"andere Sprache, gleiche Simulation" und "andere Sprache, subtil kaputter Port" —
-und dann misst dein Benchmark Äpfel gegen Birnen.
-
-Deshalb: exakt spezifizierte Operationsreihenfolge, exakt spezifizierter PRNG,
-und Trigonometrie aus einer Tabelle statt aus `libm` (siehe §4).
+The keywords MUST / SHOULD / MAY are used per RFC 2119.
 
 ---
 
-## 1. Numerisches Modell
+## 0. Why so pedantic?
 
-### 1.1 Datentyp
+Physarum is a **chaotic** system: agents follow gradients they create
+themselves. A 1 ULP deviation in a single agent's sensor evaluation at tick 3
+causes that agent to eventually turn differently, therefore deposit somewhere
+else, therefore influence neighbouring agents — after ~50–200 ticks two runs are
+macroscopically different.
 
-Das Pheromon-Grid und alle Agenten-Koordinaten sind **IEEE-754 binary32 (`f32`)**.
+The consequence: **"looks similar" is not a correctness criterion.** Without
+bit-exact verification you cannot, across nine ports, distinguish "different
+language, same simulation" from "different language, subtly broken port" — and
+then your benchmark is comparing apples to oranges.
 
-**Begründung** (die Alternative `f64` wurde verworfen):
+Hence: an exactly specified operation order, an exactly specified PRNG, and
+trigonometry from a table instead of from `libm` (see §4).
 
-| Kriterium | f32 | f64 |
+---
+
+## 1. Numeric model
+
+### 1.1 Data type
+
+The pheromone grid and all agent coordinates are **IEEE-754 binary32 (`f32`)**.
+
+**Rationale** (the alternative, `f64`, was rejected):
+
+| Criterion | f32 | f64 |
 |---|---|---|
-| Speicherbandbreite Grid | 1× | 2× — und der Diffusionspass ist bandbreitenlimitiert |
-| GPU (Consumer-NVIDIA) | volle Rate | 1/32 Rate → GPU-Tier wäre sinnlos |
-| SIMD-Lanes pro Register | 8 (AVX2) / 16 (AVX-512) | 4 / 8 — halbe Vektorbreite |
-| Browser | `Float32Array` nativ | `Float64Array`, aber Canvas will eh f32-Präzision |
+| Grid memory bandwidth | 1× | 2× — and the diffusion pass is bandwidth-limited |
+| GPU (consumer NVIDIA) | full rate | 1/32 rate → the GPU tier would be pointless |
+| SIMD lanes per register | 8 (AVX2) / 16 (AVX-512) | 4 / 8 — half the vector width |
+| Browser | `Float32Array` native | `Float64Array`, but canvas wants f32 precision anyway |
 
-Da GPU-Compute und SIMD explizit im Projektumfang sind, ist f32 die einzige
-konsistente Wahl. Der Preis: Perl und reines Python können f32-Arithmetik nicht
-nativ ausdrücken (beide rechnen intern in Doubles) und fallen deshalb in
-Konformitätsstufe B (§7).
+Since GPU compute and SIMD are explicitly in scope, f32 is the only consistent
+choice. The price: Perl and pure Python cannot express f32 arithmetic natively
+(both compute internally in doubles) and therefore fall into conformance tier B
+(§7).
 
-### 1.2 Arithmetik-Regeln
+### 1.2 Arithmetic rules
 
-1. Jede Einzeloperation MUSS in `f32` ausgeführt und das Ergebnis nach `f32`
-   gerundet werden (Rundungsmodus: round-to-nearest-even).
-2. **Keine FMA-Kontraktion.** `a*b + c` MUSS als zwei gerundete Operationen
-   ausgeführt werden. In C/C++: `#pragma STDC FP_CONTRACT OFF` bzw. `-ffp-contract=off`.
-3. **Keine Reassoziation.** Die in §5 angegebene Klammerung ist verbindlich.
-4. **Keine Reziprok-Substitution.** `x / 12.0f` MUSS eine Division sein, nicht
-   `x * (1.0f/12.0f)` — die beiden Ergebnisse unterscheiden sich.
-5. Keine erweiterte Zwischenpräzision. In C MUSS `FLT_EVAL_METHOD == 0` gelten
-   (auf x86-64 mit SSE der Fall; x87 ist ausgeschlossen).
+1. Every individual operation MUST be carried out in `f32` and its result
+   rounded to `f32` (rounding mode: round-to-nearest-even).
+2. **No FMA contraction.** `a*b + c` MUST be executed as two rounded
+   operations. In C/C++: `#pragma STDC FP_CONTRACT OFF` or
+   `-ffp-contract=off`.
+3. **No reassociation.** The parenthesisation given in §5 is binding.
+4. **No reciprocal substitution.** `x / 12.0f` MUST be a division, not
+   `x * (1.0f/12.0f)` — the two results differ.
+5. No extended intermediate precision. In C, `FLT_EVAL_METHOD == 0` MUST hold
+   (true on x86-64 with SSE; x87 is excluded).
 
-> **Hinweis zu `-ffast-math` / `-Ofast`:** Diese Flags verletzen Regel 2–4
-> absichtlich. Builds damit sind **nicht** Stufe-A-konform und werden vom Harness
-> in eine eigene Klasse einsortiert (§7.3). Das ist kein Fehler, sondern genau
-> einer der Messwerte, um die es geht: *Was kostet Determinismus?*
+> **A note on `-ffast-math` / `-Ofast`:** these flags violate rules 2–4
+> deliberately. Builds using them are **not** tier A conformant and are sorted
+> into a class of their own by the harness (§7.3). That is not a defect but
+> precisely one of the measurements this project is about: *what does
+> determinism cost?*
 
-### 1.3 Was NICHT gilt
+### 1.3 What does NOT apply
 
-- Kein Clamping, keine Sättigung. Pheromonwerte dürfen frei wachsen.
-  (Der Steady-State liegt bei `deposit / (1 - decay)` ≈ 167 pro dauerhaft
-  besuchter Zelle; Überlauf nach `inf` ist bei f32 praktisch ausgeschlossen.)
-- Keine `NaN`-Behandlung. Bei korrekter Implementierung entstehen keine.
+- No clamping, no saturation. Pheromone values may grow freely.
+  (The steady state is `deposit / (1 - decay)` ≈ 167 per permanently visited
+  cell; overflow to `inf` is practically impossible in f32.)
+- No `NaN` handling. A correct implementation produces none.
 
 ---
 
 ## 2. Grid
 
-- Breite `W` und Höhe `H` MÜSSEN Zweierpotenzen sein.
-  Das macht jedes Wrapping zu einer Bitmaske und ist Voraussetzung für die
-  SIMD- und GPU-Varianten.
-- Speicherlayout: **row-major**, dicht, Index `idx = (y << log2(W)) | x`.
-- Randbehandlung: **toroidal** (Wrap in beide Achsen).
+- Width `W` and height `H` MUST be powers of two.
+  That turns every wrap into a bit mask and is a prerequisite for the SIMD and
+  GPU variants.
+- Memory layout: **row-major**, dense, index `idx = (y << log2(W)) | x`.
+- Boundary handling: **toroidal** (wrap on both axes).
 
-### 2.1 Index-Wrapping (ganzzahlig)
+### 2.1 Index wrapping (integer)
 
 ```
 wrap_x(i) = i & (W - 1)
 wrap_y(j) = j & (H - 1)
 ```
 
-### 2.2 Koordinaten-Wrapping (Gleitkomma)
+### 2.2 Coordinate wrapping (floating point)
 
-Positionen werden in `[0, W)` bzw. `[0, H)` gehalten:
+Positions are kept in `[0, W)` and `[0, H)` respectively:
 
 ```
 wrapf(v, m):
@@ -102,20 +105,20 @@ wrapf(v, m):
     return v
 ```
 
-Ein einzelner Korrekturschritt genügt, weil kein Offset pro Tick betragsmäßig
-größer als `sensor_distance` (9.0) ist und `m >= 512`.
+A single correction step is enough, because no per-tick offset exceeds
+`sensor_distance` (9.0) in magnitude and `m >= 512`.
 
-> **Fallstrick:** `wrapf` kann durch Rundung exakt `m` zurückgeben (z.B.
-> `-1e-7 + 1024.0f == 1024.0f`). Der Cast nach Integer MUSS daher **immer**
-> zusätzlich maskiert werden (§2.1). Verlass dich nie allein auf `wrapf`.
+> **Pitfall:** `wrapf` can return exactly `m` through rounding (for example
+> `-1e-7 + 1024.0f == 1024.0f`). The cast to integer MUST therefore **always**
+> be masked as well (§2.1). Never rely on `wrapf` alone.
 
 ---
 
-## 3. Pseudo-Zufallszahlen
+## 3. Pseudo-random numbers
 
-### 3.1 Generatoren
+### 3.1 Generators
 
-**SplitMix32** — nur für Seeding und Grid-Initialisierung:
+**SplitMix32** — for seeding and grid initialisation only:
 
 ```
 splitmix32(state):            # state: u32, by reference
@@ -126,7 +129,7 @@ splitmix32(state):            # state: u32, by reference
     return z XOR (z >> 15)
 ```
 
-**xoshiro128++** — pro Agent, für Entscheidungen im Hot Loop:
+**xoshiro128++** — per agent, for decisions in the hot loop:
 
 ```
 rotl(x, k) = (x << k) | (x >> (32 - k))
@@ -143,12 +146,12 @@ xoshiro128pp(s):              # s: u32[4], by reference
     return result
 ```
 
-Alle Operationen sind **vorzeichenlose 32-Bit-Arithmetik mit Wraparound**.
+All operations are **unsigned 32-bit arithmetic with wraparound**.
 
-> **Warum 32 Bit und nicht PCG64?** Ein 64-Bit-PRNG bräuchte in JavaScript
-> `BigInt` (um Größenordnungen langsamer) und in WGSL/GLSL eine
-> Emulation über zwei 32-Bit-Wörter. xoshiro128++ ist in *jeder* Zielsprache
-> ein direkter Einzeiler und in Qualität mehr als ausreichend.
+> **Why 32-bit and not PCG64?** A 64-bit PRNG would need `BigInt` in JavaScript
+> (orders of magnitude slower) and emulation over two 32-bit words in
+> WGSL/GLSL. xoshiro128++ is a direct one-liner in *every* target language and
+> more than good enough in quality.
 
 ### 3.2 Uniform in [0, 1)
 
@@ -157,12 +160,12 @@ rnd01(u):    # u: u32
     return f32(u >> 8) / 16777216.0f
 ```
 
-`u >> 8 < 2^24` ist in `f32` exakt darstellbar, und die Division durch `2^24`
-ist exakt. Das Ergebnis ist damit in allen Sprachen bitgleich.
+`u >> 8 < 2^24` is exactly representable in `f32`, and the division by `2^24` is
+exact. The result is therefore bit-identical in every language.
 
-### 3.3 Initialisierung
+### 3.3 Initialisation
 
-**Grid** (ein eigener Strom, unabhängig von der Agentenzahl):
+**Grid** (its own stream, independent of the agent count):
 
 ```
 sm = seed XOR 0x5BF03635
@@ -170,8 +173,8 @@ for i in 0 .. W*H-1:
     grid[i] = rnd01(splitmix32(sm)) * 100.0f
 ```
 
-**Agenten** (pro Agent ein unabhängiger Strom — dadurch ist die Initialisierung
-parallelisierbar und unabhängig von der Reihenfolge):
+**Agents** (one independent stream per agent — which makes initialisation
+parallelisable and order-independent):
 
 ```
 for i in 0 .. N-1:
@@ -180,97 +183,96 @@ for i in 0 .. N-1:
     s[1] = splitmix32(sm)
     s[2] = splitmix32(sm)
     s[3] = splitmix32(sm)
-    if s[0]|s[1]|s[2]|s[3] == 0: s[0] = 1     # xoshiro darf nicht Null sein
+    if s[0]|s[1]|s[2]|s[3] == 0: s[0] = 1     # xoshiro must not be all zero
 
     ax[i]  = rnd01(xoshiro128pp(s)) * f32(W)
     ay[i]  = rnd01(xoshiro128pp(s)) * f32(H)
     adir[i] = xoshiro128pp(s) % NDIR
 ```
 
-Die Modulo-Verzerrung bei `% NDIR` ist bekannt und akzeptiert — sie ist
-deterministisch und damit für die Vergleichbarkeit irrelevant.
+The modulo bias in `% NDIR` is known and accepted — it is deterministic and
+therefore irrelevant to comparability.
 
 ---
 
-## 4. Richtungen und Trigonometrie
+## 4. Directions and trigonometry
 
-### 4.1 Das Problem
+### 4.1 The problem
 
-`sin()` und `cos()` sind **nicht** bit-identisch zwischen Implementierungen.
-glibc, musl, Apples libm, V8s fdlibm-Port, Rusts `f64::sin` und die GPU-Intrinsics
-liefern für dasselbe Argument teils unterschiedliche letzte Bits. In einem
-chaotischen System reicht das, um jede Cross-Language-Verifikation unmöglich zu
-machen.
+`sin()` and `cos()` are **not** bit-identical between implementations. glibc,
+musl, Apple's libm, V8's fdlibm port, Rust's `f64::sin` and the GPU intrinsics
+partly return different final bits for the same argument. In a chaotic system
+that is enough to make any cross-language verification impossible.
 
-### 4.2 Die Lösung: quantisierte Richtungen
+### 4.2 The solution: quantised directions
 
-Die Agentenrichtung ist **kein `f32`-Winkel, sondern ein ganzzahliger Index**:
+An agent's heading is **not an `f32` angle but an integer index**:
 
 ```
-NDIR = 1440            # Auflösung: 0.25° pro Schritt
+NDIR = 1440            # resolution: 0.25° per step
 adir ∈ [0, NDIR)
 ```
 
-`sin`/`cos` kommen aus einer generierten Tabelle mit `NDIR` Einträgen:
+`sin`/`cos` come from a generated table with `NDIR` entries:
 
 ```
 COS[d] = f32(cos(2*PI * d / NDIR))
 SIN[d] = f32(sin(2*PI * d / NDIR))
 ```
 
-Die Tabelle wird **einmalig** von `spec/tools/gen_dirtable.py` erzeugt und als
-**u32-Bitmuster** in Quelltext für jede Sprache emittiert (`spec/data/` und
-`impl/*/dirtable.*`). Damit ist sie per Konstruktion in allen Sprachen
-byteidentisch — kein Laufzeit-`sin()` beteiligt.
+The table is generated **once** by `spec/tools/gen_dirtable.py` and emitted as
+**u32 bit patterns** into source for every language (`spec/data/` and
+`impl/*/dirtable.*`). By construction it is therefore byte-identical across all
+languages — no runtime `sin()` involved.
 
-Der Generator ist Teil des Repos und reproduzierbar; das Harness prüft die
-Tabellen-Prüfsumme beim Start jeder Implementierung.
+The generator is part of the repo and reproducible; the harness checks the
+table checksum at the start of every implementation.
 
-### 4.3 Abgeleitete Konstanten
+### 4.3 Derived constants
 
-| Größe | Bogenmaß | NDIR-Schritte |
+| Quantity | Radians | NDIR steps |
 |---|---|---|
-| Sensorwinkel | 0.2·π = 36° | **144** |
-| Rotationswinkel | 0.2·π = 36° | **144** |
+| Sensor angle | 0.2·π = 36° | **144** |
+| Rotation angle | 0.2·π = 36° | **144** |
 
-`NDIR = 1440` ist so gewählt, dass 36° exakt 144 Schritten entspricht — keine
-Rundung in der Parametrisierung.
+`NDIR = 1440` is chosen so that 36° corresponds to exactly 144 steps — no
+rounding in the parameterisation.
 
-**Nebeneffekt:** Der Tabellen-Lookup ist auch schneller als `sinf`/`cosf`
-(11.5 KB Tabelle, passt in L1d). Die Quantisierung ist also kein reiner Preis.
+**Side effect:** the table lookup is also faster than `sinf`/`cosf` (an 11.5 KB
+table, fits in L1d). The quantisation is therefore not a pure cost.
 
-Wer kontinuierliche Winkel will, kann `--trig=libm` setzen — das ist
-ausdrücklich **Stufe B** und nicht cross-language verifizierbar.
+If you want continuous angles, `--trig=libm` is available — that is explicitly
+**tier B** and not cross-language verifiable.
 
 ---
 
-## 5. Simulationsschritt
+## 5. Simulation step
 
-### 5.1 Parameter (Defaults)
+### 5.1 Parameters (defaults)
 
-| Name | CLI | Default | Typ |
+| Name | CLI | Default | Type |
 |---|---|---|---|
-| Sensordistanz | `--sensor-dist` | `9.0` | f32 |
-| Sensorwinkel | `--sensor-steps` | `144` | int (NDIR-Schritte) |
-| Rotationswinkel | `--rot-steps` | `144` | int (NDIR-Schritte) |
-| Schrittweite | `--step` | `1.0` | f32 |
+| Sensor distance | `--sensor-dist` | `9.0` | f32 |
+| Sensor angle | `--sensor-steps` | `144` | int (NDIR steps) |
+| Rotation angle | `--rot-steps` | `144` | int (NDIR steps) |
+| Step length | `--step` | `1.0` | f32 |
 | Deposit | `--deposit` | `10.0` | f32 |
 | Decay | `--decay` | `0.94` | f32 |
-| Diffusionskernel | fix | `[[1,1,1],[1,4,1],[1,1,1]] / 12` | — |
+| Diffusion kernel | fixed | `[[1,1,1],[1,4,1],[1,1,1]] / 12` | — |
 
-### 5.2 Reihenfolge pro Tick
+### 5.2 Order within a tick
 
 ```
-1. Agenten-Pass  (§5.3)
-2. Diffusions-/Decay-Pass  (§5.4)
+1. agent pass          (§5.3)
+2. diffusion/decay pass (§5.4)
 ```
 
-Diese Reihenfolge folgt der Referenz (programmingchaos): Deposits eines Ticks
-werden **im selben Tick** diffundiert und gedämpft.
+This order follows the reference (programmingchaos): a tick's deposits are
+diffused and damped **within the same tick**.
 
-### 5.3 Agenten-Pass
+### 5.3 Agent pass
 
-Agenten werden in **Indexreihenfolge 0 → N−1** verarbeitet.
+Agents are processed in **index order 0 → N−1**.
 
 ```
 sense(x, y, d):
@@ -288,8 +290,8 @@ for i in 0 .. N-1:
     FC = sense(x, y, d)
     FR = sense(x, y, dr)
 
-    if   FC >= FL and FC >= FR:  pass                       # geradeaus
-    elif FC <  FL and FC <  FR:                             # Sackgasse: Zufall
+    if   FC >= FL and FC >= FR:  pass                       # straight on
+    elif FC <  FL and FC <  FR:                             # dead end: random
         if xoshiro128pp(rng[i]) & 1: d = (d + rot_steps)        mod NDIR
         else:                        d = (d - rot_steps + NDIR) mod NDIR
     elif FL >  FR:               d = (d - rot_steps + NDIR) mod NDIR
@@ -299,20 +301,20 @@ for i in 0 .. N-1:
     y = wrapf(y + SIN[d] * step, H)
 
     idx = ((int(y) & (H-1)) << log2W) | (int(x) & (W-1))
-    DEPOSIT_TARGET[idx] = DEPOSIT_TARGET[idx] + deposit      # siehe §5.5
+    DEPOSIT_TARGET[idx] = DEPOSIT_TARGET[idx] + deposit      # see §5.5
 
     adir[i] = d;  ax[i] = x;  ay[i] = y
 ```
 
-Beachte: Die Reihenfolge ist **erst rotieren, dann in die neue Richtung
-bewegen**. Der PRNG wird **nur** im Sackgassen-Zweig konsumiert — dadurch hängt
-der Zustand jedes Agenten-PRNG vom Simulationsverlauf ab. Das ist beabsichtigt
-und Teil der Prüfsumme.
+Note: the order is **rotate first, then move in the new direction**. The PRNG is
+consumed **only** in the dead-end branch — which makes each agent's PRNG state
+depend on the course of the simulation. That is intentional and part of the
+checksum.
 
-### 5.4 Diffusions- und Decay-Pass
+### 5.4 Diffusion and decay pass
 
-Liest aus `src`, schreibt nach `dst` (getrennte Puffer, danach Tausch).
-Die Summationsreihenfolge ist **verbindlich**:
+Reads from `src`, writes to `dst` (separate buffers, swapped afterwards). The
+summation order is **binding**:
 
 ```
 for y in 0 .. H-1:
@@ -333,93 +335,92 @@ for y in 0 .. H-1:
         dst[y][x] = (acc / 12.0f) * decay
 ```
 
-`4.0f * v` ist exakt (Zweierpotenz) und darf als `v + v + v + v` **nicht**
-ersetzt werden — das Ergebnis wäre zwar gleich, aber Regel §1.2.3 verbietet
-Umformungen grundsätzlich, damit Reviews mechanisch prüfbar bleiben.
+`4.0f * v` is exact (a power of two) and MUST **not** be replaced by
+`v + v + v + v` — the result would be identical, but rule §1.2.3 forbids
+rewrites on principle, so that reviews stay mechanically checkable.
 
-Die Division durch `12.0f` und die anschließende Multiplikation mit `decay`
-sind **zwei** gerundete Operationen in genau dieser Reihenfolge.
+The division by `12.0f` and the subsequent multiplication by `decay` are **two**
+rounded operations, in exactly that order.
 
-### 5.5 Update-Modi
+### 5.5 Update modes
 
-Es gibt zwei Modi, die **unterschiedliche Simulationen** sind und jeweils eigene
-Referenz-Prüfsummen haben. Jede Implementierung MUSS beide unterstützen.
+There are two modes. They are **different simulations** and each has its own
+reference checksums. Every implementation MUST support both.
 
-| Modus | `DEPOSIT_TARGET` | Eigenschaft |
+| Mode | `DEPOSIT_TARGET` | Property |
 |---|---|---|
-| `serial` (Default) | `grid` selbst, in-place | Spätere Agenten sehen frühere Deposits desselben Ticks. Entspricht der Referenz. **Inhärent sequenziell.** |
-| `deferred` | separater, pro Tick genullter Puffer `dep` | Alle Agenten sehen denselben Grid-Snapshot. Vor dem Diffusionspass gilt `grid[i] = grid[i] + dep[i]`. **Reihenfolgeunabhängig → parallelisierbar.** |
+| `serial` (default) | `grid` itself, in place | Later agents see earlier deposits from the same tick. Matches the reference. **Inherently sequential.** |
+| `deferred` | a separate buffer `dep`, zeroed each tick | All agents see the same grid snapshot. Before the diffusion pass, `grid[i] = grid[i] + dep[i]`. **Order-independent → parallelisable.** |
 
-> **Das ist der wichtigste Design-Entscheid des Projekts.** Der `serial`-Modus
-> ist die getreue Umsetzung der Vorlage, lässt sich aber prinzipiell nicht
-> deterministisch parallelisieren — der Deposit eines Agenten verändert, was der
-> nächste Agent misst. Wer die Agentenschleife über 32 Threads verteilt, bekommt
-> bei jedem Lauf ein anderes Ergebnis.
+> **This is the most important design decision in the project.** The `serial`
+> mode is the faithful implementation of the source material, but it cannot be
+> deterministically parallelised even in principle — one agent's deposit
+> changes what the next agent measures. Spread the agent loop over 32 threads
+> and you get a different result every run.
 >
-> `deferred` löst das (und ist physikalisch sogar plausibler: gleichzeitige
-> statt sequenzieller Aktualisierung), kostet aber einen zusätzlichen
-> Grid-Durchlauf.
+> `deferred` resolves that (and is arguably more physically plausible:
+> simultaneous rather than sequential update), at the cost of one extra pass
+> over the grid.
 >
-> **Vergleichsregel: `serial` nur gegen `serial`, `deferred` nur gegen
-> `deferred`.** Die Benchmark-Klassen P/V/G (§8) nutzen ausschließlich `deferred`.
+> **Comparison rule: `serial` only against `serial`, `deferred` only against
+> `deferred`.** Benchmark classes P/V/G (§8) use `deferred` exclusively.
 
-### 5.6 Determinismus bei Parallelisierung
+### 5.6 Determinism under parallelisation
 
-Atomare `f32`-Additionen sind **nicht** zulässig — ihr Ergebnis hängt von der
-Ausführungsreihenfolge ab. Darüber hinaus gilt pro Pass:
+Atomic `f32` additions are **not** permitted — their result depends on
+execution order. Beyond that, per pass:
 
-**Diffusionspass:** unbedingt reihenfolgeunabhängig. Jede Ausgabezelle wird
-allein aus `src` berechnet, es gibt keine Abhängigkeit zwischen Ausgabezellen.
-Eine Parallelisierung über Zeilen ist damit **garantiert bit-identisch** zum
-seriellen Lauf, für jede Thread-Zahl.
+**Diffusion pass:** unconditionally order-independent. Every output cell is
+computed from `src` alone, and there is no dependency between output cells.
+Parallelising over rows is therefore **guaranteed bit-identical** to the serial
+run, for any thread count.
 
-**Agenten-Pass:** Sensorik, Rotation und Bewegung sind pro Agent unabhängig
-(im `deferred`-Modus ist das Grid dabei read-only) und damit ebenfalls
-garantiert bit-identisch. Kritisch ist allein die **Akkumulation der Deposits**.
+**Agent pass:** sensing, rotation and movement are independent per agent (in
+`deferred` mode the grid is read-only while they happen) and are therefore
+likewise guaranteed bit-identical. The only critical part is the
+**accumulation of deposits**.
 
-Für eine Zelle, die von den Agenten `i₁ < i₂ < … < i_k` getroffen wird, schreibt
-§5.3 die Summe `((0 + d) + d) + …` in Indexreihenfolge vor. Gleitkommaaddition
-ist nicht assoziativ, also ist eine andere Gruppierung im Allgemeinen ein
-anderes Ergebnis.
+For a cell hit by agents `i₁ < i₂ < … < i_k`, §5.3 prescribes the sum
+`((0 + d) + d) + …` in index order. Floating-point addition is not associative,
+so a different grouping is in general a different result.
 
-> **Wichtige Einschränkung, die in einer früheren Fassung dieser Spec fehlte:**
-> Thread-lokale Deposit-Puffer mit anschließender Reduktion in fester
-> Thread-Reihenfolge sind **nicht automatisch** bit-identisch zum seriellen
-> Lauf. Sie ergeben `(d_Thread0) + (d_Thread1) + …`, also eine andere
-> Klammerung als die serielle Kette. Garantiert ist damit nur Determinismus
-> **für eine gegebene Thread-Zahl**, nicht Unabhängigkeit von ihr.
+> **An important limitation that an earlier version of this spec was missing:**
+> thread-local deposit buffers with a subsequent reduction in fixed thread
+> order are **not automatically** bit-identical to the serial run. They produce
+> `(d_thread0) + (d_thread1) + …`, a different parenthesisation from the serial
+> chain. What is guaranteed is only determinism **for a given thread count**,
+> not independence from it.
 
-Deshalb definiert die Spec zwei Reduktionsstrategien, die getrennt ausgewiesen
-werden:
+The spec therefore defines two reduction strategies, reported separately:
 
-| Strategie | `--deposit-reduce` | Garantie | Speicher |
+| Strategy | `--deposit-reduce` | Guarantee | Memory |
 |---|---|---|---|
-| Thread-lokale Puffer | `private` | reproduzierbar **je Thread-Zahl** | `T × W × H × 4 Byte` |
-| Räumliche Bündelung | `binned` | **bit-identisch zu T = 1**, für jede Thread-Zahl | `N × 4 Byte` |
+| Thread-local buffers | `private` | reproducible **per thread count** | `T × W × H × 4 bytes` |
+| Spatial binning | `binned` | **bit-identical to T = 1**, for any thread count | `N × 4 bytes` |
 
-`binned` erreicht die stärkere Garantie so: Der Agenten-Pass schreibt nur die
-Zielzelle pro Agent in ein Array. Anschließend werden die Agenten per
-**stabiler Counting-Sort** nach Zeilenblock gebündelt; jeder Thread besitzt
-einen Zeilenblock und trägt dessen Deposits in aufsteigender Agenten-Index-
-Reihenfolge ein. Pro Zelle entsteht damit exakt die serielle Kette.
+`binned` reaches the stronger guarantee like this: the agent pass writes only
+each agent's target cell into an array. The agents are then grouped by row
+block with a **stable counting sort**; each thread owns one row block and
+applies its deposits in ascending agent index order. Per cell that reproduces
+exactly the serial chain.
 
-Der Preis ist Lastungleichheit: Physarum-Agenten ballen sich per Konstruktion
-auf den Filamenten, die Zeilenblöcke sind also unterschiedlich stark belegt.
+The price is load imbalance: Physarum agents cluster on the filaments by
+construction, so the row blocks are unevenly occupied.
 
-> **Anmerkung zu den Default-Parametern.** Mit `deposit = 10.0` und realistischen
-> Trefferzahlen pro Zelle bleibt jede Teilsumme `k · 10` unter 2²⁴ und ist damit
-> in `f32` exakt darstellbar — die Addition ist dann *zufällig* auch bei
-> `private` reihenfolgeunabhängig. Darauf darf sich keine Implementierung
-> verlassen: mit `--deposit 0.1` gilt es nicht mehr. Das Harness prüft
-> Bit-Identität gegen `T = 1`, statt sie anzunehmen.
+> **A note on the default parameters.** With `deposit = 10.0` and realistic hit
+> counts per cell, every partial sum `k · 10` stays below 2²⁴ and is therefore
+> exactly representable in `f32` — the addition is then *accidentally*
+> order-independent under `private` too. No implementation may rely on that:
+> with `--deposit 0.1` it no longer holds. The harness checks bit-identity
+> against `T = 1` rather than assuming it.
 
 ---
 
-## 6. Prüfsummen
+## 6. Checksums
 
-### 6.1 SB-FNV32 (wortweise)
+### 6.1 SB-FNV32 (word-wise)
 
-Kein Standard-FNV — eine wortweise Variante, damit sie in jeder Sprache schnell ist:
+Not standard FNV — a word-wise variant, so that it is fast in every language:
 
 ```
 sbfnv32(words):
@@ -430,89 +431,88 @@ sbfnv32(words):
     return h
 ```
 
-### 6.2 Grid-Hash
+### 6.2 Grid hash
 
-Das Grid wird als Folge von `W*H` `u32`-Wörtern interpretiert (die
-Little-Endian-Bitmuster der `f32`-Werte, in Indexreihenfolge) und durch
-`sbfnv32` geschickt.
+The grid is interpreted as a sequence of `W*H` `u32` words (the little-endian
+bit patterns of the `f32` values, in index order) and passed through
+`sbfnv32`.
 
-### 6.3 Agenten-Hash
+### 6.3 Agent hash
 
-Über die Folge `[bits(ax[0]), bits(ay[0]), u32(adir[0]), bits(ax[1]), ...]`.
+Over the sequence `[bits(ax[0]), bits(ay[0]), u32(adir[0]), bits(ax[1]), ...]`.
 
-Zwei getrennte Hashes, weil sie unterschiedliche Fehler lokalisieren:
-Grid-Hash weicht ab, Agenten-Hash stimmt → Fehler im Diffusionspass.
-Beide weichen ab → Fehler im Agenten-Pass (oder eine frühere Ursache).
+Two separate hashes, because they localise different bugs: grid hash diverges,
+agent hash matches → bug in the diffusion pass. Both diverge → bug in the agent
+pass (or an earlier cause).
 
-### 6.4 Zwischenstände
+### 6.4 Intermediate states
 
-Mit `--hash-every N` MUSS eine Implementierung nach jedem N-ten Tick eine
-Hash-Zeile ausgeben. Damit lässt sich der **erste** divergierende Tick binär
-eingrenzen — das ist beim Portieren das mit Abstand nützlichste Werkzeug.
+With `--hash-every N` an implementation MUST print a hash line after every Nth
+tick. That allows the **first** diverging tick to be binary-searched — by far
+the most useful tool there is when porting.
 
 ---
 
-## 7. Konformitätsstufen
+## 7. Conformance tiers
 
-### 7.1 Stufe A — bit-exakt
+### 7.1 Tier A — bit-exact
 
-Grid- und Agenten-Hash stimmen **exakt** mit den Referenzvektoren
-(`spec/testvectors/`) überein.
+Grid and agent hash match the reference vectors (`spec/testvectors/`)
+**exactly**.
 
-Erwartet für: **C, C++, Rust, Haskell, TypeScript** (`Float32Array` +
-`Math.fround`), **Python mit NumPy** (`float32`).
+Expected for: **C, C++, Rust, Haskell, Go, Swift, TypeScript**
+(`Float32Array` + `Math.fround`) and **Python with NumPy** (`float32`).
 
-### 7.2 Stufe B — numerisch äquivalent
+### 7.2 Tier B — numerically equivalent
 
-Bit-Exaktheit ist erreichbar, aber unwirtschaftlich.
+Bit-exactness is achievable but uneconomic.
 
-Wichtig zum Verständnis: Doubles **können** f32-Arithmetik exakt nachbilden.
-Doppelrundung ist unschädlich, wenn das Zwischenformat mindestens `2p+2` Bits
-hat, und `53 ≥ 2·24+2`. `round_f32(f64_op(a,b))` ist daher für `+ − × ÷`
-identisch mit der f32-Operation. Genau darauf beruht die
-TypeScript-Implementierung mit ihrem `Math.fround` um jede Operation — und die
-ist nachweislich Stufe A.
+Worth understanding: doubles **can** reproduce f32 arithmetic exactly. Double
+rounding is harmless when the intermediate format has at least `2p+2` bits, and
+`53 ≥ 2·24+2`. `round_f32(f64_op(a,b))` is therefore identical to the f32
+operation for `+ − × ÷`. That is exactly what the TypeScript implementation
+relies on with its `Math.fround` around every operation — and that
+implementation is demonstrably tier A.
 
-Perl und reines Python haben nur kein billiges `fround`: die Rundung geht über
-`pack`/`unpack` bzw. `struct`, also einen Funktionsaufruf pro Operation — der
-Diffusionskernel allein braucht neun davon pro Zelle.
+Perl and pure Python simply have no cheap `fround`: rounding goes through
+`pack`/`unpack` or `struct`, so one function call per operation — and the
+diffusion kernel alone needs nine of them per cell.
 
-Deshalb: **Default ist Stufe B**, das Flag `--strict-f32` schaltet auf Stufe A.
-Beide Implementierungen sind mit `--strict-f32` nachweislich bit-identisch mit
-der C-Referenz.
+Hence: **the default is tier B**, and the flag `--strict-f32` switches to
+tier A. Both implementations are demonstrably bit-identical to the C reference
+with `--strict-f32`.
 
-Der Abstand zwischen beiden Läufen ist selbst ein Messergebnis — *was kostet
-Bit-Exaktheit in dieser Sprache?* Gemessen bei 128×128 / 4096 Agenten:
+The gap between the two runs is itself a measurement — *what does bit-exactness
+cost in this language?* Measured at 128×128 / 4096 agents:
 
-| Sprache | Stufe B | Stufe A (`--strict-f32`) | Aufschlag |
+| Language | tier B | tier A (`--strict-f32`) | surcharge |
 |---|---:|---:|---:|
-| Python (pur) | 9.44 ms/Tick | 21.88 ms/Tick | **2.3×** |
-| Perl | 9.40 ms/Tick | 31.15 ms/Tick | **3.3×** |
+| Python (pure) | 9.44 ms/tick | 21.88 ms/tick | **2.3×** |
+| Perl | 9.40 ms/tick | 31.15 ms/tick | **3.3×** |
 
-Das ist deutlich billiger als erwartet, und das ist selbst der interessante
-Befund: In einer Sprache, die pro Operation ohnehin einen Interpreter-Dispatch
-zahlt, verschwinden neun zusätzliche C-Level-Aufrufe pro Zelle weitgehend im
-schon vorhandenen Overhead. Die ursprüngliche Schätzung in dieser Spec lag bei
-zwei Größenordnungen — sie war schlicht falsch.
+That is considerably cheaper than expected, and that is itself the interesting
+finding: in a language that already pays an interpreter dispatch per operation,
+nine extra C-level calls per cell largely disappear into the overhead that was
+there already. The original estimate in this spec was two orders of magnitude —
+it was simply wrong.
 
-> **Unterschied zwischen den beiden Stufe-B-Implementierungen:** Python legt das
-> Grid in einem `array('f')` ab, rundet also bei *jedem Store* auf f32 und
-> weicht nur in den Zwischenergebnissen ab. Ein Perl-Array speichert volle NVs,
-> rundet also gar nicht. Perls Stufe B driftet deshalb stärker als Pythons.
+> **Difference between the two tier B implementations:** Python stores the grid
+> in an `array('f')`, so it rounds to f32 on *every store* and diverges only in
+> the intermediate results. A Perl array stores full NVs, so it does not round
+> at all. Perl's tier B therefore drifts more than Python's.
 
-Verifikation von Stufe B über Toleranzmetriken nach N Ticks. Die Toleranzen
-sind **nach Metrik getrennt**, weil eine einheitliche Zahl für beide Sorten
-falsch wäre:
+Tier B is verified through tolerance metrics after N ticks. The tolerances are
+**separated by metric**, because a single number for both kinds would be wrong:
 
-| Metrik | Toleranz | Warum |
+| Metric | Tolerance | Why |
 |---|---|---|
-| Gesamtmasse `Σ grid` | rel. **1e-6** | Erhaltungsgröße |
-| Mittelwert | rel. **1e-6** | Erhaltungsgröße |
-| Standardabweichung | rel. **2e-2** | strukturempfindlich |
-| Anteil Zellen > 1.0 | abs. **2e-2** | strukturempfindlich |
+| Total mass `Σ grid` | rel. **1e-6** | conserved quantity |
+| Mean | rel. **1e-6** | conserved quantity |
+| Standard deviation | rel. **2e-2** | structure-sensitive |
+| Fraction of cells > 1.0 | abs. **2e-2** | structure-sensitive |
 
-Begründung, gemessen an der Stufe-B-Python-Implementierung gegen die
-C-Referenz (128×128, 4096 Agenten):
+Justification, measured with the tier B Python implementation against the C
+reference (128×128, 4096 agents):
 
 | Ticks | `sum`/`mean` | `stddev` | `frac>1` |
 |---|---|---|---|
@@ -520,159 +520,166 @@ C-Referenz (128×128, 4096 Agenten):
 | 100 | 5.1e-09 | 2.6e-04 | 0 |
 | 1000 | 8.6e-09 | 6.7e-04 | 7.3e-04 |
 
-Gesamtmasse und Mittelwert sind nahezu erhalten: wie viel Pheromon im Grid
-steht, folgt aus Depositrate und Decay und hängt praktisch nicht davon ab,
-*wohin* die Agenten gelaufen sind. Sie bleiben bei 1e-9 — deshalb darf die
-Toleranz hier **enger** sein als ursprünglich spezifiziert. Ein falscher
-Decay-Wert, eine falsche Depositmenge oder eine falsch normierte Faltung
-sprengt 1e-6 sofort.
+Total mass and mean are essentially conserved: how much pheromone is in the
+grid follows from the deposit rate and the decay, and depends hardly at all on
+*where* the agents went. They stay at 1e-9 — which is why the tolerance here
+may be **tighter** than originally specified. A wrong decay value, a wrong
+deposit amount or a wrongly normalised convolution breaks 1e-6 immediately.
 
-Standardabweichung und der Anteil heller Zellen messen dagegen, *wo* die
-Filamente liegen. Das divergiert unter Chaos zwangsläufig. Hielte man sie auf
-1e-4, würde die Prüfung nur noch das Chaos melden und nie einen Bug.
+Standard deviation and the fraction of bright cells, by contrast, measure
+*where* the filaments are. Under chaos that necessarily diverges. Held at 1e-4,
+the check would only ever report the chaos and never a bug.
 
-Default für: **Perl** und **reines Python**.
+Default for: **Perl** and **pure Python**.
 
-### 7.3 Stufe C — fast-math / approximativ
+### 7.3 Tier C — fast-math / approximate
 
-Builds mit `-ffast-math`, `-Ofast`, `-funsafe-math-optimizations`, GPU-Backends
-mit Fast-Math-Default, oder SIMD-Varianten mit umsortierter Reduktion.
-Verifikation wie Stufe B. Werden im Report **getrennt** ausgewiesen und nie
-gegen Stufe A in dieselbe Tabellenzeile gestellt.
+Builds with `-ffast-math`, `-Ofast`, `-funsafe-math-optimizations`, GPU
+backends with a fast-math default, or SIMD variants with a reordered reduction.
+Verified like tier B. Reported **separately** and never placed in the same
+table row as tier A.
 
 ---
 
-## 8. Benchmark-Klassen
+## 8. Benchmark classes
 
-Jede Klasse wird separat ausgewiesen. Ein Vergleich über Klassengrenzen hinweg
-ist bedeutungslos.
+Each class is reported separately. Comparing across class boundaries is
+meaningless.
 
-| Klasse | Bedeutung | Update-Modus | Threads |
+| Class | Meaning | Update mode | Threads |
 |---|---|---|---|
-| **S** | Skalar, ein Thread. **Die Sprach-Achse.** | `serial` | 1 |
-| **P** | Multi-Thread, skalar | `deferred` | N |
-| **V** | SIMD (explizit oder auto-vektorisiert) | beide | 1 |
-| **PV** | SIMD + Multi-Thread | `deferred` | N |
-| **G** | GPU-Compute | `deferred` | — |
-| **R** | Rendering-Backend (§11.1) | — | 1 |
+| **S** | Scalar, one thread. **The language axis.** | `serial` | 1 |
+| **P** | Multi-threaded, scalar | `deferred` | N |
+| **V** | SIMD (explicit or auto-vectorised), and hand-written assembly | both | 1 |
+| **PV** | SIMD + multi-threaded | `deferred` | N |
+| **G** | GPU compute | `deferred` | — |
+| **R** | Rendering backend (§11.1) | — | 1 |
 
-Klasse **S** ist die eigentliche Antwort auf "wie schnell ist Sprache X".
-Alles andere misst, wie gut das Ökosystem der Sprache Parallelisierung
-zugänglich macht — auch interessant, aber eine andere Frage.
+Class **S** is the actual answer to "how fast is language X". Everything else
+measures how accessible the language's ecosystem makes parallelism — also
+interesting, but a different question.
 
-### 8.1 Klasse V ist nicht automatisch Stufe C
+### 8.1 Class V is not automatically tier C
 
-Eine frühere Fassung dieser Spec behauptete, SIMD lande zwangsläufig in
-Konformitätsstufe C, weil die Reduktion umsortiert werde. Das gilt für den
-Diffusionskernel **nicht**.
+An earlier version of this spec claimed that SIMD necessarily lands in
+conformance tier C because the reduction gets reordered. For the diffusion
+kernel that is **not** true.
 
-Der Kernel hat gar keine Cross-Lane-Reduktion: jede Lane berechnet eine
-Ausgabezelle und führt dabei exakt dieselbe Operationsfolge in derselben
-Reihenfolge aus wie die skalare Schleife. Lane *i* produziert bitgenau, was
-die skalare Version für Zelle *i* produziert.
+The kernel has no cross-lane reduction at all: each lane computes one output
+cell and performs exactly the same operation sequence, in the same order, as
+the scalar loop. Lane *i* produces bit for bit what the scalar version produces
+for cell *i*.
 
-Damit gilt: **eine elementweise Vektorisierung des Diffusionspasses ist
-Stufe A**, sofern zwei Bedingungen eingehalten werden:
+Therefore: **an element-wise vectorisation of the diffusion pass is tier A**,
+provided two conditions hold:
 
-1. **Kein FMA.** `4.0f * c + acc` als eine gerundete Operation ist eine andere
-   Zahl. Multiplikation und Addition bleiben getrennte Intrinsics.
-2. **Echte Division.** `_mm*_div_ps` durch 12, nicht Multiplikation mit dem
-   Kehrwert (§1.2.4).
+1. **No FMA.** `4.0f * c + acc` as a single rounded operation is a different
+   number. Multiplication and addition stay separate intrinsics.
+2. **A real division.** `_mm*_div_ps` by 12, not a multiplication by the
+   reciprocal (§1.2.4).
 
-Eine Vektorisierung des **Agenten-Passes** wäre etwas anderes: dort müssten
-mehrere Agenten pro Vektor in dieselbe Zelle deponieren, was eine
-Konfliktauflösung und damit eine Reihenfolgeentscheidung erfordert. Das wäre
-Stufe C — und ist bisher nicht implementiert.
+Vectorising the **agent pass** would be a different matter: there, several
+agents per vector would have to deposit into the same cell, which requires
+conflict resolution and therefore an ordering decision. That would be tier C —
+and is not implemented.
 
-### 8.2 Klasse G ist ebenfalls nicht automatisch Stufe C
+The same reasoning covers hand-written assembly: `impl/asm/sb_diffuse_avx512.S`
+performs the nine additions per lane in the prescribed order, keeps the
+multiply by 4 as a separate `VMULPS` and divides with a real `VDIVPS`, and is
+therefore tier A as well.
 
-Dieselbe Annahme stand für GPU-Compute in dieser Spec und ist ebenfalls
-widerlegt: die CUDA-Implementierung ist **bit-identisch** mit der C-Referenz.
+### 8.2 Class G is likewise not automatically tier C
 
-Drei Dinge müssen dafür zusammenkommen:
+The same assumption stood for GPU compute in this spec and has likewise been
+refuted: the CUDA implementation is **bit-identical** to the C reference.
 
-1. **Keine FMA-Kontraktion.** `nvcc -fmad=false`. Ohne das fusioniert der
-   Compiler `4.0f * c + acc` und der Diffusionspass weicht ab.
-2. **Korrekt gerundete Division.** `--prec-div=true` (bei nvcc Default). Eine
-   Reziprok-Näherung verletzt §1.2.4.
-3. **Ganzzahlige Deposit-Atomics.** `atomicAdd` auf `float` ist *nicht*
-   deterministisch — die Reihenfolge, in der Threads ankommen, bestimmt die
-   Rundung. Stattdessen zählt ein `atomicAdd` auf `uint` die Treffer pro Zelle
-   (ganzzahlige Addition ist exakt und reihenfolgeunabhängig), und die
-   Multiplikation mit `deposit` passiert einmal danach.
+Three things have to come together:
 
-   Das reproduziert die serielle Kette genau dann, wenn `k · deposit` exakt
-   darstellbar bleibt — dieselbe Einschränkung wie bei der CPU-Strategie
-   `private` in §5.6, und das Harness prüft sie, statt sie anzunehmen.
+1. **No FMA contraction.** `nvcc -fmad=false`. Without it the compiler fuses
+   `4.0f * c + acc` and the diffusion pass diverges.
+2. **Correctly rounded division.** `--prec-div=true` (the nvcc default). A
+   reciprocal approximation violates §1.2.4.
+3. **Integer deposit atomics.** `atomicAdd` on `float` is *not* deterministic —
+   the order in which threads arrive decides the rounding.
+   Instead an `atomicAdd` on `uint` counts the hits per cell (integer addition
+   is exact and order-independent), and the multiplication by `deposit`
+   happens once afterwards.
 
-> **Aber es hängt am Treiber, nicht nur an der Sprache.** Derselbe
-> GLSL-Compute-Kernel mit denselben `precise`-Qualifiern ist auf Mesas
-> `llvmpipe` bit-exakt und auf Mesas D3D12-Backend um bis zu 2 ULP daneben.
-> `precise` verbietet in GLSL Umordnen und Fusion, erzwingt aber **keine**
-> korrekt gerundete Division — anders als CUDAs `--prec-div=true`. Klasse G
-> ist deshalb pro Backend einzustufen, nicht pauschal.
+   That reproduces the serial chain exactly as long as `k · deposit` stays
+   exactly representable — the same limitation as the CPU strategy `private`
+   in §5.6, and the harness checks it rather than assuming it.
+
+> **But it depends on the driver, not only on the language.** The same GLSL
+> compute kernel with the same `precise` qualifiers is bit-exact on Mesa's
+> `llvmpipe` and up to 2 ULP off on Mesa's D3D12 backend. In GLSL `precise`
+> forbids reordering and fusion but does **not** force correctly rounded
+> division — unlike CUDA's `--prec-div=true`. Class G therefore has to be
+> graded per backend, not as a whole.
 >
-> `precise` gehört dabei an mehr Stellen als man zuerst denkt: nur auf dem
-> Diffusions-Akkumulator reichte nicht, weil auch `x + cos*step` im
-> Agenten-Pass fusioniert wird und den Agenten um ein ULP versetzt.
+> `precise` belongs in more places than one first thinks: on the diffusion
+> accumulator alone it was not enough, because `x + cos*step` in the agent pass
+> gets fused too and displaces the agent by one ULP.
 
 ---
 
 ## 9. Presets
 
-| Preset | W × H | Agenten | Dichte | Ticks | Zweck |
+| Preset | W × H | Agents | Density | Ticks | Purpose |
 |---|---|---|---|---|---|
-| `tiny` | 512 × 512 | 65 536 | 25 % | 1 000 | CI, Smoke-Test, Konformität |
-| `small` | 1024 × 1024 | 262 144 | 25 % | 1 000 | schneller Vergleich, auch für Perl erträglich |
-| `medium` | 2048 × 2048 | 1 048 576 | 25 % | 1 000 | **Headline-Zahl** |
-| `large` | 4096 × 4096 | 4 194 304 | 25 % | 500 | Bandbreiten-Stress |
-| `huge` | 8192 × 8192 | 16 777 216 | 25 % | 100 | Klasse G ausreizen |
-| `browser` | 1024 × 1024 | 262 144 | 25 % | ∞ | interaktiv |
+| `tiny` | 512 × 512 | 65 536 | 25 % | 1 000 | CI, smoke test, conformance |
+| `small` | 1024 × 1024 | 262 144 | 25 % | 1 000 | quick comparison, bearable even for Perl |
+| `medium` | 2048 × 2048 | 1 048 576 | 25 % | 1 000 | **the headline figure** |
+| `large` | 4096 × 4096 | 4 194 304 | 25 % | 500 | bandwidth stress |
+| `huge` | 8192 × 8192 | 16 777 216 | 25 % | 100 | push class G |
+| `browser` | 1024 × 1024 | 262 144 | 25 % | ∞ | interactive |
 
-`huge` ist für Klasse G gedacht und auf einer CPU nicht sinnvoll zu Ende
-zu rechnen: 1,25 GB Puffer und 16,8 Millionen Agenten. Es existiert, weil
-`medium` eine RTX 5080 nicht auslastet — dort kosten `small` und `medium`
-praktisch dasselbe, womit die gemessene Beschleunigung eine Untergrenze ist
-und keine Antwort.
+`huge` is meant for class G and cannot sensibly be run to completion on a CPU:
+1.25 GB of buffers and 16.8 million agents. It exists because `medium` does not
+saturate an RTX 5080 — there `small` and `medium` cost practically the same,
+which makes the measured speedup a lower bound rather than an answer.
 
-Agentendichte 25 % der Zellen. (Die Vorlage nutzt 0.6 Agenten pro *Zelle* bei
-8 px Zellgröße — auf Pixelauflösung übertragen wäre das absurd viel.)
+Agent density is 25 % of the cells. (The source material uses 0.6 agents per
+*cell* at 8 px cell size — transferred to pixel resolution that would be
+absurdly many.)
 
-Referenz-Seed: **`12345`**.
+Reference seed: **`12345`**.
 
 ---
 
-## 10. CLI-Vertrag
+## 10. CLI contract
 
-Jede Implementierung MUSS diese Argumente akzeptieren. Unbekannte Argumente
-MÜSSEN mit Exit-Code 2 und einer Fehlermeldung auf stderr abgelehnt werden
-(stillschweigend ignorierte Flags haben schon mehr Benchmarks ruiniert als
-jeder Compiler-Bug).
+Every implementation MUST accept these arguments. Unknown arguments MUST be
+rejected with exit code 2 and an error message on stderr (silently ignored
+flags have ruined more benchmarks than any compiler bug).
 
 ```
 --preset NAME          tiny|small|medium|large|huge|browser
---width N --height N   Zweierpotenzen
+--width N --height N   powers of two
 --agents N
 --ticks N
---seed N               Default 12345
---update MODE          serial|deferred        (Default serial)
---threads N            Default 1
+--seed N               default 12345
+--update MODE          serial|deferred        (default serial)
+--threads N            default 1
 --sensor-dist F  --sensor-steps N  --rot-steps N
 --step F  --deposit F  --decay F
---deposit-reduce MODE  private|binned  (nur bei --threads > 1, §5.6)
---simd / --no-simd     vektorisierter Diffusionspass (Klasse V, §8.1)
---headless             kein Fenster (Default für Benchmark-Binaries)
---render               Fenster öffnen
---freeze-sim           Simulation anhalten (nur Render-Benchmark, §11.1)
---json                 Ergebnis als JSON auf stdout (letzte Zeile)
---hash-every N         Zwischen-Hashes auf stderr
---dump-grid PATH       rohes f32-Grid am Ende schreiben (Debugging)
---warmup N             N Ticks vor der Zeitmessung (Default 0)
+--deposit-reduce MODE  private|binned  (only with --threads > 1, §5.6)
+--simd / --no-simd     vectorised diffusion pass (class V, §8.1)
+--headless             no window (the default for benchmark binaries)
+--render               open a window
+--freeze-sim           halt the simulation (render benchmark only, §11.1)
+--json                 result as JSON on stdout (last line)
+--hash-every N         intermediate hashes on stderr
+--dump-grid PATH       write the raw f32 grid at the end (debugging)
+--warmup N             N ticks before timing starts (default 0)
 ```
 
-### 10.1 Ergebnis-JSON
+Implementations MAY accept further flags for features the spec does not
+mandate — `--asm`, `--mp-backend`, `--hud` and `--strict-f32` are examples —
+provided the flags above keep their meaning.
 
-Die **letzte Zeile** von stdout bei `--json` MUSS exakt dieses Schema haben:
+### 10.1 Result JSON
+
+With `--json`, the **last line** of stdout MUST have exactly this schema:
 
 ```json
 {
@@ -697,44 +704,47 @@ Die **letzte Zeile** von stdout bei `--json` MUSS exakt dieses Schema haben:
 }
 ```
 
-- `maups` = Millionen Agenten-Updates pro Sekunde = `agents * ticks / ms_total / 1000`
-- `mcups` = Millionen Zell-Updates pro Sekunde = `width * height * ticks / ms_total / 1000`
-- Zeiten MÜSSEN mit einer monotonen Uhr gemessen werden.
-- Init und Hash-Berechnung zählen **nicht** in `ms_total`.
+- `maups` = million agent updates per second = `agents * ticks / ms_total / 1000`
+- `mcups` = million cell updates per second = `width * height * ticks / ms_total / 1000`
+- Times MUST be measured with a monotonic clock.
+- Initialisation and hash computation do **not** count towards `ms_total`.
 
-RSS, Binärgröße und Buildzeit misst das Harness von außen — nicht die
-Implementierung selbst.
+RSS, binary size and build time are measured from the outside by the harness —
+not by the implementation itself.
 
 ---
 
-## 11. Rendering (normativ, damit alle Backends gleich aussehen)
+## 11. Rendering (normative, so that all backends look the same)
 
 ```
 u8 = clamp( int( grid[idx] * 255.0f / display_max ), 0, 255 )     # display_max = 100.0
 pixel = RGBA(u8, u8, u8, 255)
 ```
 
-Optionale Farbpaletten sind erlaubt, MÜSSEN aber hinter einem Flag liegen und
-sind nie Teil eines Benchmarks. Rendering wird in `--headless` **nie** ausgeführt.
+Optional colour palettes are allowed but MUST sit behind a flag and are never
+part of a benchmark. Rendering is **never** executed under `--headless`.
 
-### 11.1 Render-Benchmark (Klasse R)
+### 11.1 Render benchmark (class R)
 
-Ein Rendering-Backend-Vergleich misst den Upload-Pfad
-Grid → Textur → Bildschirm. Läuft die Simulation dabei weiter, dominiert sie
-den Frame und die Backends sind ununterscheidbar.
+A rendering backend comparison measures the upload path
+grid → texture → screen. If the simulation keeps running during it, the
+simulation dominates the frame and the backends become indistinguishable.
 
-Deshalb: **`--freeze-sim`** hält die Simulation an; jeder Frame lädt dasselbe
-Grid erneut hoch. `--ticks N` bedeutet dann *N Frames*.
+Hence **`--freeze-sim`**: it halts the simulation, and every frame re-uploads
+the same grid. `--ticks N` then means *N frames*.
 
-Gemessen wird von `sb_render_gray` bis einschließlich Present/EndDrawing.
-Eventverarbeitung liegt außerhalb des Messfensters.
+The measurement runs from `sb_render_gray` up to and including
+Present/EndDrawing. Event handling lies outside the measurement window.
 
-Backends DÜRFEN das Pixelformat wählen, das ihre API am günstigsten
-entgegennimmt — ein erzwungenes gemeinsames Format würde genau den
-Unterschied wegnormieren, um den es geht. Das gewählte Format gehört
-dokumentiert.
+An on-screen overlay (HUD), where an implementation has one, MUST be either
+switched off or timed separately and subtracted — it is not part of the upload
+path. Under `--json` it defaults to off.
 
-Ergebnis-JSON bei `--json`, letzte Zeile auf stdout:
+Backends MAY choose the pixel format their API accepts most cheaply — forcing a
+common format would normalise away exactly the difference the class is about.
+The chosen format belongs in the documentation.
+
+Result JSON with `--json`, last line on stdout:
 
 ```json
 {
@@ -750,34 +760,35 @@ Ergebnis-JSON bei `--json`, letzte Zeile auf stdout:
 }
 ```
 
-Klasse-R-Ergebnisse werden **nie** gegen Klasse-S-Ergebnisse gestellt.
+Class R results are **never** placed against class S results.
 
 ---
 
-## 12. Referenzvektoren
+## 12. Reference vectors
 
-`spec/testvectors/SPEC-1.json` enthält Grid-Hash, Agenten-Hash und die
-Stufe-B-Metriken für drei Größen × beide Update-Modi × mehrere Tick-Stände,
-erzeugt von der C-Referenzimplementierung (`impl/c`, gcc, `-O2 -ffp-contract=off`).
+`spec/testvectors/SPEC-1.json` holds the grid hash, the agent hash and the
+tier B metrics for three sizes × both update modes × several tick counts,
+produced by the C reference implementation (`impl/c`, gcc,
+`-O2 -ffp-contract=off`).
 
-| Größe | Dimensionen | Ticks | Zweck |
+| Size | Dimensions | Ticks | Purpose |
 |---|---|---|---|
-| `micro` | 128×128, 4 096 Agenten | 1, 10, 100 | auch für Perl und reines Python in Sekunden durchführbar |
-| `tiny` | 512×512, 65 536 Agenten | 1, 10, 100, 1000 | Standardfall |
-| `small` | 1024×1024, 262 144 Agenten | 1, 10, 100 | andere Cache- und Wrapping-Verhältnisse |
+| `micro` | 128×128, 4 096 agents | 1, 10, 100 | runnable in seconds even for Perl and pure Python |
+| `tiny` | 512×512, 65 536 agents | 1, 10, 100, 1000 | the standard case |
+| `small` | 1024×1024, 262 144 agents | 1, 10, 100 | different cache and wrapping behaviour |
 
-Langsame Implementierungen deklarieren in `bench/targets.toml`
-`conformance_set = "micro"` und prüfen nur die kleinste Größe. Sie prüfen
-damit dieselben Vektoren wie alle anderen — nur weniger davon.
+Slow implementations declare `conformance_set = "micro"` in
+`bench/targets.toml` and check only the smallest size. They check the same
+vectors as everyone else — just fewer of them.
 
-Erzeugt und geprüft mit:
+Produced and verified with:
 
 ```bash
-python3 bench/run.py conformance --write   # neu erzeugen (nur aus der Referenz)
-python3 bench/run.py conformance           # alle Targets prüfen
+python3 bench/run.py conformance --write   # regenerate (from the reference only)
+python3 bench/run.py conformance           # check every target
 ```
 
-Wenn ein neuer Port abweicht, ist **im Zweifel der Port falsch**, nicht die
-Referenz. Wenn sich herausstellt, dass die Referenz falsch ist, wird die
-Spec-Version auf `SPEC-2` erhöht und *alle* Vektoren werden neu erzeugt —
-niemals einzelne Vektoren "angepasst".
+If a new port diverges, **the port is wrong until proven otherwise**, not the
+reference. If the reference turns out to be wrong, the spec version is raised
+to `SPEC-2` and *all* vectors are regenerated — individual vectors are never
+"adjusted".

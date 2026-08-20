@@ -537,7 +537,15 @@ def cmd_conformance(a: argparse.Namespace) -> int:
     for t in pick_targets(targets, a.targets):
         if not t.headless_capable or t.skip_conformance:
             continue
-        cc = t.compilers[0]
+        # One compiler per target: conformance asks whether the *port* agrees,
+        # and a second compiler of the same language answers a different
+        # question. --compilers exists so CI can ask that other question too,
+        # because a tier-A claim that only holds under gcc is not a tier-A
+        # claim.
+        ccs = filter_list(t.compilers, getattr(a, "compilers", None))
+        if not ccs:
+            continue
+        cc = ccs[0]
         profile = next((p for p in t.profiles if p not in t.fastmath_profiles),
                        t.profiles[0])
         if t.build and not shutil.which(cc.split("/")[-1]):
@@ -668,8 +676,8 @@ def render_report(rows: list[dict]) -> str:
     ok.sort(key=lambda r: r["ms_total_best"])
     fastest = ok[0]["ms_total_best"]
 
-    head = ("| # | Sprache | Backend | Compiler | Profil | Konf. | ms total | "
-            "ms/tick | Agent % | MAUPS | rel. | RSS MiB | Binär KiB | Build s |")
+    head = ("| # | Language | Backend | Compiler | Profile | Tier | ms total | "
+            "ms/tick | agent % | MAUPS | rel. | RSS MiB | binary KiB | build s |")
     sep = "|---|---|---|---|---|:-:|---:|---:|---:|---:|---:|---:|---:|---:|"
     lines = [head, sep]
     for i, r in enumerate(ok, 1):
@@ -699,23 +707,23 @@ def render_report(rows: list[dict]) -> str:
             f"{r['lang']}/{r['cc']}/{r['profile']}")
 
     lines.append("")
-    lines.append("### Hash-Konsens")
+    lines.append("### Hash consensus")
     for (case, cls), hs in sorted(groups.items()):
         if len(hs) == 1:
             h = next(iter(hs))
-            lines.append(f"- `{case}` Stufe {cls}: **{h}** — "
-                         f"alle {len(hs[h])} Läufe identisch.")
+            lines.append(f"- `{case}` tier {cls}: **{h}** — "
+                         f"all {len(hs[h])} runs identical.")
         elif cls == "A":
-            lines.append(f"- `{case}` Stufe A: **DIVERGENZ ({len(hs)} Ergebnisse)** — "
-                         "das ist ein Fehler, Stufe A muss bit-exakt sein:")
+            lines.append(f"- `{case}` tier A: **DIVERGENCE ({len(hs)} results)** — "
+                         "this is a bug; tier A must be bit-exact:")
             for h, who in sorted(hs.items()):
                 lines.append(f"    - `{h}` — {', '.join(who)}")
         else:
             why = {
-                "B": "erwartet — Stufe B rechnet in Doubles, siehe SPEC 7.2",
-                "C": "erwartet — fast-math ist nicht bit-reproduzierbar",
-            }.get(cls, "erwartet")
-            lines.append(f"- `{case}` Stufe {cls}: {len(hs)} Ergebnisse ({why}):")
+                "B": "expected — tier B computes in doubles, see SPEC 7.2",
+                "C": "expected — fast-math is not bit-reproducible",
+            }.get(cls, "expected")
+            lines.append(f"- `{case}` tier {cls}: {len(hs)} results ({why}):")
             for h, who in sorted(hs.items()):
                 lines.append(f"    - `{h}` — {', '.join(who)}")
 
@@ -783,6 +791,9 @@ def main() -> int:
 
     c = sub.add_parser("conformance", help="verify hashes against spec/testvectors")
     c.add_argument("--targets")
+    c.add_argument("--compilers",
+                   help="comma-separated compiler filter; a target whose "
+                        "compilers are all filtered out is skipped")
     c.add_argument("--write", action="store_true",
                    help="regenerate the reference vectors from the C reference")
     c.add_argument("-v", "--verbose", action="store_true")

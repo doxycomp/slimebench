@@ -1,61 +1,62 @@
-# Messdaten
+# Measurement data
 
 ```
-run-YYYYmmdd-HHMM/    eine vollständige Messreihe
-archive/              die Einzelmessungen, aus denen das Projekt entstanden ist
+run-YYYYmmdd-HHMM/    one complete measurement series
+archive/              the individual measurements the project grew out of
 ```
 
-## `run-*/` — die aktuellen Zahlen
+## `run-*/` — the current numbers
 
-Jedes Verzeichnis ist **ein** Lauf über die ganze Matrix, erzeugt mit
+Each directory is **one** run over the whole matrix, produced with
 
 ```bash
-bench/full-run.sh          # nativ, oder von /mnt/c mit dem 9p-Vorbehalt
-scripts/stage-wsl.sh && bench/full-run.sh   # WSL2, für saubere Build-Zeiten
+bench/full-run.sh          # native, or from /mnt/c with the 9p caveat
+scripts/stage-wsl.sh && bench/full-run.sh   # WSL2, for clean build times
 ```
 
-Alle Tabellen und Diagramme in [`docs/RESULTS.md`](../docs/RESULTS.md) stammen
-aus dem jeweils jüngsten davon — derzeit `run-20260820-0330` — erzeugt mit `bench/tables.py` und
-`bench/charts.py`. `environment.txt` hält Maschine, Toolchain-Versionen und
-Commit fest — eine Messung, die sich keiner Revision zuordnen lässt, ist ein
-Transkript.
+Every table and chart in [`docs/RESULTS.md`](../docs/RESULTS.md) comes from the
+most recent one — currently `run-20260820-0330` — generated with
+`bench/tables.py` and `bench/charts.py`. `environment.txt` records the machine,
+the toolchain versions and the commit: a measurement that cannot be tied to a
+revision is a transcript.
 
-| Datei | Inhalt |
+| File | Contents |
 |---|---|
-| `A-crosslang-{serial,deferred}.jsonl` | Klasse S, alle Sprachen, 256² |
-| `C-compiler-matrix.jsonl` | Compiler × Profil, 1024²/300 |
-| `G-simd.jsonl` | Klasse V (Intrinsics), 1024²/300 |
-| `V-asm-kernels.jsonl` | Klasse V, Diffusionskerne skalar/Intrinsics/Assembler |
-| `M-haskell-style.jsonl` | Die Stilachse: C-Referenz und drei Haskell-Fassungen |
-| `P-parallel.jsonl` | Klasse P, Thread-Sweep pro Sprache |
-| `P-gil-matrix.jsonl` | CPython 3.12 gegen 3.14t × Threads gegen Prozesse |
-| `H-gpu.jsonl` | Klasse G, alle fünf Presets, drei Hosts |
-| `Q-render.jsonl` | Klasse R, beide Backends × beide Renderer |
-| `environment.txt` | Maschine, Toolchains, Commit |
-| `run.log` | Der vollständige Konsolenmitschnitt des Laufs |
+| `A-crosslang-{serial,deferred}.jsonl` | class S, all languages, 256² |
+| `C-compiler-matrix.jsonl` | compiler × profile, 1024²/300 |
+| `G-simd.jsonl` | class V (intrinsics), 1024²/300 |
+| `V-asm-kernels.jsonl` | class V, diffusion kernels scalar/intrinsics/assembly |
+| `M-haskell-style.jsonl` | the style axis: C reference and three Haskell versions |
+| `P-parallel.jsonl` | class P, thread sweep per language |
+| `P-gil-matrix.jsonl` | CPython 3.12 vs 3.14t × threads vs processes |
+| `H-gpu.jsonl` | class G, all five presets, three hosts |
+| `Q-render.jsonl` | class R, both backends × both renderers |
+| `environment.txt` | machine, toolchains, commit |
+| `run.log` | the full console transcript of the run |
 
-## `archive/` — wie es dazu kam
+## `archive/` — how it got here
 
-Die Buchstabendateien sind die Einzelmessungen aus den Sitzungen, in denen die
-jeweiligen Befunde entstanden sind. Sie sind **nicht** untereinander
-vergleichbar: verschiedene Tage, verschiedener Maschinenzustand, teils
-verschiedene Quellstände. Genau das war der Anlass für `full-run.sh`.
+The letter files are the individual measurements from the sessions in which the
+corresponding findings appeared. They are **not** comparable with one another:
+different days, different machine state, in places different source revisions.
+That is exactly what prompted `full-run.sh`.
 
-Sie bleiben im Baum, weil einige Befunde in RESULTS.md nur hier belegt sind und
-im Gesamtlauf nicht wiederholt werden — die Barrieren-Varianten, die verworfene
-parallele Präfixsumme, die PGO-Messung, der `threads::shared`-Vergleich für
-Perl. Wer eine dieser Zahlen nachrechnen will, findet sie hier; wer Sprachen
-vergleichen will, nimmt `run-*/`.
+They stay in the tree because a few findings in RESULTS.md are only evidenced
+here and are not repeated by the full run — the barrier variants, the rejected
+parallel prefix sum, the PGO measurement, the `threads::shared` comparison for
+Perl. If you want to re-derive one of those numbers, it is here; if you want to
+compare languages, use `run-*/`.
 
-Eine Datei ist bewusst falsch und bleibt es: `H-gpu.jsonl` enthält die
-GL-Compute-Zahlen von vor dem 2D-Dispatch-Fix, bei denen der Diffusionspass
-still übersprungen wurde. Sie steht als Beleg für den Eintrag in
-[RESULTS.md §12](../docs/RESULTS.md#12-wo-ich-mich-geirrt-habe) da.
+One file is deliberately wrong and stays that way: `H-gpu.jsonl` holds the GL
+compute figures from before the 2D dispatch fix, where the diffusion pass was
+silently skipped. It is the evidence behind the entry in
+[RESULTS.md §12](../docs/RESULTS.md#12-where-i-was-wrong).
 
-Ältere `run-*/` bleiben liegen. Sie sind in sich konsistent und damit weiter
-brauchbar; sie sind nur nicht mehr die, aus denen das Dokument zitiert.
+Older `run-*/` directories are left in place. They are internally consistent
+and therefore still usable; they are simply no longer the ones the document
+quotes.
 
-Im Wurzelverzeichnis liegen daneben ein paar Einzelmessungen, die keiner Reihe
-angehören und das auch nicht sollen: `V-asm-kernels-reps9.jsonl` etwa ist die
-Kontrollmessung mit neun statt drei Wiederholungen, mit der geprüft wurde, ob
-der Vorsprung des Assembler-Kerns Rauschen ist (§7).
+The root directory also holds a few individual measurements that belong to no
+series and are not meant to: `V-asm-kernels-reps9.jsonl`, for instance, is the
+control measurement with nine repetitions instead of three, used to check
+whether the assembly kernel's lead is noise (§7).
