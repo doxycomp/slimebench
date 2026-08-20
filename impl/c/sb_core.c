@@ -3,6 +3,7 @@
 #include "sb_core.h"
 #include "sb_agent.h"
 #include "sb_simd.h"
+#include "sb_asm.h"
 
 #include <float.h>
 #include <stdlib.h>
@@ -146,7 +147,9 @@ static void sb_agent_pass(sb_sim *s) {
 /* ---- diffusion + decay (SPEC-1 section 5.4) ----------------------------- */
 
 static void sb_diffuse_pass(sb_sim *s) {
-    if (s->cfg.simd)
+    if (s->cfg.use_asm)
+        sb_diffuse_rows_asm(s, s->grid, s->scratch, 0, s->cfg.height);
+    else if (s->cfg.simd)
         sb_diffuse_rows_simd(s, s->grid, s->scratch, 0, s->cfg.height);
     else
         sb_diffuse_rows(s, s->grid, s->scratch, 0, s->cfg.height);
