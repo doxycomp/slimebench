@@ -1,141 +1,149 @@
-# slimebench — Physarum Benchmarking Suite
+# slimebench — Physarum benchmarking suite
 
-Dieselbe Simulation, acht Sprachen, zwei Rendering-Backends, viele Compiler —
-und ein Verifikationsmechanismus, der beweist, dass wirklich dieselbe
-Simulation läuft.
+The same simulation, nine languages, two rendering backends, many compilers —
+and a verification mechanism that proves it really is the same simulation
+running.
 
-## 1. Worum es geht
+## 1. What this is about
 
-Physarum polycephalum (Schleimpilz) lässt sich mit einem verblüffend simplen
-Agentenmodell nachbilden (Jeff Jones, 2010). Jeder Agent kennt nur eine
-Position, eine Richtung und drei Sensoren. Aus dieser lokalen Regel entstehen
-globale Transportnetzwerke — ohne dass irgendwo im Code das Wort "Netzwerk"
-vorkommt.
+Physarum polycephalum (slime mould) can be reproduced with a startlingly simple
+agent model (Jeff Jones, 2010). Each agent knows only a position, a heading and
+three sensors. Out of that local rule come global transport networks — without
+the word "network" appearing anywhere in the code.
 
-Pro Tick:
+Per tick:
 
-1. **Chemotaxis** — der Agent liest drei Punkte vor sich (links, geradeaus, rechts).
-2. **Rotation** — er dreht sich zum stärksten Signal.
-3. **Bewegung** — ein Schritt nach vorn.
-4. **Deposit** — er hinterlässt Pheromon.
-5. **Diffusion** — 3×3-Blur über das gesamte Grid.
-6. **Decay** — alles wird mit 0.94 multipliziert.
+1. **Chemotaxis** — the agent reads three points ahead of it (left, straight, right).
+2. **Rotation** — it turns toward the strongest signal.
+3. **Movement** — one step forward.
+4. **Deposit** — it leaves pheromone behind.
+5. **Diffusion** — a 3×3 blur over the whole grid.
+6. **Decay** — everything is multiplied by 0.94.
 
-Für einen Sprach- und Compiler-Vergleich ist das ein nahezu ideales Workload:
+For a language and compiler comparison this is close to an ideal workload:
 
-- **Zwei komplementäre Zugriffsmuster.** Der Agenten-Pass ist reines
-  Random-Access-Gather/Scatter (cache-feindlich, latenzgebunden), der
-  Diffusions-Pass ein dichter Stencil-Stream (bandbreitengebunden,
-  vektorisierbar). Sprachen und Compiler verhalten sich in beiden Phasen
-  völlig unterschiedlich — deshalb misst die Suite sie **getrennt**.
-- **Kein I/O, keine Allokation im Hot Loop, keine Bibliotheken.** Was du misst,
-  ist Codegen und Speicherverhalten, nicht das Ökosystem.
-- **Chaotisch.** Winzige numerische Abweichungen wachsen sichtbar an — was
-  Verifikation schwer macht und deshalb zum eigentlich interessanten Teil des
-  Projekts wird (siehe §3).
-- **Skaliert glatt** von 512² bis 4096² und von 65k bis 4M Agenten.
+- **Two complementary access patterns.** The agent pass is pure random-access
+  gather/scatter (cache-hostile, latency-bound); the diffusion pass is a dense
+  stencil stream (bandwidth-bound, vectorisable). Languages and compilers
+  behave completely differently in the two phases — which is why the suite
+  measures them **separately**.
+- **No I/O, no allocation in the hot loop, no libraries.** What you measure is
+  code generation and memory behaviour, not the ecosystem.
+- **Chaotic.** Tiny numerical deviations grow visibly — which makes
+  verification hard and therefore turns it into the genuinely interesting part
+  of the project (see §3).
+- **Scales smoothly** from 512² to 8192² and from 65k to 16M agents.
 
-## 2. Architektur
+## 2. Architecture
 
 ```
-spec/                normative Spezifikation + generierte Richtungstabelle
-  SPEC.md            <- die einzige Wahrheit
-  tools/             Codegen für die Trig-Tabelle (alle Sprachen)
-  testvectors/       Referenz-Prüfsummen und Stufe-B-Metriken
+spec/                normative specification + generated direction table
+  SPEC.md            <- the single source of truth
+  tools/             codegen for the trig table (every language)
+  testvectors/       reference checksums and tier B metrics
 impl/
-  c/                 Referenzimplementierung: Kern + headless + SDL2 + raylib
-  cpp/               idiomatisches C++20, dieselben drei Frontends
-  rust/              safe- und unchecked-Variante über ein Cargo-Feature
-  haskell/           IOUArray in IO, durchgehend strikt
-  ts/                Kern + Node-headless + Browser-Entry
-  web/               HTML5-Canvas-Frontend (generierter Bundle)
-  python/            pure (Stufe B / --strict-f32) und numpy (nur deferred)
-  perl/              Stufe B / --strict-f32
+  c/                 reference implementation: core + headless + SDL2 + raylib
+  cpp/               idiomatic C++20, the same three frontends
+  rust/              safe and unchecked variants behind a cargo feature
+  haskell/           IOUArray in IO, strict throughout, plus an idiomatic port
+  go/                goroutines and a hand-built barrier
+  swift/             Foundation.Thread, three safety models
+  ts/                core + Node headless + browser entry point
+  web/               HTML5 canvas frontend (generated bundle)
+  python/            pure (tier B / --strict-f32) and numpy (deferred only)
+  perl/              tier B / --strict-f32
+  asm/               hand-written AVX-512 diffusion kernel (class V)
+  cuda/, glcompute/, pygl/   GPU hosts (class G)
+  shim/              by-value raylib wrappers shared by Haskell and Perl
 bench/
-  run.py             Build- und Messharness, Konformitätsprüfung, Report
-  targets.toml       Registry: Sprache × Backend × Compiler × Profil
-  gridstat.py        Grid-Dump inspizieren, PNG-Vorschau
+  run.py             build and measurement harness, conformance check, report
+  targets.toml       registry: language × backend × compiler × profile
+  full-run.sh        one complete measurement series over the whole matrix
+  preflight.sh       what this machine can actually measure
+  tables.py          the RESULTS.md tables, from a result directory
+  charts.py          the RESULTS.md charts, from the same directory
+  gridstat.py        inspect a grid dump, PNG preview
 scripts/
-  setup-wsl.sh       Toolchains nachinstallieren (phasenweise)
-  stage-wsl.sh       Repo aufs Linux-Dateisystem spiegeln und messen
-results/             JSONL-Messreihen
-docs/RESULTS.md      ausgewertete Ergebnisse
+  setup-wsl.sh       install toolchains (in phases)
+  stage-wsl.sh       mirror the repo onto the Linux filesystem and measure
+results/             JSONL measurement series
+docs/RESULTS.md      the evaluated results
 ```
 
-Jede Implementierung ist **strikt zweigeteilt**: ein Simulationskern ohne jede
-Ein-/Ausgabe, und darüber austauschbare Frontends (headless / SDL2 / raylib /
-Canvas). Nur so lässt sich Rechenzeit von Renderzeit trennen — und nur so ist
-der spätere SDL2-vs-raylib-Vergleich fair, weil beide exakt denselben
-Byte-Puffer übergeben bekommen.
+Every implementation is **strictly split in two**: a simulation core with no
+input or output at all, and interchangeable frontends on top (headless / SDL2 /
+raylib / canvas). That is the only way to separate compute time from render
+time — and the only way the SDL2-versus-raylib comparison is fair, because both
+are handed exactly the same byte buffer.
 
-## 3. Der eigentliche Kniff: Verifikation
+## 3. The actual trick: verification
 
-Das Problem, an dem solche Vergleichsprojekte normalerweise scheitern:
+The problem such comparison projects normally founder on:
 
-> Nach 200 Ticks sehen zwei Implementierungen unterschiedlich aus. War das ein
-> Portierungsfehler, oder nur eine andere Rundung im letzten Bit?
+> After 200 ticks two implementations look different. Was that a porting bug,
+> or just different rounding in the last bit?
 
-Bei einem chaotischen System sind beide Ursachen nach wenigen hundert Ticks
-optisch **nicht unterscheidbar**. Ohne Antwort darauf vergleichst du am Ende
-möglicherweise eine korrekte Implementierung mit einer kaputten.
+In a chaotic system both causes are optically **indistinguishable** after a few
+hundred ticks. Without an answer to that, you may end up comparing a correct
+implementation against a broken one.
 
-slimebench löst das mit vier Bausteinen:
+slimebench solves it with four building blocks:
 
-| Baustein | Wirkung |
+| Building block | Effect |
 |---|---|
-| **Vorgeschriebene Operationsreihenfolge** (SPEC §5.4) | Gleitkomma-Addition ist nicht assoziativ. Die Summationsreihenfolge im Diffusionskernel ist normativ festgelegt. |
-| **Generierte Trig-Tabelle** (SPEC §4) | `sin`/`cos` sind zwischen glibc, V8, Rust und GPU-Treibern **nicht** bit-identisch. Deshalb sind Richtungen ganzzahlig quantisiert (NDIR=1440) und die Tabelle wird als u32-Bitmuster in jede Sprache generiert. Nebeneffekt: schneller als `sinf`. |
-| **Portabler 32-Bit-PRNG** (SPEC §3) | xoshiro128++ und SplitMix32, reine 32-Bit-Ganzzahlarithmetik — direkt abbildbar in JS, Perl, GLSL und WGSL, wo 64-Bit teuer oder gar nicht verfügbar ist. |
-| **Prüfsummen** (SPEC §6) | Getrennte Hashes für Grid und Agenten. Weicht nur das Grid ab, liegt der Fehler im Diffusionspass; weichen beide ab, im Agenten-Pass. `--hash-every N` grenzt den ersten divergierenden Tick binär ein. |
+| **Prescribed operation order** (SPEC §5.4) | Floating-point addition is not associative. The summation order in the diffusion kernel is fixed normatively. |
+| **Generated trig table** (SPEC §4) | `sin`/`cos` are **not** bit-identical between glibc, V8, Rust and GPU drivers. So headings are quantised to integers (NDIR=1440) and the table is generated into every language as u32 bit patterns. Side effect: faster than `sinf`. |
+| **Portable 32-bit PRNG** (SPEC §3) | xoshiro128++ and SplitMix32, pure 32-bit integer arithmetic — directly expressible in JS, Perl, GLSL and WGSL, where 64-bit is expensive or unavailable. |
+| **Checksums** (SPEC §6) | Separate hashes for grid and agents. If only the grid diverges the bug is in the diffusion pass; if both diverge it is in the agent pass. `--hash-every N` binary-searches the first diverging tick. |
 
-**Ergebnis:** Sechs von acht Implementierungen — C, C++, Rust, Haskell,
-TypeScript und Python/numpy — sind bit-exakt gegen die C-Referenz, über
-Grid- *und* Agenten-Prüfsumme, bei drei Grid-Größen × beiden Update-Modi ×
-Tick-Ständen bis 1000. Python (pur) und Perl erreichen dasselbe mit
-`--strict-f32`; ohne das Flag laufen sie in Stufe B.
+**Result:** seven of nine languages — C, C++, Rust, Haskell, Go, Swift,
+TypeScript and Python/numpy — are bit-exact against the C reference, on the
+grid *and* the agent checksum, across three grid sizes × both update modes ×
+tick counts up to 1000. Python (pure) and Perl reach the same with
+`--strict-f32`; without the flag they run in tier B.
 
-Damit ist die Frage oben beantwortbar geworden: weicht ein Port ab, ist es ein
-Bug, kein Rundungsartefakt.
+That makes the question above answerable: if a port diverges, it is a bug, not
+a rounding artefact.
 
-Und wo Bit-Exaktheit prinzipiell unmöglich ist (fast-math, GPU, SIMD mit
-umsortierter Reduktion), sagt die Spec das vorher und weist die Läufe in einer
-eigenen Konformitätsstufe aus, statt sie stillschweigend danebenzustellen.
+And where bit-exactness is impossible in principle (fast-math, GPU, SIMD with a
+reordered reduction), the spec says so in advance and reports those runs in a
+conformance tier of their own, instead of quietly placing them alongside.
 
-## 4. Was gemessen wird
+## 4. What gets measured
 
-Pro Lauf, von der Implementierung selbst gemeldet:
+Per run, reported by the implementation itself:
 
-- Gesamtzeit, **aufgeteilt nach Agenten-Pass und Diffusions-Pass**
-- ms/Tick als Median und p99 (nicht nur Mittelwert — Ausreißer sind aussagekräftig)
-- MAUPS (Mio. Agenten-Updates/s) und MCUPS (Mio. Zell-Updates/s)
-- Grid- und Agenten-Prüfsumme
+- total time, **split into agent pass and diffusion pass**
+- ms/tick as median and p99 (not just the mean — outliers are informative)
+- MAUPS (million agent updates/s) and MCUPS (million cell updates/s)
+- grid and agent checksum
 
-Vom Harness von außen gemessen, damit sich niemand selbst schönrechnen kann:
+Measured from the outside by the harness, so nobody can flatter themselves:
 
-- Peak RSS (per `os.wait4`, kein `time(1)` nötig)
-- Binärgröße, roh und `strip`ped
-- Buildzeit
+- peak RSS (via `os.wait4`, no `time(1)` needed)
+- binary size, raw and `strip`ped
+- build time
 
-## 5. Benchmark-Klassen
+## 5. Benchmark classes
 
-Ein Vergleich über Klassengrenzen hinweg ist bedeutungslos und wird vom Report
-verhindert:
+Comparing across class boundaries is meaningless, and the report prevents it:
 
-| Klasse | Was sie misst |
+| Class | What it measures |
 |---|---|
-| **S** | Skalar, ein Thread. **Die Sprach-Achse** — hier steht "wie schnell ist Sprache X". |
-| **P** | Multi-Thread. Misst, wie zugänglich das Ökosystem Parallelisierung macht. |
-| **V** | SIMD. Realistisch nur für C, C++ und Rust. |
-| **G** | GPU-Compute. Misst **nicht** die Sprache, sondern Shader-Compiler und Treiber. |
+| **S** | Scalar, one thread. **The language axis** — this is where "how fast is language X" lives. |
+| **P** | Multi-threaded. Measures how accessible the ecosystem makes parallelism. |
+| **V** | SIMD, and hand-written assembly. Realistic only for C, C++ and Rust. |
+| **G** | GPU compute. Measures **not** the language but the shader compiler and driver. |
+| **R** | Rendering. Measures the upload path, and mostly the pixel format. |
 
-## 6. Umgebung
+## 6. Environment
 
-Kanonischer Messhost ist **WSL2 / Ubuntu 24.04** — dort sind gcc, clang, rustc,
-GHC, SDL2 und raylib alle erstklassig verfügbar.
+The canonical measurement host is **WSL2 / Ubuntu 24.04** — gcc, clang, rustc,
+GHC, SDL2 and raylib are all first-class there.
 
-Eine Warnung ist im Harness eingebaut: liegt das Repo unter `/mnt/c`, läuft
-jeder Dateizugriff über die 9p-Brücke, und Buildzeiten wie Prozessstart messen
-die Brücke statt den Code. `scripts/stage-wsl.sh` spiegelt das Repo vorher aufs
-Linux-Dateisystem.
+One warning is built into the harness: if the repo sits under `/mnt/c`, every
+file access goes through the 9p bridge, and build times and process startup
+measure the bridge instead of the code. `scripts/stage-wsl.sh` mirrors the repo
+onto the Linux filesystem first.
 
-Referenzmaschine: AMD Ryzen 9 9950X3D (16C/32T), NVIDIA RTX 5080.
+Reference machine: AMD Ryzen 9 9950X3D (16C/32T), NVIDIA RTX 5080.

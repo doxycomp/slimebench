@@ -537,7 +537,15 @@ def cmd_conformance(a: argparse.Namespace) -> int:
     for t in pick_targets(targets, a.targets):
         if not t.headless_capable or t.skip_conformance:
             continue
-        cc = t.compilers[0]
+        # One compiler per target: conformance asks whether the *port* agrees,
+        # and a second compiler of the same language answers a different
+        # question. --compilers exists so CI can ask that other question too,
+        # because a tier-A claim that only holds under gcc is not a tier-A
+        # claim.
+        ccs = filter_list(t.compilers, getattr(a, "compilers", None))
+        if not ccs:
+            continue
+        cc = ccs[0]
         profile = next((p for p in t.profiles if p not in t.fastmath_profiles),
                        t.profiles[0])
         if t.build and not shutil.which(cc.split("/")[-1]):
@@ -783,6 +791,9 @@ def main() -> int:
 
     c = sub.add_parser("conformance", help="verify hashes against spec/testvectors")
     c.add_argument("--targets")
+    c.add_argument("--compilers",
+                   help="comma-separated compiler filter; a target whose "
+                        "compilers are all filtered out is skipped")
     c.add_argument("--write", action="store_true",
                    help="regenerate the reference vectors from the C reference")
     c.add_argument("-v", "--verbose", action="store_true")

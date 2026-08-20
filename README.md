@@ -5,6 +5,8 @@ mechanism that proves the same simulation really is running everywhere, and a
 harness for performance and footprint comparisons across languages, rendering
 backends and compilers.
 
+[![CI](https://github.com/doxycomp/slimebench/actions/workflows/ci.yml/badge.svg)](https://github.com/doxycomp/slimebench/actions/workflows/ci.yml)
+
 | | |
 |---|---|
 | **What it is** | [docs/PROJECT.md](docs/PROJECT.md) |
@@ -93,6 +95,14 @@ Check that every implementation agrees:
 ```bash
 python3 bench/run.py conformance
 ```
+
+CI runs the same gate on every push, over the subset a GitHub runner can host
+without installing a toolchain — C, C++, Rust, Go, TypeScript, Python and Perl,
+under both gcc and clang. It also re-runs the three code generators and fails
+if their output differs from what is committed. It deliberately measures no
+performance: a shared runner varies by more than most of the effects in
+[docs/RESULTS.md](docs/RESULTS.md), and a benchmark you cannot trust is worse
+than no benchmark.
 
 Install further toolchains (in phases: `base`, `render`, `rust`, `haskell`, `scripting`, `gpu`):
 
