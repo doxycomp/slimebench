@@ -67,7 +67,10 @@ languages. Everything else depends on it.
 - ✅ **Perl** — tier B by default, tier A with `--strict-f32` (surcharge 3.3×).
 - ✅ **Tolerant conformance gate** — metrics instead of hashes, separated into
   conserved quantities (1e-6) and structure-sensitive ones (2e-2).
-- ⬜ Optional: `numba` as a third Python data point.
+- ✅ **Python numba** — tier A with no strictness flag, and tier C on the
+  `fastmath` profile from the same source. Deliberately a line-for-line copy of
+  the pure-Python target so the pair isolates the interpreter: 341× tier A
+  against tier A, and 1.07× of gcc `-O2` once it is gone.
 
 ---
 
@@ -345,7 +348,6 @@ reaches 1.52× at eight tasks, but costs 19 % serially, so the end-to-end win is
   unmeasured, and that category has a poor record.
 - **The HUD in Haskell, Perl and Python.** The 5×7 font is deliberately data in
   a header so a port can adopt it.
-- **`numba`** as a third Python data point.
 - **CI.** `.github/workflows/` builds the C reference and runs the conformance
   gate on every push; extending it to more toolchains is a matter of runner
   minutes, not design.

@@ -317,6 +317,28 @@ profiles  = ["default"]
 updates  = ["deferred"]
 optional = true
 
+# The same program as python-pure -- same loops, same order, same names -- with
+# @njit on the kernels. That is the point: the ratio between the two is the
+# interpreter and nothing else. It is tier A without a strictness flag, because
+# numba has f32 as a real type where CPython does not.
+#
+# The `fastmath` profile compiles the identical source with LLVM's fast-math
+# flags and is conformance tier C. Conformance always picks a non-fastmath
+# profile, so it is benchmarked but never asked to be bit-exact -- the same
+# treatment the C targets' ofast builds get.
+[[target]]
+id       = "python-numba"
+lang     = "Python"
+backend  = "numba"
+class    = "S"
+dir      = "impl/python"
+run      = ["{numbapy}", "{dir}/slimebench_numba.py"]
+compilers = ["numba"]
+profiles  = ["default", "fastmath"]
+fastmath_profiles = ["fastmath"]
+profile_args = { fastmath = ["--fastmath"] }
+optional = true
+
 [[target]]
 id       = "python-pure"
 lang     = "Python"

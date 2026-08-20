@@ -280,6 +280,104 @@ Perl pays more than Python because a Perl array stores full doubles, so *every*
 operation has to be rounded, whereas Python's `array('f')` rounds to f32 on
 store in any case.
 
+### The interpreter, isolated (numba)
+
+The table above says what exactness costs *within* an interpreter. It does not
+say what the interpreter costs, because every other row is also a different
+program. [`slimebench_numba.py`](../impl/python/slimebench_numba.py) is written
+to close that gap: it is
+[`slimebench_pure.py`](../impl/python/slimebench_pure.py) with `@njit` on the
+kernels — the same loops, the same order of operations, the same variable
+names, the same file structure. The only differences are the decorator and
+`np.float32` arrays in place of `array('f')`.
+
+128², 4096 agents, 100 ticks, `serial`, measured by
+[`bench/numba-jit.sh`](../bench/numba-jit.sh):
+
+| Target | tier | grid hash | ms/tick | vs numba |
+|---|:-:|---|---:|---:|
+| python pure | B | `0x44625B3D` | 9.6721 | 143× |
+| python pure `--strict-f32` | A | `0xB1D75130` | 23.1522 | **341×** |
+| **numba** | **A** | `0xB1D75130` | **0.0678** | 1.00× |
+| numba `--fastmath` | C | `0xF9B2609A` | 0.0673 | 0.99× |
+| c gcc `-O2` | A | `0xB1D75130` | 0.0631 | 0.93× |
+
+**Against the honest comparison — tier A against tier A — CPython costs 341×.**
+Not 143×: the tier-B row is a different computation, one that happens to be
+cheaper because it is wrong. And what is left after the interpreter is removed
+is 7 %: numba runs the identical source at **1.07× of gcc `-O2`**.
+
+The second finding is about the exactness surcharge, and it inverts. Pure
+Python needs `--strict-f32` and pays 2.2× for tier A, because CPython has no
+f32 arithmetic and every intermediate has to be forced through a `struct`
+round-trip. numba has `float32` as a real type, so **it is tier A by default,
+at no cost at all** — 20 of 20 conformance cases across the full set, first
+attempt, no strictness flag. The same language, one runtime apart, and
+exactness goes from expensive to free.
+
+The third is that hand-vectorising was the wrong answer. At 512² `deferred`,
+where the numpy target can run:
+
+| Target | ms/tick |
+|---|---:|
+| c gcc `-O2` | 1.072 |
+| **numba** (scalar loops) | **1.277** |
+| numpy (vectorised) | 5.626 |
+
+**The scalar loops through a JIT are 4.4× faster than the vectorised numpy
+version** — and they can do `serial`, which numpy structurally cannot (§8).
+The numpy target exists because in 2015 it was the only answer; it is kept
+because it is a fair measurement of that answer, not because it is the good one.
+
+What numba charges instead is up front: compiling the seven kernels takes
+0.8–1.3 s. That is not in any number above, because
+[`_precompile()`](../impl/python/slimebench_numba.py) compiles them against a
+4×4 grid before the clock starts. Leaving it to `--warmup` would work too, and
+would silently turn `ms_per_tick_p99` into a compiler benchmark whenever
+someone omitted the flag — the failure shape §12 is a list of.
+
+### `--fastmath`: the grid hash catches it, the agent hash does not
+
+`--fastmath` compiles the *identical source text* with LLVM's fast-math flags.
+It is therefore the cheapest available demonstration of what conformance tier C
+is for: one program, one flag, two tiers.
+
+It is also, at this size, not faster — 0.0673 against 0.0678 ms/tick, inside
+the noise. LLVM's reassociation has nothing to reassociate that matters: the
+stencil is nine adds that the spec has already ordered, and the agent pass has
+no reduction at all.
+
+What it does do is diverge, and *where* it diverges is the finding. SPEC-1 §6
+hashes the grid and the agents separately, for fault localisation. Sweeping
+tick counts at 512² with 65 536 agents:
+
+| ticks | `serial` grid | `serial` agents | `deferred` grid | `deferred` agents |
+|---:|:-:|:-:|:-:|:-:|
+| 1 | **DIFF** | same | **DIFF** | same |
+| 5 | **DIFF** | same | **DIFF** | **DIFF** |
+| 50 | **DIFF** | same | **DIFF** | **DIFF** |
+| 400 | **DIFF** | same | **DIFF** | **DIFF** |
+| 800 | **DIFF** | **DIFF** | **DIFF** | **DIFF** |
+
+**The grid diverges on tick 1 in both modes. The agent checksum keeps
+reporting agreement for 400 ticks in `serial`.** A conformance gate that
+hashed only the agents would have certified a fast-math build as bit-exact
+through a run longer than most of the ones in this document.
+
+The mechanism is that agent positions are *exact* by construction: a heading
+indexes the generated trig table, and the result is multiplied by the step and
+added in f32 — no operation there for fast-math to reassociate. An agent can
+only move differently once a low-bit difference in the grid flips one of the
+three `>=` comparisons in the sensing step. Until the first such flip the
+agent hash is not merely lagging, it is *identical*, and it stays identical
+until chaos amplifies one ULP into a decision. That took 400–800 ticks in
+`serial` and fewer than 5 in `deferred`.
+
+Two hashes were originally split so that a divergence could be attributed to
+the diffusion pass or the agent pass. The more useful property turns out to be
+this one: the grid hash is the sensitive instrument, and a checksum over the
+agents alone would be a slow-acting one.
+
 ---
 
 ## 3. Compilers
@@ -1170,6 +1268,18 @@ instead of "divergence" ten times. A tool that reports *wrong* where it means
   8–9× elsewhere (§2). What remains genuinely open is whether an FFI escape to
   a raw buffer would change it, which would be measuring C through Lean rather
   than Lean.
+- **Class P for numba.** `@njit(parallel=True)` with `prange` releases the GIL
+  and uses real threads, so Python could have thread scaling today without
+  waiting for a free-threaded build — which would make §6 a comparison of three
+  things rather than two. The diffusion pass is trivially parallel. The agent
+  pass is the question, and the non-obvious part is that it may not need the
+  `binned` machinery at all: every deposit adds the *same* constant, so a
+  per-cell integer count reduced across threads and then applied as k successive
+  f32 adds is bit-identical to the serial run whatever the partitioning. That is
+  how the CUDA target already gets tier A (§8). What stops it being free is
+  memory — a per-thread count array is T × cells, which is 512 MiB at `medium`
+  with 32 threads, and avoiding that is exactly the problem `binned` solves.
+
 - **The HUD in Haskell, Perl and Python.** Six frontends have it, six do not.
   The 5×7 font is deliberately data in a header so a port can adopt it; the
   Rust version is generated from the C one and checked against it through a

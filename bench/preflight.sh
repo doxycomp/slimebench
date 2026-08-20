@@ -135,6 +135,18 @@ else
   missing=$((missing + 1))
 fi
 
+printf '  %-14s ' "numba"
+NB="${SLIMEBENCH_NUMBAPY:-$HOME/opt/numba/bin/python}"
+if [ -x "$NB" ] && "$NB" -c 'import numba, numpy' 2>/dev/null; then
+  green "yes"; printf '  %s
+' "$(dim "numba $("$NB" -c 'import numba;print(numba.__version__)') on $("$NB" -V 2>&1 | awk '{print $2}')")"
+  ok=$((ok + 1))
+else
+  red "no "; printf '   %s
+' "$(dim '-> python-numba and bench/numba-jit.sh; uv venv --python 3.12 ~/opt/numba && uv pip install --python ~/opt/numba/bin/python numba numpy')"
+  missing=$((missing + 1))
+fi
+
 printf '  %-14s ' "avx512f"
 if grep -qm1 ' avx512f' /proc/cpuinfo 2>/dev/null; then
   green "yes"; printf '  %s

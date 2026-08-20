@@ -103,6 +103,7 @@ HAVE_DISPLAY=0
   echo "ghc         $(ghc --numeric-version 2>/dev/null)"
   echo "node        $(node --version 2>/dev/null)"
   echo "python      $(python3 -V 2>&1 | awk '{print $2}')"
+  echo "numba       $("${SLIMEBENCH_NUMBAPY:-$HOME/opt/numba/bin/python}" -c 'import numba;print(numba.__version__)' 2>/dev/null)"
   echo "perl        $(perl -e 'print $^V' 2>/dev/null)"
   echo "nvcc        $(nvcc --version 2>/dev/null | awk '/release/{print $6}')"
   echo "gl          $GPU_LABEL"
@@ -214,6 +215,13 @@ psweep perl    tiny    20 ""              -- perl impl/perl/slimebench.pl
 # interpreter is installed -- the GIL half alone is not the measurement.
 phase "class P, CPython free-threading matrix"
 bench/gil-matrix.sh "$OUT/P-gil-matrix.jsonl" small 100 || true
+
+# The interpreter's share, isolated: slimebench_pure.py and
+# slimebench_numba.py are the same source shape, so the ratio between them is
+# CPython and nothing else. The same phase measures how long the agent hash
+# keeps calling a fast-math build conformant after the grid hash has stopped.
+phase "class S, numba: the interpreter, the JIT, and what fast-math breaks"
+bench/numba-jit.sh "$OUT/S-numba-jit.txt" || true
 
 # ---- 5. class G ----------------------------------------------------------
 phase "class G, every preset"

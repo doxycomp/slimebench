@@ -11,6 +11,7 @@
 #   scripts/setup-wsl.sh rust
 #   scripts/setup-wsl.sh haskell
 #   scripts/setup-wsl.sh scripting  perl, python numpy
+#   scripts/setup-wsl.sh numba      the JIT'd Python target, in its own venv
 #   scripts/setup-wsl.sh render-bindings  pygame, pyray, FFI::Platypus, shim
 #   scripts/setup-wsl.sh gpu        Vulkan/OpenGL compute prerequisites
 #   scripts/setup-wsl.sh all
@@ -153,6 +154,24 @@ setup_scripting() {
     warn "SDL2::FFI failed -- the Perl headless target does not need it"
 }
 
+setup_numba() {
+  log "numba (python-numba target, bench/numba-jit.sh)"
+
+  # Its own venv, for the same reason the free-threaded interpreter has one:
+  # Ubuntu marks the system Python externally-managed (PEP 668), and numba
+  # pins a narrower numpy range than the system package. bench/run.py finds it
+  # by this path or by SLIMEBENCH_NUMBAPY.
+  if ! have uv; then
+    warn "uv not found -- install it first: curl -LsSf https://astral.sh/uv/install.sh | sh"
+    return
+  fi
+  uv venv --python 3.12 "$HOME/opt/numba" >/dev/null || {
+    warn "uv venv failed; the numba target will not run"; return; }
+  uv pip install --python "$HOME/opt/numba/bin/python" numba numpy || {
+    warn "uv pip install failed; the numba target will not run"; return; }
+  "$HOME/opt/numba/bin/python" -c 'import numba, numpy; print("  numba", numba.__version__, "numpy", numpy.__version__)'
+}
+
 setup_render_bindings() {
   log "render bindings (class R for Python and Perl, class G for pygl)"
 
@@ -202,11 +221,12 @@ main() {
     rust)      setup_rust ;;
     haskell)   setup_haskell ;;
     scripting) setup_scripting; setup_render_bindings ;;
+    numba)     setup_numba ;;
     render-bindings) setup_render_bindings ;;
     gpu)       setup_gpu ;;
     all)       setup_base; setup_render; setup_rust; setup_haskell
-               setup_scripting; setup_render_bindings; setup_gpu ;;
-    *)         echo "usage: $0 {base|render|rust|haskell|scripting|render-bindings|gpu|all}" >&2
+               setup_scripting; setup_render_bindings; setup_numba; setup_gpu ;;
+    *)         echo "usage: $0 {base|render|rust|haskell|scripting|numba|render-bindings|gpu|all}" >&2
                exit 2 ;;
   esac
   log "done"

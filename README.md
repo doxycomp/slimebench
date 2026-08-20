@@ -27,6 +27,7 @@ backends and compilers.
 | TypeScript / Node | ✅ | ✅ | — | — | — | tier A |
 | TypeScript / Canvas | — | — | ✅ browser | — | sliders | tier A |
 | Python / numpy | ✅ | ✅ | ✅ pygame | ✅ | — | tier A, `deferred` only |
+| Python / numba | ✅ | — | — | — | — | tier A, tier C with `--fastmath` |
 | Python / pure | ✅ | — | — | — | — | tier B, A with `--strict-f32` |
 | Perl | ✅ | ✅ | ✅ | ✅ | — | tier B, A with `--strict-f32` |
 
@@ -36,7 +37,9 @@ Plus two GPU hosts that are not languages of their own: CUDA and GLSL compute
 **All ten languages pass `bench/run.py conformance`.** Eight of them are
 bit-exact against the C reference on both the grid *and* the agent checksum,
 across `micro`/`tiny`/`small` × `serial`/`deferred` × tick counts
-{1, 10, 100, 1000}. Python and Perl reach bit-exactness with `--strict-f32`.
+{1, 10, 100, 1000}. The two interpreted outliers reach bit-exactness with
+`--strict-f32` — as does Python without any flag once the same loops go
+through numba, which is a finding in itself.
 
 Measurements: [docs/RESULTS.md](docs/RESULTS.md).
 
@@ -160,6 +163,12 @@ CPython without the GIL against CPython with it, same worker, same phases:
 bench/gil-matrix.sh results/P-gil-matrix.jsonl small 100
 ```
 
+The same loops interpreted and JIT-compiled, plus what `--fastmath` breaks:
+
+```bash
+bench/numba-jit.sh results/S-numba-jit.txt
+```
+
 ## The interesting details
 
 - **Why bit-exactness is possible at all.** `sin`/`cos` are not bit-identical
@@ -207,6 +216,20 @@ bench/gil-matrix.sh results/P-gil-matrix.jsonl small 100
   **7.3× slower** than with one. Without the GIL the same configuration is
   2.7× *faster*, and threads then beat processes wherever the reduction has
   many phases. [bench/gil-matrix.sh](bench/gil-matrix.sh).
+- **What the interpreter actually costs.**
+  [slimebench_numba.py](impl/python/slimebench_numba.py) is
+  [slimebench_pure.py](impl/python/slimebench_pure.py) with `@njit` on the
+  kernels — same loops, same order, same names — so the ratio between them is
+  CPython and nothing else. Tier A against tier A it is **341×**, and what
+  remains after the interpreter is 7 %: numba runs the identical source at
+  1.07× of gcc `-O2`, and 4.4× *faster* than the hand-vectorised numpy target.
+  Exactness inverts too — pure Python pays 2.2× for tier A, numba gets it free,
+  because `float32` is a real type there.
+- **What `--fastmath` breaks, and which checksum notices.** The grid hash
+  diverges on tick 1. The agent hash keeps saying "conformant" for 400 ticks,
+  because agent positions are exact by construction and only move once a low
+  bit flips a comparison. A gate that hashed only the agents would have
+  certified a fast-math build. [docs/RESULTS.md §2](docs/RESULTS.md#2-language-comparison-class-s).
 - **What a proof assistant does with a mutable-array workload.** Lean 4
   lands at 8.9× C, between TypeScript and pure Python — and gets there in
   native `Float32`, because Lean's is IEEE binary32 (verified against
