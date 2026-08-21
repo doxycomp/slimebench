@@ -82,6 +82,12 @@ CONFORMANCE_SETS = {
 }
 UPDATE_MODES = ["serial", "deferred"]
 
+# A repetition spread above this is called out in the run log and marked in the
+# generated tables. Not a failure -- some targets are legitimately noisy, and
+# class P at 32 threads is one of them -- but a row the reader should not read
+# to three significant figures.
+NOISY_SPREAD = 0.05
+
 REFERENCE_TARGET = "c"
 REFERENCE_CC = "gcc"
 REFERENCE_PROFILE = "o2"
@@ -413,6 +419,34 @@ def bench_one(t: Target, cc: str, profile: str, a: argparse.Namespace) -> dict:
         print(f"   rep {i+1}/{a.reps}: {payload['ms_total']:.1f} ms  "
               f"{payload['maups']:.1f} MAUPS  rss {r.max_rss_kb/1024:.1f} MiB")
 
+    if a.reps > 1:
+        _ms = [p["ms_total"] for p in reps]
+        _sp = (max(_ms) - min(_ms)) / min(_ms) if min(_ms) > 0 else 0.0
+        if _sp > NOISY_SPREAD:
+            print(f"   spread {_sp*100:.1f}% -- noisy, see the statistics rule")
+
+    # THE STATISTICS RULE. One place, one convention, applied everywhere.
+    #
+    # Report the *minimum* of the repetitions, and report the spread beside it.
+    #
+    # The minimum, because interference is one-sided: another process, a
+    # migration, a page fault can only make a run slower, never faster. The
+    # fastest repetition is the best estimate of what the code costs when
+    # nothing else is happening, and the mean of a distribution with a hard
+    # floor and an unbounded tail estimates the machine's mood instead.
+    #
+    # The spread, because a minimum on its own invites exactly the mistake
+    # this rule was written after: two rows differing by less than the
+    # run-to-run variation, read as a ranking. `ms_total_spread` is
+    # (max - min) / min over the repetitions. A difference between two rows
+    # that is smaller than either row's spread is not a difference, and
+    # tables.py marks such rows rather than leaving the reader to notice.
+    #
+    # Median is kept because it is the honest thing to look at when the spread
+    # is large -- if best and median disagree by more than the spread, the
+    # distribution is not what any single number describes.
+    ms = [p["ms_total"] for p in reps]
+    spread = (max(ms) - min(ms)) / min(ms) if min(ms) > 0 else 0.0
     best = min(reps, key=lambda p: p["ms_total"])
     hashes = {(p["grid_hash"], p["agent_hash"]) for p in reps}
     return {
@@ -429,7 +463,10 @@ def bench_one(t: Target, cc: str, profile: str, a: argparse.Namespace) -> dict:
         "agents": best["agents"], "ticks": best["ticks"], "update": best["update"],
         "threads": best["threads"],
         "ms_total_best": best["ms_total"],
-        "ms_total_median": statistics.median(p["ms_total"] for p in reps),
+        "ms_total_median": statistics.median(ms),
+        # (max - min) / min across repetitions; see the statistics rule above.
+        "ms_total_spread": round(spread, 4),
+        "ms_total_reps": [round(v, 4) for v in ms],
         "ms_agents": best["ms_agents"], "ms_diffuse": best["ms_diffuse"],
         "ms_per_tick_median": best["ms_per_tick_median"],
         "ms_per_tick_p99": best["ms_per_tick_p99"],
@@ -741,8 +778,9 @@ def render_report(rows: list[dict]) -> str:
     fastest = ok[0]["ms_total_best"]
 
     head = ("| # | Language | Backend | Compiler | Profile | Tier | ms total | "
-            "ms/tick | agent % | MAUPS | rel. | RSS MiB | binary KiB | build s |")
-    sep = "|---|---|---|---|---|:-:|---:|---:|---:|---:|---:|---:|---:|---:|"
+            "spread | ms/tick | agent % | MAUPS | rel. | RSS MiB | binary KiB | "
+            "build s |")
+    sep = "|---|---|---|---|---|:-:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
     lines = [head, sep]
     for i, r in enumerate(ok, 1):
         binkb = f"{r['stripped_bytes']/1024:.0f}" if r.get("stripped_bytes") else "–"
@@ -751,14 +789,27 @@ def render_report(rows: list[dict]) -> str:
         backend = r.get("backend", "")
         if r.get("variant"):
             backend = f"{backend}/{r['variant']}"
+        sp = r.get("ms_total_spread")
+        spread = "–" if sp is None else f"{sp*100:.1f}%" + ("!" if sp > NOISY_SPREAD else "")
         lines.append(
             f"| {i} | {r['lang']} | {backend} | {r['cc']} | {r['profile']} | "
             f"{r['conformance_class']} | "
-            f"{r['ms_total_best']:.0f} | {r['ms_per_tick_median']:.3f} | "
+            f"{r['ms_total_best']:.0f} | {spread} | "
+            f"{r['ms_per_tick_median']:.3f} | "
             f"{agent_pct} | "
             f"{r['maups']:.1f} | {r['ms_total_best']/fastest:.2f}x | "
             f"{r['max_rss_kb']/1024:.0f} | {binkb} | {r['build_seconds']:.1f} |"
         )
+
+    noisy = [r for r in ok if (r.get("ms_total_spread") or 0) > NOISY_SPREAD]
+    if noisy:
+        worst = max(r["ms_total_spread"] for r in noisy)
+        lines.append("")
+        lines.append(
+            f"! {len(noisy)} row(s) varied by more than {NOISY_SPREAD*100:.0f}% "
+            f"between repetitions, up to {worst*100:.0f}%. Times are the minimum "
+            f"of {ok[0].get('reps', '?')} runs; a gap smaller than a row's own "
+            f"spread is not a ranking.")
 
     # Hash consensus is only meaningful within a conformance class: class C
     # (fast-math) is *expected* to differ from class A, and lumping them

@@ -27,6 +27,32 @@ def load(d: pathlib.Path, name: str) -> list[dict]:
     return [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines() if l.strip()]
 
 
+# The statistics rule, reader-facing half. bench/run.py records the minimum of
+# the repetitions plus (max - min) / min; these render it and flag the rows
+# where it is large enough that neighbouring positions mean nothing.
+NOISY_SPREAD = 0.05
+
+
+def spread_cell(r: dict) -> str:
+    """The repetition spread, with a marker when it is large."""
+    s = r.get("ms_total_spread")
+    if s is None:
+        return "—"
+    return f"{s * 100:.1f}%" + (" ⚠" if s > NOISY_SPREAD else "")
+
+
+def spread_note(rows: list[dict]) -> str:
+    """One line under a table, naming the rows that cannot be ranked."""
+    noisy = [r for r in rows if (r.get("ms_total_spread") or 0) > NOISY_SPREAD]
+    if not noisy:
+        return ""
+    worst = max(r["ms_total_spread"] for r in noisy)
+    return (f"\n⚠ {len(noisy)} row(s) varied by more than "
+            f"{NOISY_SPREAD * 100:.0f} % between repetitions, up to "
+            f"{worst * 100:.0f} %. Differences smaller than a row's own spread "
+            f"are not rankings.\n")
+
+
 def table(headers: list[str], rows: list[list[str]], align: str | None = None) -> str:
     if not rows:
         return "_(no rows)_\n"
@@ -88,11 +114,13 @@ def sec_crosslang(d: pathlib.Path) -> str:
                 r.get("conformance_class", "?"),
                 f"{r['ms_per_tick_median']:.3f}",
                 f"{r['ms_per_tick_median'] / fastest:.2f}×",
+                spread_cell(r),
                 str(round(r["max_rss_kb"] / 1024)) if r.get("max_rss_kb") else "—",
             ])
         out.append(f"### §2 class S, `--update {upd}`\n")
-        out.append(table(["#", "Language", "Profile", "Tier", "ms/tick", "rel.", "RSS MiB"],
-                         body, "rlrcrrr"))
+        out.append(table(["#", "Language", "Profile", "Tier", "ms/tick", "rel.",
+                          "spread", "RSS MiB"], body, "rlrcrrrr"))
+        out.append(spread_note([r for _, r in ranked]))
         hashes = {(r["grid_hash"], r["agent_hash"])
                   for r in rows if r.get("conformance_class") == "A"}
         n_a = sum(1 for r in rows if r.get("conformance_class") == "A")
@@ -140,12 +168,14 @@ def sec_compilers(d: pathlib.Path) -> str:
     best = rows[0]["ms_total_best"]
     body = [[r["lang"], r["cc"], r["profile"], r.get("conformance_class", "?"),
              fnum(r["ms_total_best"]), f"{r['ms_total_best'] / best:.2f}×",
+             spread_cell(r),
              fnum((r.get("stripped_bytes") or r.get("binary_bytes") or 0) / 1024, 0)
              if (r.get("stripped_bytes") or r.get("binary_bytes")) else "—"]
             for r in rows]
     return ("### §3 compiler matrix, 1024×1024, 300 Ticks\n"
-            + table(["Language", "Compiler", "Profile", "Tier", "ms", "rel.", "Binary KiB"],
-                    body, "llrcrrr") + "\n")
+            + table(["Language", "Compiler", "Profile", "Tier", "ms", "rel.",
+                     "spread", "Binary KiB"], body, "llrcrrrr")
+            + spread_note(rows) + "\n")
 
 
 def sec_parallel(d: pathlib.Path) -> str:

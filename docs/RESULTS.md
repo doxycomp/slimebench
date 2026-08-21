@@ -54,6 +54,32 @@ go 1.25 · swift 6.3.3 · python 3.12.3 (+ 3.14t) · perl 5.38.2 · CUDA 12.0
 
 ---
 
+## How to read these numbers
+
+**Every time is the minimum of three repetitions, and every table that can
+show it shows the spread beside it.**
+
+The minimum because interference is one-sided: another process, a migration, a
+page fault can only make a run slower. The fastest repetition is the best
+estimate of what the code costs when nothing else is happening, where a mean
+would estimate the machine's mood. The spread — `(max − min) / min` — because
+a minimum on its own invites the mistake this rule was written after: two rows
+differing by less than the run-to-run variation, read as a ranking.
+
+**A gap smaller than a row's own spread is not a ranking.** Rows above 5 %
+carry a marker, in the generated tables and in the run log. The rule lives in
+one place, [`bench/run.py`](../bench/run.py), and the standalone scripts under
+[`bench/`](../bench) follow it; the two exceptions are pure Python and Perl,
+where a single repetition is ninety seconds and the ratio being measured is
+three hundredfold.
+
+It was written after two near misses in one sitting — a claim about 0.5 %
+resting on a measurement whose own spread was 6 %, and a work/barrier split
+that moved 15 % between single samples. Both were caught by looking. The rule
+exists so the next one is caught by the tooling.
+
+---
+
 ## 1. The short version
 
 The same simulation in **fourteen languages**, from a Perl interpreter to 84
