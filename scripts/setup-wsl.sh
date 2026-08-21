@@ -11,6 +11,7 @@
 #   scripts/setup-wsl.sh rust
 #   scripts/setup-wsl.sh haskell
 #   scripts/setup-wsl.sh scripting  perl, python numpy
+#   scripts/setup-wsl.sh managed    JDK, .NET SDK with Native AOT
 #   scripts/setup-wsl.sh numba      the JIT'd Python target, in its own venv
 #   scripts/setup-wsl.sh render-bindings  pygame, pyray, FFI::Platypus, shim
 #   scripts/setup-wsl.sh gpu        Vulkan/OpenGL compute prerequisites
@@ -154,6 +155,17 @@ setup_scripting() {
     warn "SDL2::FFI failed -- the Perl headless target does not need it"
 }
 
+setup_managed() {
+  log "managed runtimes (Java, C#) and the two remaining compilers"
+  need_apt_update
+  # dotnet-sdk-aot is a separate package and the C# target needs it: without
+  # it three of the four profiles build and `aot` does not, which is the one
+  # the port exists for. zlib1g-dev and clang are Native AOT's link-time
+  # dependencies.
+  apt_install openjdk-21-jdk-headless dotnet-sdk-10.0 dotnet-sdk-aot-10.0 \
+              zlib1g-dev ocaml-nox gfortran
+}
+
 setup_numba() {
   log "numba (python-numba target, bench/numba-jit.sh)"
 
@@ -221,12 +233,14 @@ main() {
     rust)      setup_rust ;;
     haskell)   setup_haskell ;;
     scripting) setup_scripting; setup_render_bindings ;;
+    managed)   setup_managed ;;
     numba)     setup_numba ;;
     render-bindings) setup_render_bindings ;;
     gpu)       setup_gpu ;;
     all)       setup_base; setup_render; setup_rust; setup_haskell
-               setup_scripting; setup_render_bindings; setup_numba; setup_gpu ;;
-    *)         echo "usage: $0 {base|render|rust|haskell|scripting|numba|render-bindings|gpu|all}" >&2
+               setup_scripting; setup_render_bindings; setup_managed
+               setup_numba; setup_gpu ;;
+    *)         echo "usage: $0 {base|render|rust|haskell|scripting|managed|numba|render-bindings|gpu|all}" >&2
                exit 2 ;;
   esac
   log "done"

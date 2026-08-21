@@ -135,7 +135,8 @@ else
   missing=$((missing + 1))
 fi
 
-for tc in javac:openjdk-21-jdk-headless ocamlopt:ocaml-nox gfortran:gfortran; do
+for tc in javac:openjdk-21-jdk-headless ocamlopt:ocaml-nox gfortran:gfortran \
+         'dotnet:dotnet-sdk-10.0 dotnet-sdk-aot-10.0'; do
   printf '  %-14s ' "${tc%%:*}"
   if command -v "${tc%%:*}" >/dev/null 2>&1; then
     green "yes"; printf '  %s

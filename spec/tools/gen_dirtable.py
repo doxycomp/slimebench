@@ -418,6 +418,45 @@ final class Dirtable {{
     write(ROOT / "impl" / "java" / "src" / "Dirtable.java", body)
 
 
+def emit_csharp(cos_b, sin_b, table_hash):
+    # C# has a real uint, so unlike the Java emitter these stay unsigned and
+    # the literals need a `u` suffix. Roslyn turns a large constant primitive
+    # array initialiser into a metadata blob plus RuntimeHelpers.InitializeArray
+    # rather than element-by-element IL, so the 64 KiB method limit that
+    # constrains the Java version does not apply here.
+    def crows(bits, per_line=8):
+        out = []
+        for i in range(0, len(bits), per_line):
+            out.append("        " + " ".join(f"0x{b:08X}u," for b in bits[i : i + per_line]))
+        return out
+
+    body = f"""// {BANNER}
+// SPEC-1 section 4: quantised direction table, NDIR={NDIR}.
+
+namespace Slimebench;
+
+internal static class Dirtable
+{{
+    /// <summary>Number of quantised headings.</summary>
+    public const int NDIR = {NDIR};
+
+    /// <summary>Recomputed from the arrays at run time; here so it is greppable.</summary>
+    public const uint DirtableHash = 0x{table_hash:08X}u;
+
+    public static readonly uint[] CosBits =
+    {{
+{chr(10).join(crows(cos_b))}
+    }};
+
+    public static readonly uint[] SinBits =
+    {{
+{chr(10).join(crows(sin_b))}
+    }};
+}}
+"""
+    write(ROOT / "impl" / "csharp" / "Dirtable.cs", body)
+
+
 def emit_ocaml(cos_b, sin_b, table_hash):
     # OCaml's native `int` is 63-bit, so every one of these fits without the
     # boxing an Int32 array would bring. The floats are reconstructed once at
@@ -515,6 +554,7 @@ def main() -> int:
     emit_java(cos_b, sin_b, table_hash)
     emit_ocaml(cos_b, sin_b, table_hash)
     emit_fortran(cos_b, sin_b, table_hash)
+    emit_csharp(cos_b, sin_b, table_hash)
     emit_bin(cos_b, sin_b)
     return 0
 

@@ -646,6 +646,63 @@ compilers = ["go"]
 # as unsupported. It is here to price the checks, not to ship.
 profiles  = ["default", "nobounds"]
 
+# ------------------------------------------------------------------------- C#
+#
+# The only target that compiles the same source both through a JIT and ahead of
+# time to a native binary. That is why it is here: every other language in this
+# project sits on one side of that line and stays there, so "what does runtime
+# profile information buy over ahead-of-time compilation?" had no answer.
+#
+# Four profiles, one source, and all four must produce the same hashes:
+#   jit    tiered JIT with dynamic PGO -- what `dotnet run` does
+#   tier1  TieredCompilation off, straight to the optimising JIT
+#   r2r    ReadyToRun: IL compiled ahead of time, runtime still present
+#   aot    Native AOT: a static binary, no JIT, no runtime
+
+[[target]]
+id       = "csharp"
+lang     = "C#"
+backend  = "headless"
+class    = "S"
+dir      = "impl/csharp"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["dotnet"]
+profiles  = ["jit", "tier1", "r2r", "aot"]
+
+[[target]]
+id       = "csharp-par-binned"
+lang     = "C#"
+backend  = "threads/binned"
+class    = "P"
+dir      = "impl/csharp"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["dotnet"]
+# The class P rows use the AOT build: it is the configuration with no warm-up
+# to confound a thread sweep, which matters more here than JIT parity.
+profiles  = ["aot"]
+updates  = ["deferred"]
+extra_args = ["--deposit-reduce", "binned"]
+skip_conformance = true
+
+[[target]]
+id       = "csharp-par-private"
+lang     = "C#"
+backend  = "threads/private"
+class    = "P"
+dir      = "impl/csharp"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["dotnet"]
+profiles  = ["aot"]
+updates  = ["deferred"]
+extra_args = ["--deposit-reduce", "private"]
+skip_conformance = true
+
 # --------------------------------------------------------------------- Fortran
 #
 # The only statically typed port that needed no argument for exactness: a

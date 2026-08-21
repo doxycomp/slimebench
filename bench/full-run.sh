@@ -107,6 +107,7 @@ HAVE_DISPLAY=0
   echo "javac       $(javac -version 2>&1 | awk '{print $2}')"
   echo "ocamlopt    $(ocamlopt -version 2>/dev/null)"
   echo "gfortran    $(gfortran -dumpversion 2>/dev/null)"
+  echo "dotnet      $(dotnet --version 2>/dev/null)"
   echo "perl        $(perl -e 'print $^V' 2>/dev/null)"
   echo "nvcc        $(nvcc --version 2>/dev/null | awk '/release/{print $6}')"
   echo "gl          $GPU_LABEL"
@@ -133,7 +134,7 @@ done
 # ---- 2. compiler matrix --------------------------------------------------
 phase "compiler matrix, 1024x1024, 300 ticks"
 python3 bench/run.py bench --preset small --ticks 300 --reps 3 \
-  --targets c,cpp,rust,haskell,haskell-vector,c-pgo,go,swift,fortran,ocaml,java \
+  --targets c,cpp,rust,haskell,haskell-vector,c-pgo,go,swift,fortran,ocaml,java,csharp \
   --out "$OUT/C-compiler-matrix.jsonl" || true
 
 # ---- 3. class V ----------------------------------------------------------
@@ -212,6 +213,7 @@ psweep python  medium 100 binned private -- python3 impl/python/slimebench_numpy
 psweep go      medium 100 binned private -- impl/go/build/nobounds/slimebench
 psweep swift   medium 100 binned private -- impl/swift/build/unchecked/slimebench
 psweep java    medium 100 binned private -- impl/java/build/default/slimebench
+psweep csharp  medium 100 binned private -- impl/csharp/build/aot/slimebench
 psweep perl    tiny    20 ""              -- perl impl/perl/slimebench.pl
 
 # The free-threading experiment: {GIL, no-GIL} x {threads, processes} x T,
@@ -233,6 +235,11 @@ bench/numba-jit.sh "$OUT/S-numba-jit.txt" || true
 # in one phase.
 phase "class S, JVM: the warm-up ramp and the two interpreters"
 bench/jvm-warmup.sh "$OUT/S-jvm-warmup.txt" || true
+
+# .NET compiles the identical source through a JIT and ahead of time to a
+# native binary. No other language here can be asked that question.
+phase "class S, .NET: what runtime profile information is worth"
+bench/dotnet-aot.sh "$OUT/S-dotnet-aot.txt" || true
 
 # ---- 5. class G ----------------------------------------------------------
 phase "class G, every preset"

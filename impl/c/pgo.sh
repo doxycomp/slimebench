@@ -17,7 +17,10 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 CC="${1:-gcc}"
 BASE="-O3 -march=native -mtune=native"
 FP="-ffp-contract=off -fno-fast-math"
-COMMON="-std=c11 -D_POSIX_C_SOURCE=200809L $BASE $FP"
+# DEFS must match the Makefile's. It did not: the Makefile also passes
+# -D_DEFAULT_SOURCE, which is what makes syscall() visible in <unistd.h>, and
+# without it the clang PGO build failed outright while gcc's merely warned.
+COMMON="-std=c11 -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE $BASE $FP"
 # Must match CORE_SRC in the Makefile. It did not: sb_simd.c and sb_asm.c
 # were added to the Makefile and not here, so every PGO build since has failed
 # to link with "undefined reference to sb_diffuse_rows_simd" -- and a

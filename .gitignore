@@ -1,6 +1,7 @@
 # build output
 build/
 target/
+obj/
 dist-newstyle/
 *.o
 *.hi
