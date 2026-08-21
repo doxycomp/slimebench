@@ -272,6 +272,28 @@ def do_build(t: Target, cc: str, profile: str, verbose: bool) -> BuildInfo:
     p = subprocess.run(shlex.split(cmd), cwd=t.dir, capture_output=True, text=True)
     dt = time.monotonic() - t0
     log = p.stdout + p.stderr
+
+    # One retry, and only one.
+    #
+    # A ninety-minute series lost a row to
+    #   error: unable to rename temporary '...o.tmp' to output file '...o':
+    #   No such file or directory
+    # from clang, on a build that then succeeded five times out of five when
+    # asked again. Under the I/O this run generates, the filesystem
+    # occasionally loses a rename; a build-failed target is a missing row and
+    # the run still reports success, which is the failure shape section 14 of
+    # docs/RESULTS.md collects.
+    #
+    # Retrying once is not the same as ignoring the failure: a build that is
+    # actually broken fails twice, the second log is what gets reported, and
+    # the retry itself is printed so it cannot pass unnoticed.
+    if p.returncode != 0:
+        print(f"   build failed, retrying once: {cmd}")
+        t1 = time.monotonic()
+        p = subprocess.run(shlex.split(cmd), cwd=t.dir, capture_output=True, text=True)
+        dt += time.monotonic() - t1
+        log += "\n--- retry ---\n" + p.stdout + p.stderr
+
     if p.returncode != 0:
         return BuildInfo(False, dt, None, None, log)
 
