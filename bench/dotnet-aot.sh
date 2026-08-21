@@ -128,13 +128,25 @@ if [ -x "$BS" ]; then
   echo
 fi
 BIG="--preset tiny --agents 262144 --ticks 200 --warmup 100 --update deferred"
-printf '  %-24s %12s %12s\n' configuration "agents ms" "diffuse ms"
+# Best of five, and the spread printed next to it. A single run put Native AOT
+# at 767 ms of agent time and then at 816 -- a 6 % swing around a difference
+# this section was about to describe in fractions of a per cent.
+printf '  %-24s %12s %10s %12s
+' configuration "agents ms" spread "diffuse ms"
 for p in tier1 aot aot-native; do
   [ -x "impl/csharp/build/$p/slimebench" ] || continue
-  "impl/csharp/build/$p/slimebench" $BIG --json 2>/dev/null | grep -m1 '^{'     | P="$p" python3 -c '
+  for _ in 1 2 3 4 5; do
+    "impl/csharp/build/$p/slimebench" $BIG --json 2>/dev/null | grep -m1 '^{'
+  done | P="$p" python3 -c '
 import json, os, sys
-d = json.load(sys.stdin)
-print("  %-24s %12.2f %12.2f" % (os.environ["P"], d["ms_agents"], d["ms_diffuse"]))'
+rows = [json.loads(l) for l in sys.stdin if l.startswith("{")]
+if not rows:
+    print("  %-24s NO OUTPUT" % os.environ["P"])
+else:
+    a = sorted(r["ms_agents"] for r in rows)
+    d = min(r["ms_diffuse"] for r in rows)
+    print("  %-24s %12.2f %9.1f%% %12.2f"
+          % (os.environ["P"], a[0], 100 * (a[-1] - a[0]) / a[0], d))'
 done
 echo
 echo "   If ahead-of-time compilation only kept up on straight-line code, the"
