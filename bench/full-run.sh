@@ -124,10 +124,15 @@ phase() { echo; echo "=== $* ==="; }
 # ---- 1. cross-language, class S -----------------------------------------
 # 256x256 with 16 384 agents: the largest size pure Python and Perl finish in
 # seconds, which is the only reason all of them fit in one table.
+# --warmup 50 matters for exactly three targets and costs the rest nothing.
+# Java, C# and numba are not at full speed on tick 1, and without a warm-up
+# their *median* over a hundred cold ticks lands mid-ramp -- which measures
+# the compiler rather than the code. Section 6 keeps the cold measurement on
+# purpose; this table is the steady state.
 phase "class S, all languages, 256x256"
 for upd in serial deferred; do
   python3 bench/run.py bench --width 256 --height 256 --agents 16384 \
-    --ticks 100 --reps 3 --update "$upd" \
+    --ticks 100 --warmup 50 --reps 3 --update "$upd" \
     --out "$OUT/A-crosslang-$upd.jsonl" || true
 done
 
@@ -138,8 +143,12 @@ python3 bench/run.py bench --preset small --ticks 300 --reps 3 \
   --out "$OUT/C-compiler-matrix.jsonl" || true
 
 # ---- 3. class V ----------------------------------------------------------
+# Class V has contained two managed runtimes since java-simd and csharp-simd
+# were added, so it needs the warm-up for the same reason class S does.
+# Without it Java's vector kernel measured 179 ms of diffusion against C's
+# 64, which is the ramp and not the vector unit.
 phase "class V (SIMD), 1024x1024, 300 ticks"
-python3 bench/run.py bench --preset small --ticks 300 --reps 3 \
+python3 bench/run.py bench --preset small --ticks 300 --warmup 100 --reps 3 \
   --targets c-simd,cpp-simd,rust-simd,java-simd,csharp-simd,csharp-simd-portable \
   --out "$OUT/G-simd.jsonl" || true
 
