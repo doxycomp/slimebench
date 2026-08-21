@@ -59,6 +59,7 @@ final class Sim {
         int sensorSteps = 144;
         int rotSteps = 144;
         int hashEvery = 0;
+        boolean simd = false;
         String preset = "custom";
     }
 
@@ -181,7 +182,8 @@ final class Sim {
         long t1 = System.nanoTime();
 
         if (dep != null) mergeRows(0, cfg.height);
-        diffuseRows(0, cfg.height);
+        if (cfg.simd) Simd.diffuseRows(this, 0, cfg.height);
+        else diffuseRows(0, cfg.height);
         swapBuffers();
 
         nsAgents += t1 - t0;

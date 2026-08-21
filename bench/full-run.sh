@@ -140,7 +140,7 @@ python3 bench/run.py bench --preset small --ticks 300 --reps 3 \
 # ---- 3. class V ----------------------------------------------------------
 phase "class V (SIMD), 1024x1024, 300 ticks"
 python3 bench/run.py bench --preset small --ticks 300 --reps 3 \
-  --targets c-simd,cpp-simd,rust-simd \
+  --targets c-simd,cpp-simd,rust-simd,java-simd,csharp-simd,csharp-simd-portable \
   --out "$OUT/G-simd.jsonl" || true
 
 # The four-way kernel comparison, reported as ms_diffuse: the agent pass is
@@ -240,6 +240,12 @@ bench/jvm-warmup.sh "$OUT/S-jvm-warmup.txt" || true
 # native binary. No other language here can be asked that question.
 phase "class S, .NET: what runtime profile information is worth"
 bench/dotnet-aot.sh "$OUT/S-dotnet-aot.txt" || true
+
+# Six of the fourteen languages are collected. Whether any collector is doing
+# anything is a property of the workload, and the answer belongs in the series
+# rather than in a caveat.
+phase "garbage collectors: is any of them working?"
+bench/gc-stats.sh "$OUT/S-gc-stats.txt" || true
 
 # ---- 5. class G ----------------------------------------------------------
 phase "class G, every preset"

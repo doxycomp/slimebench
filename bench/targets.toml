@@ -669,7 +669,60 @@ build    = "bash build.sh {profile}"
 binary   = "build/{profile}/slimebench"
 run      = ["{binary}"]
 compilers = ["dotnet"]
-profiles  = ["jit", "tier1", "r2r", "aot"]
+profiles  = ["jit", "tier1", "r2r", "aot", "aot-native"]
+
+# Class V. Two rows because .NET has two answers and they are not the same
+# machine code: the portable Vector<T> caps at 256 bits on this hardware even
+# though Vector512.IsHardwareAccelerated is true, so naming the width
+# explicitly is the only way to reach AVX-512. Same relationship as c-simd's
+# o3-v3 and o3-native profiles.
+[[target]]
+id       = "csharp-simd"
+lang     = "C#"
+backend  = "simd"
+class    = "V"
+dir      = "impl/csharp"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["dotnet"]
+# aot is the *default* Native AOT build and gets only 128-bit vectors: the
+# compiler targets the x64 baseline unless told otherwise. aot-native is the
+# same source with -p:IlcInstructionSet=native. Both are here because the gap
+# between them is the result.
+profiles  = ["aot", "aot-native", "tier1"]
+extra_args = ["--simd"]
+# Bit-identical to the scalar path (SPEC-1 8.1), verified separately.
+skip_conformance = true
+
+[[target]]
+id       = "csharp-simd-portable"
+lang     = "C#"
+backend  = "simd/portable"
+class    = "V"
+dir      = "impl/csharp"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["dotnet"]
+profiles  = ["aot"]
+extra_args = ["--simd-portable"]
+skip_conformance = true
+
+[[target]]
+id       = "java-simd"
+lang     = "Java"
+backend  = "simd"
+class    = "V"
+dir      = "impl/java"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["javac"]
+profiles  = ["c2", "default"]
+extra_args = ["--simd"]
+# Bit-identical to the scalar path (SPEC-1 8.1), verified separately.
+skip_conformance = true
 
 [[target]]
 id       = "csharp-par-binned"

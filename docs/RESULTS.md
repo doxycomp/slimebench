@@ -106,6 +106,14 @@ Seven results I would not have predicted:
   3 % of the optimising JIT with a full run's profile behind it, starts seven
   times faster, and has no warm-up ramp at all — 2.0× from first tick to best,
   where the JVM's is 26.3×. §6.
+- **Java's portable vector API matches hand-written AVX-512.** 3.95 ms of
+  diffusion against C's 2.98, and a lower total time — from source that names
+  no instruction set. §8.
+- **No garbage collector here does anything.** The JVM collects zero times in
+  200 ticks; Go allocates 298 times in the whole run. Six of the fourteen
+  languages are collected and none of them is being asked to collect, which is
+  a limitation of the workload that §11 now states with numbers instead of
+  leaving implied.
 - **Class R does not compare languages.** On raylib, four compiled languages
   land within **10 %** of each other. What matters is the pixel format.
 - **The GIL does not cost scaling, it costs runtime.** CPython 3.12 with 16
@@ -1012,6 +1020,70 @@ there only to give the speedups a baseline.
 
 ## 8. SIMD and hand-written assembly (class V)
 
+### Managed runtimes reach the vector unit — one of them all the way
+
+Class V was three languages using intrinsics named for one instruction set.
+Java and C# reach it a different way: a portable vector type, no instruction
+set in the source, the width resolved at run time. 256², 16 384 agents,
+`deferred`, 200 ticks after 100 of warm-up; the diffusion column is the one to
+read, because the agent pass is identical in all of them and dilutes the
+difference.
+
+| target | vector | ms/tick | diffuse ms | stencil speed-up |
+|---|---|---:|---:|---:|
+| C, gcc `-O3 -march=native` | — | 0.2645 | 12.86 | — |
+| C, `--simd` | AVX-512 intrinsics | 0.2057 | **2.98** | **4.3×** |
+| Java, C2 | — | 0.2614 | 14.19 | — |
+| **Java, `--simd`** | **Vector API, 512-bit** | **0.2027** | **3.95** | **3.6×** |
+| C#, Native AOT | — | 0.3160 | 20.04 | — |
+| C#, `--simd`, AOT + `IlcInstructionSet=native` | `Vector512<float>` | 0.2556 | 7.81 | 2.6× |
+| C#, `--simd`, JIT | `Vector512<float>` | 0.2522 | 7.78 | 2.6× |
+| C#, `--simd-portable` | `Vector<float>`, 256-bit | 0.2889 | 14.31 | 1.4× |
+
+Every row above, in both update modes, produces the same hashes as the scalar
+reference — three languages and four vector widths, `0xCEC6D21A` in `serial`
+and `0x5673B1D9` in `deferred`. SPEC-1 §8.1 is why: the stencil does no
+cross-lane work, so each lane performs exactly the scalar computation for its
+own cell in the same order.
+
+**Java's Vector API matches the intrinsics.** 3.95 ms of diffusion against C's
+2.98, and on total time it actually wins — 0.2027 against 0.2057 ms/tick. A
+portable vector type with no instruction set named in the source, running on a
+JIT, lands within a few per cent of hand-written AVX-512. That is the single
+most surprising number in this document.
+
+**.NET's portable `Vector<T>` will not use AVX-512.** On this machine
+`Vector512.IsHardwareAccelerated` and `Avx512F.IsSupported` are both true and
+`Vector<float>.Count` is 8 — 256 bits.
+`DOTNET_PreferredVectorBitWidth=512` does not change it. Naming
+`Vector512<float>` explicitly does, and is worth 1.8× on the stencil. Java's
+`SPECIES_PREFERRED` has no such reservation and takes the full width.
+
+### Ahead-of-time compilation loses the vector unit, and it is one flag
+
+The §6 finding was that Native AOT matches the JIT. On vector code, by
+default, it does not — and the reason is not the compiler quality:
+
+| C# configuration | `Vector<float>.Count` | diffuse ms |
+|---|---:|---:|
+| JIT | 8 (256-bit) | 7.78 with `Vector512` |
+| Native AOT, default | **4 (128-bit)** | 14.31 |
+| Native AOT, `IlcInstructionSet=native` | 16 (512-bit) | 7.81 |
+
+**Native AOT compiles for the x64 baseline.** The JIT knows which CPU it is
+running on; the AOT compiler is told at publish time, and by default it is told
+"any x64", which means SSE2. `Vector512.IsHardwareAccelerated` is then *false*
+in a binary running on a machine that has AVX-512.
+
+`-p:IlcInstructionSet=native` fixes it and closes the gap to 0.4 %. It also
+helps the scalar path — 24.73 ms of diffusion becomes 20.04 — because the
+baseline was costing the ordinary code too. The trade is a binary that no
+longer runs anywhere, which is exactly the trade a JIT does not have to make.
+So §6's answer needs a qualifier: ahead-of-time compilation matches the JIT
+*once someone tells it what it is compiling for*, and the default does not.
+
+
+
 Explicit intrinsics for the diffusion pass, `--simd`, `small`/300. The agent
 pass stays scalar: several agents per vector routinely deposit into the same
 cell, which would need conflict resolution — and that really would be tier C.
@@ -1301,6 +1373,40 @@ place is itself a data point about C ABIs.
 ---
 
 ## 11. Footprint
+
+### No garbage collector in this benchmark does anything
+
+Six of the fourteen languages are collected, and this document said nothing
+about whether that mattered. It does not, and that is worth establishing with
+numbers rather than leaving as an assumption.
+[`bench/gc-stats.sh`](../bench/gc-stats.sh), `tiny`, 200 ticks after 20 of
+warm-up:
+
+| runtime | collections | GC time | allocated over the whole run |
+|---|---:|---:|---:|
+| **Java** | **0** | 0 ms | — |
+| Go | 1 | 0.53 ms | 5.2 MiB, 298 mallocs |
+| C# | 1 gen0 / 1 gen1 / 1 gen2 | — | 4.7 MiB |
+| Haskell | — | 1 ms of 254 | 7.8 MiB |
+| OCaml | 7 minor, 2 major | — | 12.6 MiB of minor words |
+
+**The JVM never collects.** Go allocates 298 times in two hundred ticks, which
+is startup and nothing else. The reason is structural: the simulation
+allocates its grids and agent arrays once and writes into them for the rest of
+the run, which is what SPEC-1 asks for and what every port does.
+
+So the ranking in §2 is a ranking of these runtimes with their collectors
+switched off in all but name. Allocation rate, pause distribution and the
+throughput cost of a write barrier are among the largest differences between a
+managed runtime and C, and **this benchmark exercises none of them.** That is a
+limitation of the workload, not a property of the languages, and it should be
+read into every row where a collected language appears.
+
+It also explains a result that would otherwise be surprising: Java at 1.35× and
+C# at 1.50× in §2 are managed runtimes performing like compiled ones, on the
+one workload where the managed part is free.
+
+
 
 | Language | Binary KiB (stripped) | RSS MiB |
 |---|---:|---:|

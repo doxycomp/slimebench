@@ -128,6 +128,20 @@ let () =
     close_out oc
   end;
 
+  (* What the collector did, under SLIMEBENCH_GC_STATS=1. quick_stat is the
+     cheap one: it reads counters the runtime already maintains rather than
+     walking the heap. *)
+  (match Sys.getenv_opt "SLIMEBENCH_GC_STATS" with
+   | Some "1" ->
+     let g = Gc.quick_stat () in
+     Printf.eprintf
+       "gc_stats minor_words=%.0f minor_collections=%d major_collections=%d \
+        heap_mib=%.1f ticks=%d\n"
+       g.Gc.minor_words g.Gc.minor_collections g.Gc.major_collections
+       (float_of_int (g.Gc.heap_words * (Sys.word_size / 8)) /. 1048576.0)
+       c.ticks
+   | _ -> ());
+
   let variant = if c.strict then "strict-f32" else "f64" in
   if !want_json then begin
     let k = Array.length tick_ms in
