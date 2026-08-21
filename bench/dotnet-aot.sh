@@ -18,6 +18,8 @@
 #   A  steady state       all four, plus C and Java for scale
 #   B  the ramp           per-tick from cold; aot is the flat control
 #   C  what it costs      published size and process start-up
+#   D  branchy code       the same question on the half of the tick that has
+#                         data-dependent branches in it
 #
 # usage: bench/dotnet-aot.sh [outfile]
 set -u
@@ -105,5 +107,37 @@ for p in jit tier1 r2r aot; do
   printf '%-12s %10s %12s\n' "$p" "$sz" \
     "$(awk -v n="$((t1 - t0))" 'BEGIN{printf "%.1f", n / 5 / 1000000}')"
 done
+echo
+
+# ---- D. does the parity survive a branchy loop? --------------------------
+echo "=== D. straight-line code against branchy code"
+echo "   The stencil is nine loads and ten arithmetic operations with no"
+echo "   branch in it. The agent pass makes a data-dependent four-way turn"
+echo "   decision per agent per tick, which is where profile-guided"
+echo "   optimisation should have something to work with. The two are timed"
+echo "   separately by every port, so the question needs no new workload."
+echo
+BS=impl/c/build/gcc-o2-bstats/slimebench-headless
+if [ ! -x "$BS" ]; then
+  ( cd impl/c && make -s SB_BRANCH_STATS=1 CC=gcc PROFILE=o2 headless ) >/dev/null 2>&1
+fi
+if [ -x "$BS" ]; then
+  echo "   how the turn decision actually splits (the reference; every port is"
+  echo "   bit-identical, so this is a property of the simulation):"
+  "$BS" --preset tiny --ticks 200 --update deferred --json 2>&1 >/dev/null     | grep branch_stats | sed 's/^/     /'
+  echo
+fi
+BIG="--preset tiny --agents 262144 --ticks 200 --warmup 100 --update deferred"
+printf '  %-24s %12s %12s\n' configuration "agents ms" "diffuse ms"
+for p in tier1 aot aot-native; do
+  [ -x "impl/csharp/build/$p/slimebench" ] || continue
+  "impl/csharp/build/$p/slimebench" $BIG --json 2>/dev/null | grep -m1 '^{'     | P="$p" python3 -c '
+import json, os, sys
+d = json.load(sys.stdin)
+print("  %-24s %12.2f %12.2f" % (os.environ["P"], d["ms_agents"], d["ms_diffuse"]))'
+done
+echo
+echo "   If ahead-of-time compilation only kept up on straight-line code, the"
+echo "   agents column is where it would show. It does not."
 } | tee "$OUT"
 echo "wrote $OUT" >&2

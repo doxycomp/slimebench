@@ -37,6 +37,25 @@ static inline uint32_t f32_to_bits(float f) {
 
 /* ---- setup -------------------------------------------------------------- */
 
+#if defined(SB_BRANCH_STATS) && SB_BRANCH_STATS
+#include <stdio.h>
+/* Storage and report for the counters declared in sb_agent.h; see the comment
+   there for why they are compiled out by default. */
+uint64_t sb_branch_tally[4];
+
+void sb_branch_report(void) {
+    static const char *name[4] = {"straight", "dead-end", "turn-left", "turn-right"};
+    uint64_t total = 0;
+    for (int i = 0; i < 4; i++) total += sb_branch_tally[i];
+    if (total == 0) return;
+    fprintf(stderr, "branch_stats total=%llu", (unsigned long long)total);
+    for (int i = 0; i < 4; i++)
+        fprintf(stderr, " %s=%.2f%%", name[i],
+                100.0 * (double)sb_branch_tally[i] / (double)total);
+    fprintf(stderr, "\n");
+}
+#endif
+
 void sb_config_defaults(sb_config *c) {
     memset(c, 0, sizeof *c);
     c->width = 1024;

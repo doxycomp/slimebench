@@ -256,6 +256,12 @@ bench/dotnet-aot.sh "$OUT/S-dotnet-aot.txt" || true
 phase "garbage collectors: is any of them working?"
 bench/gc-stats.sh "$OUT/S-gc-stats.txt" || true
 
+# Java and C# both stop scaling before 32 threads and section 5 attributed it
+# to the barrier. All four class P languages can now report their own
+# work/barrier split, which is what settles it -- differently for each of them.
+phase "class P, where the managed runtimes lose it"
+bench/barriers.sh "$OUT/P-barriers.txt" || true
+
 # ---- 5. class G ----------------------------------------------------------
 phase "class G, every preset"
 : > "$OUT/H-gpu.jsonl"

@@ -58,6 +58,13 @@ STD      := -std=c11
 # sb_barrier.h needs for FUTEX_WAIT. Narrower than _GNU_SOURCE.
 DEFS     := -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE
 CFLAGS   := $(STD) $(DEFS) $(WARN) $(OPTFLAGS) $(FPFLAGS) $(EXTRA_CFLAGS)
+# SB_BRANCH_STATS=1 tallies the four outcomes of the agent pass's turn
+# decision. Off by default and compiled out entirely: an unconditional
+# increment in the hottest loop would measure itself.
+ifeq ($(SB_BRANCH_STATS),1)
+  CFLAGS += -DSB_BRANCH_STATS=1
+endif
+
 ifeq ($(ASM),1)
   CFLAGS += -DSB_HAVE_ASM=1
 endif
@@ -73,7 +80,10 @@ LDLIBS   := -lm -lpthread
 ASM ?= 0
 
 CCNAME   := $(notdir $(CC))
-BUILDDIR := build/$(CCNAME)-$(PROFILE)$(if $(filter 1,$(ASM)),-asm,)
+# The instrumented build gets its own directory for the same reason the ASM
+# one does: make does not track CFLAGS, so sharing a directory would let a
+# stale instrumented object file into a measured binary. It did, once.
+BUILDDIR := build/$(CCNAME)-$(PROFILE)$(if $(filter 1,$(ASM)),-asm,)$(if $(filter 1,$(SB_BRANCH_STATS)),-bstats,)
 
 CORE_SRC := sb_core.c sb_cli.c sb_parallel.c sb_simd.c sb_asm.c
 CORE_OBJ := $(addprefix $(BUILDDIR)/,$(CORE_SRC:.c=.o))
