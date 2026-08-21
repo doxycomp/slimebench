@@ -1,0 +1,21 @@
+# The build context is the repo. These are either large, machine-specific, or
+# regenerated inside the image -- and a stale build tree copied in is the
+# failure this project keeps finding.
+.git
+.github
+results
+**/build
+**/target
+**/obj
+**/bin/Release
+**/.build*
+**/.lake
+**/dist-newstyle
+**/node_modules
+**/__pycache__
+**/*.o
+**/*.hi
+**/*.cmi
+**/*.cmx
+**/*.mod
+docs/charts

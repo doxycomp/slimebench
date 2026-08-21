@@ -187,3 +187,34 @@ jobs:
           n=$(grep -c 'depends on axioms' build.log)
           echo "checked $n theorems"
           test "$n" -ge 6
+
+  container:
+    name: container builds and conforms
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # A Dockerfile nobody builds is a Dockerfile that does not work. This
+      # job exists so the reproducibility story is verified rather than
+      # written down: the image is built from scratch and then made to run the
+      # conformance suite inside itself.
+      #
+      # The `core` target only. `full` adds GHC, Swift and Lean, which are
+      # twelve gigabytes between them and do not fit a runner's disk; the
+      # Dockerfile says so at the top.
+      - name: free some disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc                       /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          df -h /
+
+      - name: build the core image
+        run: docker build --target core -t slimebench:core .
+
+      # The gate, not a smoke test: twelve languages agreeing bit for bit
+      # inside a machine built from a Dockerfile is the claim the image makes.
+      - name: conformance inside the image
+        run: docker run --rm slimebench:core bench/run.py conformance
+
+      - name: what the image can and cannot do
+        run: docker run --rm slimebench:core bench/preflight.sh || true
+
