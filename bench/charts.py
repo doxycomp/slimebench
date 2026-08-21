@@ -27,7 +27,7 @@ OUT = ROOT / "docs" / "charts"
 # same machine state as the tables in docs/RESULTS.md, or a reader comparing a
 # chart against a table is comparing two different afternoons. Override with
 #   bench/charts.py results/run-YYYYmmdd-HHMM
-RESULTS = ROOT / "results" / "run-20260820-0330"
+RESULTS = ROOT / "results" / "run-20260821-1113"
 if len(sys.argv) > 1:
     RESULTS = pathlib.Path(sys.argv[1])
 
@@ -275,7 +275,10 @@ def chart_languages() -> None:
         name = r["lang"]
         qual = []
         # Skip the compiler when it just repeats the language ("Perl perl").
-        generic_cc = {"node", "cargo", "perl", "python3", "ghc", "nvcc", "gcc"}
+        # Compilers that carry no information beyond the language name.
+        generic_cc = {"node", "cargo", "perl", "python3", "ghc", "nvcc", "gcc",
+                      "ocamlopt", "javac", "dotnet", "gfortran", "numba",
+                      "lake", "swift"}
         if lang_count[name] > 1 and r["cc"] not in generic_cc | {"gcc"}:
             qual.append(r["cc"])
         elif lang_count[name] > 1 and r["cc"] == "gcc":
@@ -285,8 +288,17 @@ def chart_languages() -> None:
             qual.append(v)
         elif r["backend"] not in ("headless", "node"):
             qual.append(r["backend"])
-        if qual:
-            name += " " + " ".join(qual)
+        # De-duplicate: the numba target's compiler *and* variant are both
+        # "numba", which produced "Python numba numba". Drop repeats and
+        # anything that just echoes the language.
+        seen, uniq = {name.lower()}, []
+        for q in qual:
+            if q.lower() in seen:
+                continue
+            seen.add(q.lower())
+            uniq.append(q)
+        if uniq:
+            name += " " + " ".join(uniq)
         tier = r.get("conformance_class", "A")
         bars.append(Bar(name, r["ms_per_tick_median"],
                         PALETTE.get(r["target"].split("-")[0], ACCENT),

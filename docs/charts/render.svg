@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 446" width="760" height="446" role="img" aria-label="Class R: the pixel format decides, not the language">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 206" width="760" height="206" role="img" aria-label="Class R: the pixel format decides, not the language">
 
   <style>
     .bg    { fill: none; }
@@ -20,54 +20,28 @@
 
 <text x="16" y="22" class="ttl">Class R: the pixel format decides, not the language</text>
 <text x="16" y="39" class="sub">1024x1024, --freeze-sim, RTX 5080 via Mesa D3D12. Log scale.</text>
-<line x1="253.7" y1="44" x2="253.7" y2="416" class="grid"/>
-<text x="253.7" y="430" class="lbl-s" text-anchor="middle">2</text>
-<line x1="343.9" y1="44" x2="343.9" y2="416" class="grid"/>
-<text x="343.9" y="430" class="lbl-s" text-anchor="middle">5</text>
-<line x1="412.1" y1="44" x2="412.1" y2="416" class="grid"/>
-<text x="412.1" y="430" class="lbl-s" text-anchor="middle">10</text>
-<line x1="480.3" y1="44" x2="480.3" y2="416" class="grid"/>
-<text x="480.3" y="430" class="lbl-s" text-anchor="middle">20</text>
-<line x1="570.4" y1="44" x2="570.4" y2="416" class="grid"/>
-<text x="570.4" y="430" class="lbl-s" text-anchor="middle">50</text>
-<line x1="638.6" y1="44" x2="638.6" y2="416" class="grid"/>
-<text x="638.6" y="430" class="lbl-s" text-anchor="middle">100</text>
-<text x="430" y="442" class="lbl-s" text-anchor="middle">ms per frame (log)</text>
-<text x="180" y="69" class="lbl" text-anchor="end">c sdl2</text>
-<rect x="190" y="52" width="134.1" height="24" rx="2" fill="#4c78a8"/>
-<text x="332.1" y="69" class="lbl-s">4.09</text>
-<text x="180" y="99" class="lbl" text-anchor="end">c raylib</text>
-<rect x="190" y="82" width="55.7" height="24" rx="2" fill="#4c78a8"/>
-<text x="253.7" y="99" class="lbl-s">1.84</text>
-<text x="180" y="129" class="lbl" text-anchor="end">cpp sdl2</text>
-<rect x="190" y="112" width="136.1" height="24" rx="2" fill="#f58518"/>
-<text x="334.1" y="129" class="lbl-s">4.18</text>
-<text x="180" y="159" class="lbl" text-anchor="end">cpp raylib</text>
-<rect x="190" y="142" width="54.7" height="24" rx="2" fill="#f58518"/>
-<text x="252.7" y="159" class="lbl-s">1.83</text>
-<text x="180" y="189" class="lbl" text-anchor="end">haskell sdl2</text>
-<rect x="190" y="172" width="131.8" height="24" rx="2" fill="#b279a2"/>
-<text x="329.8" y="189" class="lbl-s">3.99</text>
-<text x="180" y="219" class="lbl" text-anchor="end">haskell raylib</text>
-<rect x="190" y="202" width="54.4" height="24" rx="2" fill="#b279a2"/>
-<text x="252.4" y="219" class="lbl-s">1.82</text>
-<text x="180" y="249" class="lbl" text-anchor="end">rust sdl2</text>
-<rect x="190" y="232" width="130.7" height="24" rx="2" fill="#54a24b"/>
-<text x="328.7" y="249" class="lbl-s">3.95</text>
-<text x="180" y="279" class="lbl" text-anchor="end">rust raylib</text>
-<rect x="190" y="262" width="46.3" height="24" rx="2" fill="#54a24b"/>
-<text x="244.3" y="279" class="lbl-s">1.68</text>
-<text x="180" y="309" class="lbl" text-anchor="end">python pygame</text>
-<rect x="190" y="292" width="159.5" height="24" rx="2" fill="#72b7b2"/>
-<text x="357.5" y="309" class="lbl-s">5.30</text>
-<text x="180" y="339" class="lbl" text-anchor="end">python raylib</text>
-<rect x="190" y="322" width="138.2" height="24" rx="2" fill="#72b7b2"/>
-<text x="336.2" y="339" class="lbl-s">4.26</text>
-<text x="180" y="369" class="lbl" text-anchor="end">perl sdl2</text>
-<rect x="190" y="352" width="466.2" height="24" rx="2" fill="#eeca3b"/>
-<text x="664.2" y="369" class="lbl-s">120</text>
-<text x="180" y="399" class="lbl" text-anchor="end">perl raylib</text>
-<rect x="190" y="382" width="420.5" height="24" rx="2" fill="#eeca3b"/>
-<text x="618.5" y="399" class="lbl-s">75</text>
-<line x1="190" y1="44" x2="190" y2="416" class="axis"/>
+<line x1="243.4" y1="44" x2="243.4" y2="176" class="grid"/>
+<text x="243.4" y="190" class="lbl-s" text-anchor="middle">5</text>
+<line x1="331.7" y1="44" x2="331.7" y2="176" class="grid"/>
+<text x="331.7" y="190" class="lbl-s" text-anchor="middle">10</text>
+<line x1="419.9" y1="44" x2="419.9" y2="176" class="grid"/>
+<text x="419.9" y="190" class="lbl-s" text-anchor="middle">20</text>
+<line x1="536.5" y1="44" x2="536.5" y2="176" class="grid"/>
+<text x="536.5" y="190" class="lbl-s" text-anchor="middle">50</text>
+<line x1="624.8" y1="44" x2="624.8" y2="176" class="grid"/>
+<text x="624.8" y="190" class="lbl-s" text-anchor="middle">100</text>
+<text x="430" y="202" class="lbl-s" text-anchor="middle">ms per frame (log)</text>
+<text x="180" y="69" class="lbl" text-anchor="end">python pygame</text>
+<rect x="190" y="52" width="82.4" height="24" rx="2" fill="#72b7b2"/>
+<text x="280.4" y="69" class="lbl-s">6.28</text>
+<text x="180" y="99" class="lbl" text-anchor="end">python raylib</text>
+<rect x="190" y="82" width="59.8" height="24" rx="2" fill="#72b7b2"/>
+<text x="257.8" y="99" class="lbl-s">5.26</text>
+<text x="180" y="129" class="lbl" text-anchor="end">perl sdl2</text>
+<rect x="190" y="112" width="462.2" height="24" rx="2" fill="#eeca3b"/>
+<text x="660.2" y="129" class="lbl-s">124</text>
+<text x="180" y="159" class="lbl" text-anchor="end">perl raylib</text>
+<rect x="190" y="142" width="408.7" height="24" rx="2" fill="#eeca3b"/>
+<text x="606.7" y="159" class="lbl-s">81</text>
+<line x1="190" y1="44" x2="190" y2="176" class="axis"/>
 </svg>

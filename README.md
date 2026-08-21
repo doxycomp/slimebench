@@ -24,6 +24,10 @@ backends and compilers.
 | Go | ✅ | ✅ | — | — | — | tier A |
 | Swift | ✅ | ✅ | — | — | — | tier A |
 | Lean 4 | ✅ | — | — | — | — | tier A |
+| Java | ✅ | ✅ | — | — | — | tier A |
+| C# / .NET | ✅ | ✅ | — | — | — | tier A, 4 build strategies |
+| OCaml | ✅ | — | — | — | — | tier A, B with `--f64-intermediates` |
+| Fortran | ✅ | — | — | — | — | tier A |
 | TypeScript / Node | ✅ | ✅ | — | — | — | tier A |
 | TypeScript / Canvas | — | — | ✅ browser | — | sliders | tier A |
 | Python / numpy | ✅ | ✅ | ✅ pygame | ✅ | — | tier A, `deferred` only |
@@ -34,12 +38,17 @@ backends and compilers.
 Plus two GPU hosts that are not languages of their own: CUDA and GLSL compute
 (the latter driven from C and from Python, out of the same shader source).
 
-**All ten languages pass `bench/run.py conformance`.** Eight of them are
-bit-exact against the C reference on both the grid *and* the agent checksum,
-across `micro`/`tiny`/`small` × `serial`/`deferred` × tick counts
-{1, 10, 100, 1000}. The two interpreted outliers reach bit-exactness with
-`--strict-f32` — as does Python without any flag once the same loops go
-through numba, which is a finding in itself.
+Every number in [docs/RESULTS.md](docs/RESULTS.md) comes from one series on one
+machine in one sitting. Numbers from two series are not comparable, and the
+document does not mix them.
+
+**All fourteen languages pass `bench/run.py conformance`.** Most are bit-exact
+against the C reference on both the grid *and* the agent checksum, across
+`micro`/`tiny`/`small` × `serial`/`deferred` × tick counts {1, 10, 100, 1000},
+plus one case built to catch a fused multiply-add. Perl and pure Python reach
+bit-exactness with `--strict-f32`; OCaml is exact by default and offers the
+inexact mode as a measurement. Python also reaches tier A with no flag at all
+once the same loops go through numba, which is a finding in itself.
 
 Measurements: [docs/RESULTS.md](docs/RESULTS.md).
 
@@ -169,6 +178,18 @@ The same loops interpreted and JIT-compiled, plus what `--fastmath` breaks:
 bench/numba-jit.sh results/S-numba-jit.txt
 ```
 
+The JVM's warm-up ramp, and its interpreter against CPython's:
+
+```bash
+bench/jvm-warmup.sh results/S-jvm-warmup.txt
+```
+
+The same C# source through a JIT and ahead of time:
+
+```bash
+bench/dotnet-aot.sh results/S-dotnet-aot.txt
+```
+
 ## The interesting details
 
 - **Why bit-exactness is possible at all.** `sin`/`cos` are not bit-identical
@@ -230,6 +251,28 @@ bench/numba-jit.sh results/S-numba-jit.txt
   because agent positions are exact by construction and only move once a low
   bit flips a comparison. A gate that hashed only the agents would have
   certified a fast-math build. [docs/RESULTS.md §2](docs/RESULTS.md#2-language-comparison-class-s).
+- **What ahead-of-time compilation is worth.** .NET compiles the same source
+  four ways, two of them on opposite sides of the JIT/AOT line — the only
+  target here that can be asked. Native AOT lands **within 3 %** of the
+  optimising JIT running with a full run's profile behind it, starts seven
+  times faster, and has no ramp: 2.0× from first tick to best, where the JVM's
+  is 26.3×. [docs/RESULTS.md §6](docs/RESULTS.md#6-warm-up-and-what-ahead-of-time-compilation-is-worth).
+- **That "interpreted" is not one performance class.** The JVM can be pinned to
+  its interpreter with `-Xint`, which makes it directly comparable to CPython
+  on the identical algorithm at the identical conformance tier. **CPython is
+  15.6× slower** — a bigger gap than the one between the JVM's interpreter and
+  optimised C.
+- **What exactness costs where there is no `float32`.** OCaml 4.14 has an
+  unboxed `float array` and no single-precision type, so tier A means rounding
+  through `Int32.bits_of_float`. That is not the boxing it looks like: the
+  allocation count is identical either way, and the assembly shows **22 calls
+  per cell** into the runtime. It costs 5.5×, and Lean — which boxes every
+  element but has a native `Float32` — comes out ahead of it.
+- **A conformance gate that could not fail.** gfortran with
+  `-ffp-contract=fast` emits thirteen f32 FMAs into the agent pass and still
+  matched the reference on every case, because the default `--step` is 1.0 and
+  multiplying by a power of two is exact. No port in this project could have
+  failed for letting its compiler fuse. The suite now has a case that can.
 - **What a proof assistant does with a mutable-array workload.** Lean 4
   lands at 8.9× C, between TypeScript and pure Python — and gets there in
   native `Float32`, because Lean's is IEEE binary32 (verified against

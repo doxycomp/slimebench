@@ -67,6 +67,15 @@ languages. Everything else depends on it.
 - ✅ **Perl** — tier B by default, tier A with `--strict-f32` (surcharge 3.3×).
 - ✅ **Tolerant conformance gate** — metrics instead of hashes, separated into
   conserved quantities (1e-6) and structure-sensitive ones (2e-2).
+- ✅ **Java** — tier A with no `strictfp`; JEP 306 made floating point strict
+  in 17. Three JVM profiles (tiered, C2-only, `-Xint`) and class P over
+  `CyclicBarrier`. The only target whose speed depends on how long it has run.
+- ✅ **C#** — tier A across four compilation strategies from one source: tiered
+  JIT, tier-1 only, ReadyToRun, Native AOT. The AOT build is the reason it is
+  here; nothing else in the project sits on both sides of the JIT/AOT line.
+- ✅ **OCaml** — tier A by default, tier B with `--f64-intermediates`. The
+  mirror image of Lean: unboxed `float array`, no float32 type.
+- ✅ **Fortran** — tier A, and the only port that needed no argument for it.
 - ✅ **Python numba** — tier A with no strictness flag, and tier C on the
   `fastmath` profile from the same source. Deliberately a line-for-line copy of
   the pure-Python target so the pair isolates the interpreter: 341× tier A
@@ -351,6 +360,9 @@ reaches 1.52× at eight tasks, but costs 19 % serially, so the end-to-end win is
 - **CI.** `.github/workflows/` builds the C reference and runs the conformance
   gate on every push; extending it to more toolchains is a matter of runner
   minutes, not design.
+- **The barriers of the two managed runtimes.** Java and C# both peak at or
+  before 16 threads in class P and regress after. Instrumenting their phases
+  the way C and Go already are would say why.
 
 ## Deliberately out of scope
 

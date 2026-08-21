@@ -1,0 +1,31 @@
+# host: Linux 6.18.33.2-microsoft-standard-WSL2  cores: 32
+# dotnet: 10.0.111
+
+=== A. steady state (256x256/16384, 100 ticks, warmup 50, best of 3)
+target                 grid              ms/tick
+csharp jit             0x89CFFAAC         0.3541
+csharp tier1           0x89CFFAAC         0.2951
+csharp r2r             0x89CFFAAC         0.3084
+csharp aot             0x89CFFAAC         0.3027
+java c2                0x89CFFAAC         0.2705
+c gcc-O3-native        0x89CFFAAC         0.2586
+
+=== B. per-tick milliseconds from cold, no warmup
+ticks              jit     tier1       aot
+1-5              1.028     0.998     0.469
+6-10             0.424     0.571     0.370
+11-25            0.376     0.531     0.317
+26-50            0.351     0.497     0.301
+51-100           0.355     0.303     0.301
+101-200          0.449     0.306     0.319
+201-300          0.346     0.298     0.296
+first tick       3.166     2.384     0.571
+best tick        0.328     0.277     0.280
+first/best        9.6x      8.6x      2.0x
+
+=== C. published size and process start-up (--ticks 0)
+profile            size     start ms
+jit                148K         27.7
+tier1              148K         32.5
+r2r                 80M         21.0
+aot                3.8M          3.8
