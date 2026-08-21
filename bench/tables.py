@@ -33,20 +33,25 @@ def load(d: pathlib.Path, name: str) -> list[dict]:
 NOISY_SPREAD = 0.05
 
 
-def spread_cell(r: dict) -> str:
-    """The repetition spread, with a marker when it is large."""
-    s = r.get("ms_total_spread")
+def spread_cell(r: dict, key: str = "ms_total_spread") -> str:
+    """The repetition spread of the column this table ranks by.
+
+    `key` is not decoration: ms_total and ms_per_tick_median differ by an
+    order of magnitude in noise, and quoting the wrong one puts a warning
+    next to a number nobody is reading.
+    """
+    s = r.get(key)
     if s is None:
         return "—"
     return f"{s * 100:.1f}%" + (" ⚠" if s > NOISY_SPREAD else "")
 
 
-def spread_note(rows: list[dict]) -> str:
+def spread_note(rows: list[dict], key: str = "ms_total_spread") -> str:
     """One line under a table, naming the rows that cannot be ranked."""
-    noisy = [r for r in rows if (r.get("ms_total_spread") or 0) > NOISY_SPREAD]
+    noisy = [r for r in rows if (r.get(key) or 0) > NOISY_SPREAD]
     if not noisy:
         return ""
-    worst = max(r["ms_total_spread"] for r in noisy)
+    worst = max(r[key] for r in noisy)
     return (f"\n⚠ {len(noisy)} row(s) varied by more than "
             f"{NOISY_SPREAD * 100:.0f} % between repetitions, up to "
             f"{worst * 100:.0f} %. Differences smaller than a row's own spread "
@@ -114,13 +119,13 @@ def sec_crosslang(d: pathlib.Path) -> str:
                 r.get("conformance_class", "?"),
                 f"{r['ms_per_tick_median']:.3f}",
                 f"{r['ms_per_tick_median'] / fastest:.2f}×",
-                spread_cell(r),
+                spread_cell(r, "ms_per_tick_spread"),
                 str(round(r["max_rss_kb"] / 1024)) if r.get("max_rss_kb") else "—",
             ])
         out.append(f"### §2 class S, `--update {upd}`\n")
         out.append(table(["#", "Language", "Profile", "Tier", "ms/tick", "rel.",
                           "spread", "RSS MiB"], body, "rlrcrrrr"))
-        out.append(spread_note([r for _, r in ranked]))
+        out.append(spread_note([r for _, r in ranked], "ms_per_tick_spread"))
         hashes = {(r["grid_hash"], r["agent_hash"])
                   for r in rows if r.get("conformance_class") == "A"}
         n_a = sum(1 for r in rows if r.get("conformance_class") == "A")

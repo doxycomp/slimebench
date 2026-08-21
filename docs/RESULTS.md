@@ -74,7 +74,13 @@ a minimum on its own invites the mistake this rule was written after: two rows
 differing by less than the run-to-run variation, read as a ranking.
 
 **A gap smaller than a row's own spread is not a ranking.** Rows above 5 %
-carry a marker, in the generated tables and in the run log. The rule lives in
+carry a marker, in the generated tables and in the run log — and each table
+quotes the spread of the column it sorts by. That distinction is not
+pedantry: the first version of this rule measured the spread of the total
+loop time and printed it beside a column ranked on the per-tick median, which
+is an order of magnitude steadier — 0.7 % against 6.7 % over the same five
+runs of the same binary. It marked a quarter of the rows in a series with a
+warning about a number nobody was reading. The rule lives in
 one place, [`bench/run.py`](../bench/run.py), and the standalone scripts under
 [`bench/`](../bench) follow it; the two exceptions are pure Python and Perl,
 where a single repetition is ninety seconds and the ratio being measured is

@@ -421,9 +421,11 @@ def bench_one(t: Target, cc: str, profile: str, a: argparse.Namespace) -> dict:
 
     if a.reps > 1:
         _ms = [p["ms_total"] for p in reps]
-        _sp = (max(_ms) - min(_ms)) / min(_ms) if min(_ms) > 0 else 0.0
+        _pt = [p["ms_per_tick_median"] for p in reps]
+        _sp = (max(_pt) - min(_pt)) / min(_pt) if min(_pt) > 0 else 0.0
         if _sp > NOISY_SPREAD:
-            print(f"   spread {_sp*100:.1f}% -- noisy, see the statistics rule")
+            print(f"   per-tick spread {_sp*100:.1f}% -- noisy, "
+                  f"see the statistics rule")
 
     # THE STATISTICS RULE. One place, one convention, applied everywhere.
     #
@@ -445,8 +447,20 @@ def bench_one(t: Target, cc: str, profile: str, a: argparse.Namespace) -> dict:
     # Median is kept because it is the honest thing to look at when the spread
     # is large -- if best and median disagree by more than the spread, the
     # distribution is not what any single number describes.
+    # Two spreads, because there are two ranking columns and they are not
+    # equally noisy. `ms_total` is one wall-clock measurement of the whole
+    # loop, so a single scheduling hiccup lands in it whole. `ms_per_tick_median`
+    # is the middle of a hundred per-tick measurements, which is why the class
+    # S table ranks on it -- and it is an order of magnitude steadier: 0.7 %
+    # against 6.7 % over the same five runs of the same binary. A table must
+    # quote the spread of the column it sorts by, or the warning describes a
+    # number nobody is reading.
+    def _spread(vs: list[float]) -> float:
+        return (max(vs) - min(vs)) / min(vs) if vs and min(vs) > 0 else 0.0
+
     ms = [p["ms_total"] for p in reps]
-    spread = (max(ms) - min(ms)) / min(ms) if min(ms) > 0 else 0.0
+    per_tick = [p["ms_per_tick_median"] for p in reps]
+    spread = _spread(ms)
     best = min(reps, key=lambda p: p["ms_total"])
     hashes = {(p["grid_hash"], p["agent_hash"]) for p in reps}
     return {
@@ -467,8 +481,12 @@ def bench_one(t: Target, cc: str, profile: str, a: argparse.Namespace) -> dict:
         # (max - min) / min across repetitions; see the statistics rule above.
         "ms_total_spread": round(spread, 4),
         "ms_total_reps": [round(v, 4) for v in ms],
+        "ms_per_tick_spread": round(_spread(per_tick), 4),
+        "ms_per_tick_reps": [round(v, 6) for v in per_tick],
         "ms_agents": best["ms_agents"], "ms_diffuse": best["ms_diffuse"],
-        "ms_per_tick_median": best["ms_per_tick_median"],
+        # Minimum across repetitions, like every other time here; taking
+        # it from whichever rep won on ms_total would mix two rules.
+        "ms_per_tick_median": min(per_tick),
         "ms_per_tick_p99": best["ms_per_tick_p99"],
         "maups": best["maups"], "mcups": best["mcups"],
         "max_rss_kb": min(p["_max_rss_kb"] for p in reps),
