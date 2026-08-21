@@ -49,13 +49,30 @@ case "$CC" in
         -Wno-missing-profile $SRC -o "$OUT/slimebench-headless" -lm -lpthread
     ;;
   clang|clang-*)
+    # llvm-profdata must match the clang that produced the profile, not
+    # whatever comes first on PATH. The raw profile format is versioned and
+    # the tool refuses a mismatch: "raw profile version mismatch: Profile uses
+    # ... version = 9; expected version = 10". That is not hypothetical -- the
+    # Swift toolchain on $PATH ships LLVM 21's llvm-profdata, which shadowed
+    # the system's 18.1.3 during a full run and failed the clang PGO build
+    # while the same command worked in a shell without Swift on PATH.
+    #
+    # So: ask this clang its major version and prefer that toolchain's tool.
+    CLANG_MAJOR=$($CC -dumpversion 2>/dev/null | cut -d. -f1)
     LLVM_BIN=""
-    command -v llvm-profdata >/dev/null 2>&1 || \
-      for d in $(ls -d /usr/lib/llvm-*/bin 2>/dev/null | sort -V -r); do
-        [ -x "$d/llvm-profdata" ] && { LLVM_BIN="$d/"; break; }
-      done
-    [ -n "$LLVM_BIN" ] || command -v llvm-profdata >/dev/null 2>&1 || {
-      echo "error: llvm-profdata not found (apt install llvm)" >&2; exit 3; }
+    for d in "/usr/lib/llvm-$CLANG_MAJOR/bin" $(ls -d /usr/lib/llvm-*/bin 2>/dev/null | sort -V -r); do
+      [ -x "$d/llvm-profdata" ] || continue
+      # A versioned directory is only right if it is the matching one; the
+      # sorted fallback is a last resort and gets checked the same way.
+      LLVM_BIN="$d/"
+      case "$d" in */llvm-$CLANG_MAJOR/bin) break ;; esac
+    done
+    if [ -z "$LLVM_BIN" ] && command -v llvm-profdata >/dev/null 2>&1; then
+      LLVM_BIN=""   # bare name on PATH, and nothing better was found
+    elif [ -z "$LLVM_BIN" ]; then
+      echo "error: llvm-profdata not found (apt install llvm)" >&2; exit 3
+    fi
+    echo "==> [0/3] llvm-profdata: ${LLVM_BIN:-$(command -v llvm-profdata)} (clang $CLANG_MAJOR)"
 
     echo "==> [1/3] instrumented build"
     $CC $COMMON -fprofile-instr-generate $SRC -o "$OUT/train" -lm -lpthread

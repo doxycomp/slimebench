@@ -25,11 +25,6 @@
 
 #include <linux/futex.h>
 #include <pthread.h>
-/* syscall() lives here. It was reaching this file transitively via pthread.h,
- * which held only as long as every build also passed -D_DEFAULT_SOURCE: under
- * strict -D_POSIX_C_SOURCE alone the declaration is hidden, gcc merely warns
- * about the implicit one, and clang 18 refuses. */
-#include <unistd.h>
 #include <sched.h>
 #include <stdatomic.h>
 #include <stdint.h>
