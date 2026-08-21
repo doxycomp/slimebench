@@ -119,6 +119,12 @@ uint32_t sb_dirtable_hash(void);
 
 uint64_t sb_now_ns(void);
 /* Writes W*H bytes of greyscale (SPEC-1 section 11) into `out`. */
+#if defined(SB_BRANCH_STATS) && SB_BRANCH_STATS
+/* Prints how the agent pass's four-way turn decision split, to stderr.
+   Only compiled when the build asked for it -- see sb_agent.h. */
+void sb_branch_report(void);
+#endif
+
 void sb_render_gray(const sb_sim *s, uint8_t *out, float display_max);
 
 #endif /* SB_CORE_H */

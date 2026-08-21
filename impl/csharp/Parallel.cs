@@ -153,8 +153,60 @@ internal sealed class Parallel
 
     // ---- the tick ---------------------------------------------------------
 
+    /// <summary>
+    /// Per-phase work and barrier time, the same shape impl/c, impl/go and
+    /// impl/java report under the same environment variable. Off by default,
+    /// and only worker 0 records — see the Java version for why.
+    /// </summary>
+    private sealed class PhaseStats
+    {
+        public static readonly string[] Names =
+            ["agents", "prefix", "scatter", "deposit", "merge", "diffuse"];
+        public readonly bool On =
+            Environment.GetEnvironmentVariable("SLIMEBENCH_PHASE_STATS") == "1";
+        public readonly long[] Work = new long[6];
+        public readonly long[] Barrier = new long[6];
+        public int Ticks;
+
+        public void Report(int nthreads)
+        {
+            if (!On || Ticks == 0) return;
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            double n = Ticks;
+            long tw = 0, tb = 0, total = 0;
+            for (int i = 0; i < 6; i++) total += Work[i] + Barrier[i];
+            Console.Error.WriteLine("phase breakdown (thread 0), ms/tick:");
+            Console.Error.WriteLine(string.Format(inv, "  {0,-10} {1,8} {2,9} {3,9} {4,7}",
+                "phase", "work", "barrier", "sum", "share"));
+            for (int i = 0; i < 6; i++)
+            {
+                double wms = Sim.ToNs(Work[i]) / 1e6 / n;
+                double bms = Sim.ToNs(Barrier[i]) / 1e6 / n;
+                double share = total > 0 ? 100.0 * (Work[i] + Barrier[i]) / total : 0;
+                Console.Error.WriteLine(string.Format(inv,
+                    "  {0,-10} {1,8:F3} {2,9:F3} {3,9:F3} {4,6:F1}%",
+                    Names[i], wms, bms, wms + bms, share));
+                tw += Work[i];
+                tb += Barrier[i];
+            }
+            double twms = Sim.ToNs(tw) / 1e6 / n, tbms = Sim.ToNs(tb) / 1e6 / n;
+            double pct = (twms + tbms) > 0 ? tbms / (twms + tbms) * 100 : 0;
+            Console.Error.WriteLine(string.Format(inv,
+                "  {0,-10} {1,8:F3} {2,9:F3} {3,9:F3}  barriers are {4:F1}% of the tick",
+                "total", twms, tbms, twms + tbms, pct));
+            Console.Error.WriteLine(string.Format(inv,
+                "  barrier: System.Threading.Barrier, {0} threads", nthreads));
+        }
+    }
+
+    private readonly PhaseStats _stats = new();
+
     private void RunTick(int tid)
     {
+        // The instrumented and uninstrumented paths are separate so the hot
+        // one carries no branch per phase.
+        if (_stats.On && tid == 0) { RunTickInstrumented(); return; }
+
         if (_binned)
         {
             AgentsBinned(tid);
@@ -183,6 +235,46 @@ internal sealed class Parallel
         // between two barriers -- everyone else is parked.
         if (tid == 0) _s.SwapBuffers();
         _bar.SignalAndWait();
+    }
+
+    /// <summary>RunTick for worker 0, with a clock read around every phase and
+    /// every barrier. Same order, same calls.</summary>
+    private void RunTickInstrumented()
+    {
+        const int tid = 0;
+        if (_binned)
+        {
+            Phase(0, () => AgentsBinned(tid));
+            Phase(1, PrefixBinned);
+            Phase(2, () => ScatterBinned(tid));
+            Phase(3, () => DepositBinned(tid));
+            Phase(4, () => _s.MergeRows(Lo(_height, _t, tid), Hi(_height, _t, tid)));
+        }
+        else
+        {
+            Phase(0, () => AgentsPrivate(tid));
+            Phase(4, () => MergePrivate(tid));
+        }
+
+        long a = System.Diagnostics.Stopwatch.GetTimestamp();
+        _s.DiffuseRows(Lo(_height, _t, tid), Hi(_height, _t, tid));
+        _stats.Work[5] += System.Diagnostics.Stopwatch.GetTimestamp() - a;
+        _bar.SignalAndWait();
+
+        _s.SwapBuffers();
+        _bar.SignalAndWait();
+        _stats.Ticks++;
+    }
+
+    private void Phase(int i, Action f)
+    {
+        long a = System.Diagnostics.Stopwatch.GetTimestamp();
+        f();
+        long b = System.Diagnostics.Stopwatch.GetTimestamp();
+        _bar.SignalAndWait();
+        long c = System.Diagnostics.Stopwatch.GetTimestamp();
+        _stats.Work[i] += b - a;
+        _stats.Barrier[i] += c - b;
     }
 
     public static Result Run(Sim s, int warmup, int ticks, bool logTicks)
@@ -227,6 +319,7 @@ internal sealed class Parallel
         r.MsTotal = Sim.ToNs(System.Diagnostics.Stopwatch.GetTimestamp() - start) / 1e6;
 
         foreach (var w in workers) w.Join();
+        p._stats.Report(t);
         return r;
     }
 }

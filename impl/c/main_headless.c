@@ -82,5 +82,8 @@ int main(int argc, char **argv) {
     free(tick_ms);
     sb_pool_destroy(pool);
     sb_sim_free(&sim);
+#if defined(SB_BRANCH_STATS) && SB_BRANCH_STATS
+    sb_branch_report();
+#endif
     return 0;
 }

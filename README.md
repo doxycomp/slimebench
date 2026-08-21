@@ -272,6 +272,16 @@ bench/dotnet-aot.sh results/S-dotnet-aot.txt
   asked to collect — so the class S ranking is a ranking of managed runtimes
   with the managed part free. Measured, not assumed:
   [bench/gc-stats.sh](bench/gc-stats.sh).
+- **Two ways to fail at parallelism.** Java and C# both stop scaling before
+  32 threads, and for opposite reasons: C#'s compute scales better than C's
+  while `System.Threading.Barrier` costs ~2.5 ms per crossing, and Java's
+  barrier is nearly fine while its per-thread work stops halving after eight
+  threads. All four class P languages now report their own work/barrier split:
+  [bench/barriers.sh](bench/barriers.sh).
+- **What one FFI call is worth in OCaml.** The language has no `float32`, so
+  conformance tier A means rounding through `Int32.bits_of_float` — two
+  runtime calls where the hardware needs two instructions. Replacing them with
+  one C stub is **1.99×**, bit-identical, and moves OCaml from 9.5× C to 4.7×.
 - **What ahead-of-time compilation is worth.** .NET compiles the same source
   four ways, two of them on opposite sides of the JIT/AOT line — the only
   target here that can be asked. Native AOT lands **within 3 %** of the

@@ -20,28 +20,28 @@
 
 <text x="16" y="22" class="ttl">Class R: the pixel format decides, not the language</text>
 <text x="16" y="39" class="sub">1024x1024, --freeze-sim, RTX 5080 via Mesa D3D12. Log scale.</text>
-<line x1="254.7" y1="44" x2="254.7" y2="176" class="grid"/>
-<text x="254.7" y="190" class="lbl-s" text-anchor="middle">5</text>
-<line x1="341.4" y1="44" x2="341.4" y2="176" class="grid"/>
-<text x="341.4" y="190" class="lbl-s" text-anchor="middle">10</text>
-<line x1="428.1" y1="44" x2="428.1" y2="176" class="grid"/>
-<text x="428.1" y="190" class="lbl-s" text-anchor="middle">20</text>
-<line x1="542.6" y1="44" x2="542.6" y2="176" class="grid"/>
-<text x="542.6" y="190" class="lbl-s" text-anchor="middle">50</text>
-<line x1="629.3" y1="44" x2="629.3" y2="176" class="grid"/>
-<text x="629.3" y="190" class="lbl-s" text-anchor="middle">100</text>
+<line x1="238.3" y1="44" x2="238.3" y2="176" class="grid"/>
+<text x="238.3" y="190" class="lbl-s" text-anchor="middle">5</text>
+<line x1="327.2" y1="44" x2="327.2" y2="176" class="grid"/>
+<text x="327.2" y="190" class="lbl-s" text-anchor="middle">10</text>
+<line x1="416.1" y1="44" x2="416.1" y2="176" class="grid"/>
+<text x="416.1" y="190" class="lbl-s" text-anchor="middle">20</text>
+<line x1="533.6" y1="44" x2="533.6" y2="176" class="grid"/>
+<text x="533.6" y="190" class="lbl-s" text-anchor="middle">50</text>
+<line x1="622.5" y1="44" x2="622.5" y2="176" class="grid"/>
+<text x="622.5" y="190" class="lbl-s" text-anchor="middle">100</text>
 <text x="430" y="202" class="lbl-s" text-anchor="middle">ms per frame (log)</text>
 <text x="180" y="69" class="lbl" text-anchor="end">python pygame</text>
-<rect x="190" y="52" width="78.2" height="24" rx="2" fill="#72b7b2"/>
-<text x="276.2" y="69" class="lbl-s">5.57</text>
+<rect x="190" y="52" width="80.7" height="24" rx="2" fill="#72b7b2"/>
+<text x="278.7" y="69" class="lbl-s">6.44</text>
 <text x="180" y="99" class="lbl" text-anchor="end">python raylib</text>
-<rect x="190" y="82" width="58.8" height="24" rx="2" fill="#72b7b2"/>
-<text x="256.8" y="99" class="lbl-s">4.77</text>
+<rect x="190" y="82" width="60.3" height="24" rx="2" fill="#72b7b2"/>
+<text x="258.3" y="99" class="lbl-s">5.49</text>
 <text x="180" y="129" class="lbl" text-anchor="end">perl sdl2</text>
-<rect x="190" y="112" width="462.5" height="24" rx="2" fill="#eeca3b"/>
-<text x="660.5" y="129" class="lbl-s">120</text>
+<rect x="190" y="112" width="462.1" height="24" rx="2" fill="#eeca3b"/>
+<text x="660.1" y="129" class="lbl-s">126</text>
 <text x="180" y="159" class="lbl" text-anchor="end">perl raylib</text>
-<rect x="190" y="142" width="407.2" height="24" rx="2" fill="#eeca3b"/>
-<text x="605.2" y="159" class="lbl-s">77</text>
+<rect x="190" y="142" width="404.9" height="24" rx="2" fill="#eeca3b"/>
+<text x="602.9" y="159" class="lbl-s">81</text>
 <line x1="190" y1="44" x2="190" y2="176" class="axis"/>
 </svg>

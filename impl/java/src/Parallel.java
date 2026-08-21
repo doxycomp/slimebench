@@ -96,6 +96,53 @@ final class Parallel {
 
     private int bucketOf(int idx) { return ybucket[idx >>> log2w]; }
 
+    /**
+     * Per-phase work and barrier time, the same shape impl/c and impl/go report
+     * under the same environment variable.
+     *
+     * <p>Off by default: two clock reads per phase per tick is twelve extra
+     * reads, small but not nothing, and a measurement run should not pay for
+     * its own instrumentation. Only worker 0 records, as in C — the others
+     * would report the same phases with different waits, and averaging them
+     * would hide exactly the imbalance the numbers are for.</p>
+     */
+    static final class PhaseStats {
+        static final String[] NAMES =
+            {"agents", "prefix", "scatter", "deposit", "merge", "diffuse"};
+        final boolean on = "1".equals(System.getenv("SLIMEBENCH_PHASE_STATS"));
+        final long[] work = new long[6];
+        final long[] barrier = new long[6];
+        int ticks;
+
+        void report(int nthreads) {
+            if (!on || ticks == 0) return;
+            double n = ticks;
+            long tw = 0, tb = 0, total = 0;
+            for (int i = 0; i < 6; i++) total += work[i] + barrier[i];
+            System.err.printf(Locale.ROOT, "phase breakdown (thread 0), ms/tick:%n");
+            System.err.printf(Locale.ROOT, "  %-10s %8s %9s %9s %7s%n",
+                              "phase", "work", "barrier", "sum", "share");
+            for (int i = 0; i < 6; i++) {
+                double wms = work[i] / 1e6 / n, bms = barrier[i] / 1e6 / n;
+                double share = total > 0 ? 100.0 * (work[i] + barrier[i]) / total : 0;
+                System.err.printf(Locale.ROOT, "  %-10s %8.3f %9.3f %9.3f %6.1f%%%n",
+                                  NAMES[i], wms, bms, wms + bms, share);
+                tw += work[i];
+                tb += barrier[i];
+            }
+            double twms = tw / 1e6 / n, tbms = tb / 1e6 / n;
+            double pct = (twms + tbms) > 0 ? tbms / (twms + tbms) * 100 : 0;
+            System.err.printf(Locale.ROOT,
+                "  %-10s %8.3f %9.3f %9.3f  barriers are %.1f%% of the tick%n",
+                "total", twms, tbms, twms + tbms, pct);
+            System.err.printf(Locale.ROOT,
+                "  barrier: java.util.concurrent.CyclicBarrier, %d platform threads%n",
+                nthreads);
+        }
+    }
+
+    private final PhaseStats stats = new PhaseStats();
+
     private void await() {
         try {
             bar.await();
@@ -178,6 +225,9 @@ final class Parallel {
     // ---- the tick ---------------------------------------------------------
 
     private void runTick(int tid) {
+        // The instrumented and uninstrumented paths are separate so the hot
+        // one carries no branch per phase.
+        if (stats.on && tid == 0) { runTickInstrumented(); return; }
         if (binned) {
             agentsBinned(tid);
             await();
@@ -203,6 +253,41 @@ final class Parallel {
         // between two barriers -- everyone else is parked.
         if (tid == 0) s.swapBuffers();
         await();
+    }
+
+    /** runTick for worker 0, with a clock read around every phase and every
+     *  barrier. Same order, same calls. */
+    private void runTickInstrumented() {
+        final int tid = 0;
+        if (binned) {
+            phase(0, () -> agentsBinned(tid));
+            phase(1, this::prefixBinned);
+            phase(2, () -> scatterBinned(tid));
+            phase(3, () -> depositBinned(tid));
+            phase(4, () -> s.mergeRows(lo(height, t, tid), hi(height, t, tid)));
+        } else {
+            phase(0, () -> agentsPrivate(tid));
+            phase(4, () -> mergePrivate(tid));
+        }
+
+        long a = System.nanoTime();
+        s.diffuseRows(lo(height, t, tid), hi(height, t, tid));
+        stats.work[5] += System.nanoTime() - a;
+        await();
+
+        s.swapBuffers();
+        await();
+        stats.ticks++;
+    }
+
+    private void phase(int i, Runnable f) {
+        long a = System.nanoTime();
+        f.run();
+        long b = System.nanoTime();
+        await();
+        long c = System.nanoTime();
+        stats.work[i] += b - a;
+        stats.barrier[i] += c - b;
     }
 
     static Result run(Sim s, int warmup, int ticks, boolean logTicks) {
@@ -248,6 +333,7 @@ final class Parallel {
                 Thread.currentThread().interrupt();
             }
         }
+        p.stats.report(t);
         return r;
     }
 }

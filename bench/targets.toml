@@ -799,6 +799,24 @@ compilers = ["ocamlopt"]
 profiles  = ["default", "unsafe"]
 updates  = ["serial", "deferred"]
 
+# The same port with the f32 rounding going through a one-instruction C stub
+# instead of Int32.float_of_bits (Int32.bits_of_float x). Not a different
+# algorithm and not a different tier -- the same numbers, reached with one
+# runtime call per rounding instead of two. Separate target rather than a
+# profile so conformance verifies it in its own right.
+[[target]]
+id       = "ocaml-cstub"
+lang     = "OCaml"
+backend  = "headless/cstub"
+class    = "S"
+dir      = "impl/ocaml"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["ocamlopt"]
+profiles  = ["cstub", "cstub-unsafe"]
+updates  = ["serial", "deferred"]
+
 # Tier B: the same binary with the f32 rounding switched off, so every
 # intermediate stays f64. Not a fast-math profile -- nothing is reassociated,
 # the arithmetic is simply wider -- so it is a separate target with tier = "B"

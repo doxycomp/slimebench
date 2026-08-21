@@ -57,6 +57,24 @@ static inline float sb_sense(const sb_agent_ctx *k, float x, float y, int d) {
 }
 
 /* Advances agent `i` and returns the cell its deposit belongs in. */
+/* How the four-way turn decision actually splits.
+ *
+ * Compiled out unless SB_BRANCH_STATS=1 is passed to the build, because an
+ * unconditional increment in the hottest loop in the project would measure
+ * itself. With it, `--json` gains nothing and stderr gains one line; see
+ * bench/dotnet-aot.sh, which uses it to say what "branchy" means before
+ * claiming ahead-of-time compilation copes with it.
+ *
+ * Not thread-safe on purpose: the counters are for a single-threaded
+ * characterisation run, and making them atomic would change the loop being
+ * characterised. */
+#if defined(SB_BRANCH_STATS) && SB_BRANCH_STATS
+extern uint64_t sb_branch_tally[4];
+#define SB_BRANCH_TALLY(i) (sb_branch_tally[(i)]++)
+#else
+#define SB_BRANCH_TALLY(i) ((void)0)
+#endif
+
 static inline uint32_t sb_agent_step(const sb_agent_ctx *k, sb_sim *s,
                                      uint32_t i) {
     int d = (int)s->adir[i];
@@ -72,14 +90,18 @@ static inline uint32_t sb_agent_step(const sb_agent_ctx *k, sb_sim *s,
 
     if (fc >= fl && fc >= fr) {
         /* straight on */
+        SB_BRANCH_TALLY(0);
     } else if (fc < fl && fc < fr) {
+        SB_BRANCH_TALLY(1);
         if (sb_xoshiro128pp(&s->arng[(size_t)i * 4]) & 1u)
             d = (d + k->rs) % SB_NDIR;
         else
             d = (d - k->rs + SB_NDIR) % SB_NDIR;
     } else if (fl > fr) {
+        SB_BRANCH_TALLY(2);
         d = (d - k->rs + SB_NDIR) % SB_NDIR;
     } else {
+        SB_BRANCH_TALLY(3);
         d = (d + k->rs) % SB_NDIR;
     }
 
