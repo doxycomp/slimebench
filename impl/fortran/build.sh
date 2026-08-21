@@ -5,6 +5,7 @@
 #   ./build.sh o3            -O3
 #   ./build.sh o3-native     -O3 -march=native
 #   ./build.sh ofast-native  -Ofast -march=native  -- NOT tier A, see below
+#   ./build.sh openmp        -O3 -march=native -fopenmp  -- class P
 #
 # -ffp-contract=off is on every profile except ofast-native, and it is not
 # optional. The Fortran standard lets a processor evaluate an expression any
@@ -28,6 +29,9 @@ case "$PROFILE" in
   o3)            FLAGS+=(-O3) ;;
   o3-native)     FLAGS+=(-O3 -march=native) ;;
   ofast-native)  FLAGS=(-Ofast -march=native) ;;
+  # Class P. The directives are comments without this flag, so `openmp` and
+  # `o3-native` are the same source and must not share a row.
+  openmp)        FLAGS+=(-O3 -march=native -fopenmp) ;;
   *) echo "unknown profile '$PROFILE'" >&2; exit 2 ;;
 esac
 

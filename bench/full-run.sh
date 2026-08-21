@@ -223,6 +223,9 @@ psweep go      medium 100 binned private -- impl/go/build/nobounds/slimebench
 psweep swift   medium 100 binned private -- impl/swift/build/unchecked/slimebench
 psweep java    medium 100 binned private -- impl/java/build/default/slimebench
 psweep csharp  medium 100 binned private -- impl/csharp/build/aot/slimebench
+# Fortran has one strategy, not two: an atomic add, which is bit-exact here
+# because the deposit is a constant. The empty reduction argument is that.
+psweep fortran medium 100 ""              -- impl/fortran/build/openmp/slimebench
 psweep perl    tiny    20 ""              -- perl impl/perl/slimebench.pl
 
 # The free-threading experiment: {GIL, no-GIL} x {threads, processes} x T,

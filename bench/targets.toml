@@ -777,6 +777,28 @@ profiles  = ["o2", "o3", "o3-native", "ofast-native"]
 # -Ofast implies -ffast-math, which reassociates the nine-term stencil sum.
 fastmath_profiles = ["ofast-native"]
 
+# Class P, the way Fortran does it: three directives instead of the C
+# reference's five-phase binned decomposition. It gets to skip that machinery
+# because SPEC-1's deposit is a constant -- every agent landing in a cell adds
+# the same value, so an atomic add is bit-exact whatever the interleaving. The
+# other ten class P ports need a counting sort for the same guarantee.
+#
+# Whether a directive reaches a hand-written decomposition is the question, and
+# the answer is in §5.
+[[target]]
+id       = "fortran-par"
+lang     = "Fortran"
+backend  = "openmp/atomic"
+class    = "P"
+dir      = "impl/fortran"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["gfortran"]
+profiles  = ["openmp"]
+updates  = ["deferred"]
+skip_conformance = true
+
 # ----------------------------------------------------------------------- OCaml
 #
 # The mirror image of the Lean port. OCaml's float array is unboxed, which

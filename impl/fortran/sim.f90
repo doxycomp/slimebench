@@ -212,6 +212,20 @@ contains
     fw = real(s%cfg%width, real32); fh = real(s%cfg%height, real32)
     sdist = s%cfg%sensor_dist; stp = s%cfg%step; dep = s%cfg%deposit
 
+    ! Class P, and the whole of it.
+    !
+    ! Without -fopenmp these lines are comments and this is the serial port;
+    ! with it, one directive. Everything an agent writes except the deposit is
+    ! indexed by the agent -- ax(i), ay(i), adir(i), arng(i*4..i*4+3) -- so
+    ! there is nothing to coordinate there. The grid is read-only in deferred
+    ! mode. Only dep(idx) collides, and only the deposit needs the atomic.
+    !
+    ! `serial` mode is excluded by the caller: it lets an agent see its
+    ! predecessors' deposits within the same tick, which is not
+    ! deterministically parallelisable even in principle (SPEC-1 5.5).
+    !$omp parallel do default(shared) &
+    !$omp   private(i, d, dl, dr, idx, x, y, sx, sy, fl, fc, fr) &
+    !$omp   schedule(static)
     do i = 0, s%cfg%agents - 1
       d = s%adir(i)
       x = s%ax(i)
@@ -252,6 +266,12 @@ contains
       y = wrapf(y + s%sin_t(d) * stp, fh)
       idx = ior(ishft(iand(int(y), ymask), log2w), iand(int(x), xmask))
       if (s%deferred) then
+        ! Bit-exact under any interleaving, and not by luck. SPEC-1's deposit
+        ! is a constant, so a cell's value depends on how many agents landed
+        ! there and not on which ones or in what order: ((g+d)+d)+d is the
+        ! same however the adds are scheduled. That is what lets this be one
+        ! atomic where the other ten class P ports need a counting sort.
+        !$omp atomic
         s%dep(idx) = s%dep(idx) + dep
       else
         s%grid(idx) = s%grid(idx) + dep
@@ -260,16 +280,20 @@ contains
       s%ax(i) = x
       s%ay(i) = y
     end do
+    !$omp end parallel do
   end subroutine agent_pass
 
   subroutine merge_dep(s)
     type(sim_t), intent(inout) :: s
     integer :: i
     if (.not. s%deferred) return
+    ! One cell per iteration, no sharing.
+    !$omp parallel do default(shared) private(i) schedule(static)
     do i = 0, size(s%grid) - 1
       s%grid(i) = s%grid(i) + s%dep(i)
       s%dep(i) = 0.0_real32
     end do
+    !$omp end parallel do
   end subroutine merge_dep
 
   ! SPEC-1 section 5.4. The summation order is normative -- do not reorder,
@@ -283,6 +307,11 @@ contains
     log2w = s%log2w; xmask = s%xmask; ymask = s%ymask
     decay = s%cfg%decay
 
+    ! Output cells are independent, so this one is bit-identical whatever the
+    ! schedule -- the same argument SPEC-1 8.1 makes for the vector kernels.
+    !$omp parallel do default(shared) &
+    !$omp   private(x, y, rowm, row0, rowp, xm, xp, acc) &
+    !$omp   schedule(static)
     do y = 0, h - 1
       rowm = ishft(iand(y - 1, ymask), log2w)
       row0 = ishft(y, log2w)
@@ -302,6 +331,7 @@ contains
         s%scratch(ior(row0, x)) = acc / 12.0_real32 * decay
       end do
     end do
+    !$omp end parallel do
   end subroutine diffuse_pass
 
   ! MOVE_ALLOC transfers the allocation itself, so this is two pointer moves

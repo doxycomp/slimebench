@@ -2,12 +2,14 @@
 program slimebench
   use iso_fortran_env, only: real32, real64, int32, int64, error_unit
   use sim
+!$ use omp_lib, only: omp_set_num_threads, omp_get_max_threads
   implicit none
 
   type(config_t) :: cfg
   type(sim_t) :: s
   logical :: want_json, ok
   character(len=256) :: arg, val, dump_path, why
+  character(len=16) :: variant
   integer :: i, n, t, ios
   integer(int64) :: t0, t1, rate
   real(real64) :: ms_total
@@ -44,7 +46,6 @@ program slimebench
       case ('--seed');   cfg%seed = int_arg(val)
       case ('--threads')
         cfg%threads = int_arg(val)
-        if (cfg%threads > 1) call fail('this target is class S only; --threads must be 1')
       case ('--hash-every');   cfg%hash_every = int_arg(val)
       case ('--sensor-steps'); cfg%sensor_steps = int_arg(val)
       case ('--rot-steps');    cfg%rot_steps = int_arg(val)
@@ -67,6 +68,13 @@ program slimebench
     end select
     i = i + 1
   end do
+
+  ! Class P is deferred only: `serial` lets an agent see its predecessors'
+  ! deposits within the same tick and is not deterministically parallelisable
+  ! even in principle (SPEC-1 5.5).
+  if (cfg%threads > 1 .and. cfg%update /= 'deferred') &
+    call fail('--threads > 1 requires --update deferred (SPEC-1 5.5)')
+!$ if (cfg%threads > 1) call omp_set_num_threads(cfg%threads)
 
   call sim_create(s, cfg, ok, why)
   if (.not. ok) call fail(trim(why))
@@ -97,6 +105,12 @@ program slimebench
   ms_total = real(t1 - t0, real64) * 1000.0_real64 / real(rate, real64)
 
   if (len_trim(dump_path) > 0) call dump_grid(s, trim(dump_path))
+
+  ! Named for what the binary actually is: without -fopenmp the directives are
+  ! comments and this is the serial port, so the two builds must not share a
+  ! row. The !$ sentinel is only compiled when OpenMP is on.
+  variant = 'scalar'
+!$ variant = 'openmp'
 
   if (want_json) then
     call print_json(s, ms_total, tick_ms(1:cfg%ticks))
@@ -240,8 +254,10 @@ contains
       mcups = cells * real(k, real64) / total / 1000.0_real64
     end if
 
-    write(*, '(A)', advance='no') '{"schema":1,"impl":"fortran","backend":"headless","class":"S"'
-    write(*, '(A)', advance='no') ',"preset":"'//trim(sm%cfg%preset)//'","variant":"scalar"'
+    write(*, '(A)', advance='no') '{"schema":1,"impl":"fortran","backend":"headless"'
+    write(*, '(A)', advance='no') ',"class":"'//merge('P', 'S', sm%cfg%threads > 1)//'"'
+    write(*, '(A)', advance='no') ',"preset":"'//trim(sm%cfg%preset)// &
+      '","variant":"'//trim(variant)//'"'
     write(*, '(A,I0,A,I0,A,I0,A,I0,A,I0)', advance='no') &
       ',"width":', sm%cfg%width, ',"height":', sm%cfg%height, &
       ',"agents":', sm%cfg%agents, ',"ticks":', k, ',"seed":', sm%cfg%seed
