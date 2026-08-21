@@ -157,3 +157,33 @@ jobs:
       - name: cargo test
         working-directory: impl/rust
         run: cargo test --release
+
+  proofs:
+    name: lean proofs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # impl/lean/lean-toolchain pins the version, so elan installs the right
+      # one without being told.
+      - name: install elan
+        run: |
+          curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz             | tar xz
+          ./elan-init -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      # `lake build` includes the Proofs library, so a broken proof fails the
+      # job. The grep afterwards is the part that matters: a proof can also be
+      # "broken" by being admitted, and `sorry` elaborates fine. Every theorem
+      # prints its axioms, and sorryAx appearing there is a failure.
+      - name: build and check the proofs
+        working-directory: impl/lean
+        run: |
+          lake build Proofs 2>&1 | tee build.log
+          if grep -q 'sorryAx' build.log; then
+            echo "::error::a proof is admitted with sorry"
+            exit 1
+          fi
+          n=$(grep -c 'depends on axioms' build.log)
+          echo "checked $n theorems"
+          test "$n" -ge 6

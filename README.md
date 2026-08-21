@@ -251,6 +251,15 @@ bench/dotnet-aot.sh results/S-dotnet-aot.txt
   because agent positions are exact by construction and only move once a low
   bit flips a comparison. A gate that hashed only the agents would have
   certified a fast-math build. [docs/RESULTS.md §2](docs/RESULTS.md#2-language-comparison-class-s).
+- **Two of the spec's claims are proved, not just tested.** `binned` is
+  bit-identical to the serial run — §5 checks that by running eight thread
+  counts in ten languages; [impl/lean/Proofs/](impl/lean/Proofs) proves it for
+  *every* thread count and every partition. And the bit-masked torus index is
+  the modulo index, always inside the grid, and injective. Neither proof
+  mentions floating point: Lean has no axioms about `Float32` at all, so the
+  claim is restated as one about the *order* of operations, which then holds
+  for any operation — f32 addition included. `lake build` checks them and CI
+  greps for `sorryAx`.
 - **What ahead-of-time compilation is worth.** .NET compiles the same source
   four ways, two of them on opposite sides of the JIT/AOT line — the only
   target here that can be asked. Native AOT lands **within 3 %** of the

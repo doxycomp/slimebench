@@ -48,8 +48,9 @@ go 1.25 · swift 6.3.3 · python 3.12.3 (+ 3.14t) · perl 5.38.2 · CUDA 12.0
 10. [Rendering (class R)](#10-rendering-class-r)
 11. [Footprint](#11-footprint)
 12. [What did not work](#12-what-did-not-work)
-13. [Where I was wrong](#13-where-i-was-wrong)
-14. [Open questions](#14-open-questions)
+13. [Proved, not measured](#13-proved-not-measured)
+14. [Where I was wrong](#14-where-i-was-wrong)
+15. [Open questions](#15-open-questions)
 
 ---
 
@@ -378,7 +379,7 @@ about 0.7 s. That is not in any number above, because
 [`_precompile()`](../impl/python/slimebench_numba.py) compiles them against a
 4×4 grid before the clock starts. Leaving it to `--warmup` would work too, and
 would silently turn `ms_per_tick_p99` into a compiler benchmark whenever
-someone omitted the flag — the failure shape §13 is a list of.
+someone omitted the flag — the failure shape §14 is a list of.
 
 ### `--fastmath`: the grid hash catches it, the agent hash does not
 
@@ -1376,7 +1377,99 @@ make an unbalanced phase shorter.
 
 ---
 
-## 13. Where I was wrong
+## 13. Proved, not measured
+
+Everything above is evidence: a configuration was run, a hash was compared, and
+the hashes agreed. That is worth a lot and it has a hard limit — it covers the
+configurations somebody thought to run. Two of the spec's claims are now
+machine-checked instead, in Lean, and `lake build` fails if either proof
+breaks.
+
+The proofs are in [`impl/lean/Proofs/`](../impl/lean/Proofs). Neither of them
+mentions floating point.
+
+### The binned reduction really is the serial order
+
+SPEC-1 §5.6 claims the spatially binned parallel deposit produces exactly the
+same grid as the single-threaded run, at every thread count. §5 checks that by
+running eight thread counts in ten languages and comparing hashes —
+`binned_deposits_eq_serial` proves it for **every** thread count, every
+partition of the agents into worker blocks, and every assignment of agents to
+cells.
+
+The statement is about lists, not floats:
+
+> For each cell, the list of agents depositing into it under the binned
+> schedule equals — same elements, same order — the list under the serial
+> schedule.
+
+and the corollary `binned_cell_value_eq` folds an *arbitrary* operation over
+both lists and gets the same answer. That is where floating point re-enters,
+as something the theorem never looks inside. Two folds of the same operation
+over the same list in the same order agree whatever the operation does, so
+associativity, commutativity and rounding are all beside the point.
+
+**This is not a convenience, it is the only available route.** Lean's `Float32`
+is an opaque type whose operations are `@[extern]` calls into the runtime. The
+kernel has no axioms about them, so an equation between two f32 results is not
+provable in Lean at all — not hard, *impossible*. Reformulating the claim as
+one about order is what makes it reachable, and it turns out to be the more
+general statement anyway.
+
+The proof needs exactly two hypotheses, and each is a line of the
+implementation:
+
+| hypothesis | where it comes from |
+|---|---|
+| the worker blocks concatenate to the serial order | `split()` produces contiguous, increasing ranges |
+| a cell's bucket depends only on the cell | the bucket is `ybucket[idx >> log2w]` |
+
+The C source says the partition is "identical to the C reference's,
+deliberately". This is what that deliberateness buys, and the proof is why it
+cannot be relaxed: an adaptive partition that reordered blocks would break the
+first hypothesis and the theorem with it. §12 records the adaptive variant
+being rejected on performance grounds; it would also have cost the proof.
+
+### The bit-masked torus index is the modulo index
+
+Every port computes `idx = ((y & ymask) << log2w) | (x & xmask)` and the spec
+asserts this is `(y mod h) * w + (x mod w)`. Nothing checked it. Three
+theorems now do, for every power-of-two grid and every coordinate:
+
+- `masked_index_eq_mod` — the masked form equals the modulo form,
+- `masked_index_lt` — it is always inside the grid, which is why the deposit
+  needs no bounds check,
+- `masked_index_injective` — distinct cells get distinct indices, which is why
+  the grid can be a flat array and the checksum a linear scan.
+
+Lean's core has no lemma for "shifting and or-ing is adding when the low part
+fits", so that one is proved from bit extensionality.
+
+### What the proofs rest on
+
+Both files end in `#print axioms`, and CI greps the output. All six theorems
+report:
+
+```
+depends on axioms: [propext, Classical.choice, Quot.sound]
+```
+
+which is Lean's standard three and nothing else — in particular no `sorryAx`.
+That check exists because a proof can be broken two ways: it can fail to
+compile, which is loud, or it can be admitted with `sorry`, which is silent.
+
+### What this does not cover
+
+The arithmetic. Nothing here says the diffusion stencil computes the right
+number, that `wrapf` is correct, or that any port implements the schedule the
+theorem is about — the proofs are over a model of the algorithm, and the link
+from that model to fourteen implementations is still the conformance suite and
+its hashes. What changed is that the parallel reduction's correctness no longer
+depends on having run the right thread count.
+
+---
+
+## 14. Where I was wrong
 
 The spec and the build plan have been contradicted by measurement repeatedly.
 That belongs in the record, or the project reads as more error-free than it
@@ -1438,7 +1531,7 @@ instead of "divergence" ten times. A tool that reports *wrong* where it means
 
 ---
 
-## 14. Open questions
+## 15. Open questions
 
 - **A native Linux GL driver.** The GL numbers include Mesa's D3D12
   translation; the constant throughput of ~170 MCUPS across four orders of
