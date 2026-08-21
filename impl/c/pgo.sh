@@ -18,7 +18,11 @@ CC="${1:-gcc}"
 BASE="-O3 -march=native -mtune=native"
 FP="-ffp-contract=off -fno-fast-math"
 COMMON="-std=c11 -D_POSIX_C_SOURCE=200809L $BASE $FP"
-SRC="sb_core.c sb_cli.c sb_parallel.c main_headless.c"
+# Must match CORE_SRC in the Makefile. It did not: sb_simd.c and sb_asm.c
+# were added to the Makefile and not here, so every PGO build since has failed
+# to link with "undefined reference to sb_diffuse_rows_simd" -- and a
+# build-failed target is a missing row in the results, not a failed run.
+SRC="sb_core.c sb_cli.c sb_parallel.c sb_simd.c sb_asm.c main_headless.c"
 OUT="build/$CC-o3-native-pgo"
 PROF="build/.pgo-$CC"
 
