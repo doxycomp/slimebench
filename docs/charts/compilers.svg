@@ -23,67 +23,67 @@
 <line x1="190.0" y1="44" x2="190.0" y2="596" class="grid"/>
 <text x="190.0" y="610" class="lbl-s" text-anchor="middle">0</text>
 <line x1="310.0" y1="44" x2="310.0" y2="596" class="grid"/>
-<text x="310.0" y="610" class="lbl-s" text-anchor="middle">375.81</text>
+<text x="310.0" y="610" class="lbl-s" text-anchor="middle">349.497</text>
 <line x1="430.0" y1="44" x2="430.0" y2="596" class="grid"/>
-<text x="430.0" y="610" class="lbl-s" text-anchor="middle">751.619</text>
+<text x="430.0" y="610" class="lbl-s" text-anchor="middle">698.995</text>
 <line x1="550.0" y1="44" x2="550.0" y2="596" class="grid"/>
-<text x="550.0" y="610" class="lbl-s" text-anchor="middle">1127.43</text>
+<text x="550.0" y="610" class="lbl-s" text-anchor="middle">1048.49</text>
 <line x1="670.0" y1="44" x2="670.0" y2="596" class="grid"/>
-<text x="670.0" y="610" class="lbl-s" text-anchor="middle">1503.24</text>
+<text x="670.0" y="610" class="lbl-s" text-anchor="middle">1397.99</text>
 <text x="430" y="622" class="lbl-s" text-anchor="middle">ms total</text>
 <text x="180" y="69" class="lbl" text-anchor="end">C clang o3-native</text>
-<rect x="190" y="52" width="379.0" height="24" rx="2" fill="#4c78a8"/>
-<text x="577.0" y="69" class="lbl-s">1,187</text>
+<rect x="190" y="52" width="389.2" height="24" rx="2" fill="#4c78a8"/>
+<text x="587.2" y="69" class="lbl-s">1,134</text>
 <text x="180" y="99" class="lbl" text-anchor="end">C clang o3-native-lto</text>
-<rect x="190" y="82" width="381.2" height="24" rx="2" fill="#4c78a8"/>
-<text x="579.2" y="99" class="lbl-s">1,194</text>
+<rect x="190" y="82" width="390.6" height="24" rx="2" fill="#4c78a8"/>
+<text x="588.6" y="99" class="lbl-s">1,138</text>
 <text x="180" y="129" class="lbl" text-anchor="end">C clang o3-native-pgo</text>
-<rect x="190" y="112" width="391.1" height="24" rx="2" fill="#4c78a8"/>
-<text x="589.1" y="129" class="lbl-s">1,225</text>
+<rect x="190" y="112" width="410.5" height="24" rx="2" fill="#4c78a8"/>
+<text x="608.5" y="129" class="lbl-s">1,196</text>
 <text x="180" y="159" class="lbl" text-anchor="end">C++ g++ o3</text>
-<rect x="190" y="142" width="402.4" height="24" rx="2" fill="#f58518"/>
-<text x="600.4" y="159" class="lbl-s">1,260</text>
-<text x="180" y="189" class="lbl" text-anchor="end">C gcc o2</text>
-<rect x="190" y="172" width="412.0" height="24" rx="2" fill="#4c78a8"/>
-<text x="610.0" y="189" class="lbl-s">1,290</text>
-<text x="180" y="219" class="lbl" text-anchor="end">C gcc o3</text>
-<rect x="190" y="202" width="413.3" height="24" rx="2" fill="#4c78a8"/>
-<text x="611.3" y="219" class="lbl-s">1,294</text>
-<text x="180" y="249" class="lbl" text-anchor="end">C++ g++ o3-native</text>
-<rect x="190" y="232" width="417.1" height="24" rx="2" fill="#f58518"/>
-<text x="615.1" y="249" class="lbl-s">1,306</text>
-<text x="180" y="279" class="lbl" text-anchor="end">C++ clang++ o3-native</text>
-<rect x="190" y="262" width="417.6" height="24" rx="2" fill="#f58518"/>
-<text x="615.6" y="279" class="lbl-s">1,308</text>
-<text x="180" y="309" class="lbl" text-anchor="end">C++ g++ ofast-native</text>
-<rect x="190" y="292" width="418.5" height="24" rx="2" fill="#c94c4c"/>
-<text x="616.5" y="309" class="lbl-s">1,311  fast-math</text>
-<text x="180" y="339" class="lbl" text-anchor="end">C gcc o3-native-lto</text>
-<rect x="190" y="322" width="442.9" height="24" rx="2" fill="#4c78a8"/>
-<text x="640.9" y="339" class="lbl-s">1,387</text>
-<text x="180" y="369" class="lbl" text-anchor="end">C gcc o3-native-pgo</text>
-<rect x="190" y="352" width="443.4" height="24" rx="2" fill="#4c78a8"/>
-<text x="641.4" y="369" class="lbl-s">1,389</text>
+<rect x="190" y="142" width="412.6" height="24" rx="2" fill="#f58518"/>
+<text x="610.6" y="159" class="lbl-s">1,202</text>
+<text x="180" y="189" class="lbl" text-anchor="end">C gcc o3</text>
+<rect x="190" y="172" width="416.2" height="24" rx="2" fill="#4c78a8"/>
+<text x="614.2" y="189" class="lbl-s">1,212</text>
+<text x="180" y="219" class="lbl" text-anchor="end">C gcc o2</text>
+<rect x="190" y="202" width="417.2" height="24" rx="2" fill="#4c78a8"/>
+<text x="615.2" y="219" class="lbl-s">1,215</text>
+<text x="180" y="249" class="lbl" text-anchor="end">C++ clang++ o3-native</text>
+<rect x="190" y="232" width="428.9" height="24" rx="2" fill="#f58518"/>
+<text x="626.9" y="249" class="lbl-s">1,249</text>
+<text x="180" y="279" class="lbl" text-anchor="end">C++ g++ ofast-native</text>
+<rect x="190" y="262" width="430.4" height="24" rx="2" fill="#c94c4c"/>
+<text x="628.4" y="279" class="lbl-s">1,254  fast-math</text>
+<text x="180" y="309" class="lbl" text-anchor="end">C++ g++ o3-native</text>
+<rect x="190" y="292" width="430.6" height="24" rx="2" fill="#f58518"/>
+<text x="628.6" y="309" class="lbl-s">1,254</text>
+<text x="180" y="339" class="lbl" text-anchor="end">C++ clang++ o3-native-lto</text>
+<rect x="190" y="322" width="453.2" height="24" rx="2" fill="#f58518"/>
+<text x="651.2" y="339" class="lbl-s">1,320</text>
+<text x="180" y="369" class="lbl" text-anchor="end">C gcc o3-native</text>
+<rect x="190" y="352" width="457.6" height="24" rx="2" fill="#4c78a8"/>
+<text x="655.6" y="369" class="lbl-s">1,333</text>
 <text x="180" y="399" class="lbl" text-anchor="end">C++ g++ o2</text>
-<rect x="190" y="382" width="446.7" height="24" rx="2" fill="#f58518"/>
-<text x="644.7" y="399" class="lbl-s">1,399</text>
-<text x="180" y="429" class="lbl" text-anchor="end">C gcc o3-native</text>
-<rect x="190" y="412" width="451.9" height="24" rx="2" fill="#4c78a8"/>
-<text x="649.9" y="429" class="lbl-s">1,415</text>
-<text x="180" y="459" class="lbl" text-anchor="end">Haskell ghc o2-llvm</text>
-<rect x="190" y="442" width="458.1" height="24" rx="2" fill="#b279a2"/>
-<text x="656.1" y="459" class="lbl-s">1,435</text>
-<text x="180" y="489" class="lbl" text-anchor="end">C gcc ofast-native</text>
-<rect x="190" y="472" width="462.8" height="24" rx="2" fill="#c94c4c"/>
-<text x="660.8" y="489" class="lbl-s">1,449  fast-math</text>
-<text x="180" y="519" class="lbl" text-anchor="end">C clang o3</text>
-<rect x="190" y="502" width="466.6" height="24" rx="2" fill="#4c78a8"/>
-<text x="664.6" y="519" class="lbl-s">1,461</text>
-<text x="180" y="549" class="lbl" text-anchor="end">C clang o2</text>
-<rect x="190" y="532" width="471.1" height="24" rx="2" fill="#4c78a8"/>
-<text x="669.1" y="549" class="lbl-s">1,475</text>
-<text x="180" y="579" class="lbl" text-anchor="end">C++ g++ o3-native-lto</text>
-<rect x="190" y="562" width="480.0" height="24" rx="2" fill="#f58518"/>
-<text x="678.0" y="579" class="lbl-s">1,503</text>
+<rect x="190" y="382" width="459.3" height="24" rx="2" fill="#f58518"/>
+<text x="657.3" y="399" class="lbl-s">1,338</text>
+<text x="180" y="429" class="lbl" text-anchor="end">C gcc o3-native-lto</text>
+<rect x="190" y="412" width="459.8" height="24" rx="2" fill="#4c78a8"/>
+<text x="657.8" y="429" class="lbl-s">1,339</text>
+<text x="180" y="459" class="lbl" text-anchor="end">C gcc ofast-native</text>
+<rect x="190" y="442" width="466.8" height="24" rx="2" fill="#c94c4c"/>
+<text x="664.8" y="459" class="lbl-s">1,360  fast-math</text>
+<text x="180" y="489" class="lbl" text-anchor="end">C gcc o3-native-pgo</text>
+<rect x="190" y="472" width="470.8" height="24" rx="2" fill="#4c78a8"/>
+<text x="668.8" y="489" class="lbl-s">1,371</text>
+<text x="180" y="519" class="lbl" text-anchor="end">Haskell ghc o2-llvm</text>
+<rect x="190" y="502" width="471.7" height="24" rx="2" fill="#b279a2"/>
+<text x="669.7" y="519" class="lbl-s">1,374</text>
+<text x="180" y="549" class="lbl" text-anchor="end">C clang o3</text>
+<rect x="190" y="532" width="476.7" height="24" rx="2" fill="#4c78a8"/>
+<text x="674.7" y="549" class="lbl-s">1,388</text>
+<text x="180" y="579" class="lbl" text-anchor="end">C clang o2</text>
+<rect x="190" y="562" width="480.0" height="24" rx="2" fill="#4c78a8"/>
+<text x="678.0" y="579" class="lbl-s">1,398</text>
 <line x1="190" y1="44" x2="190" y2="596" class="axis"/>
 </svg>

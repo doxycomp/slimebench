@@ -59,22 +59,22 @@ go 1.25 · swift 6.3.3 · python 3.12.3 (+ 3.14t) · perl 5.38.2 · CUDA 12.0
 The same simulation in **fourteen languages**, from a Perl interpreter to 84
 streaming multiprocessors, plus CUDA and GLSL compute as GPU hosts. Every
 number in this document comes from one series on one machine, recorded in one
-sitting: `results/run-20260821-1113`, commit `ed1bf2b`. Numbers from two
+sitting: `results/run-20260821-1447`, commit `7895bf5`. Numbers from two
 different series are not comparable and this document does not mix them.
 
 ![Class overview](charts/classes.svg)
 
 | Class | best configuration | `medium`, 100 ticks | vs. 1 CPU core |
 |---|---|---:|---:|
-| S — one thread | C, gcc `-O3 -march=native` | 5623 ms | 1× |
-| P — 32 threads | **Go**, `binned` | 571 ms | **9.8×** |
-| G — GPU | CUDA, RTX 5080 | **50 ms** | **112×** |
+| S — one thread | C, gcc `-O3 -march=native` | 4538 ms | 1× |
+| P — 32 threads | **Go**, `binned` | 576 ms | **7.9×** |
+| G — GPU | CUDA, RTX 5080 | **47 ms** | **97×** |
 
 Two things that are not in that table and are the most interesting results of
 this series:
 
-**Go wins class P**, not C and not C++ — 571 ms against 666 and 650, from a
-7 % single-thread deficit. §5 measures why: its barrier is 17 % cheaper, and
+**Go wins class P**, not C and not C++ — 576 ms against 599 and 615, from a
+20 % single-thread deficit. §5 measures why: its barrier is 17 % cheaper, and
 the gap is concentrated in the one phase where 31 workers wait for one.
 
 **Hand-written AVX-512 assembly beats the intrinsics by about 11 %**, and not
@@ -87,14 +87,14 @@ it is only a quarter of the runtime; §8.
 Seven results I would not have predicted:
 
 - **Bit-exactness survives everything.** Every tier-A run in `serial` mode
-  produces `0x9E8B1688`, every one in `deferred` mode `0xAAB0115C` — across
-  fourteen languages, four .NET compilation strategies, three JVM
-  configurations, class P in ten languages at every thread count, SIMD,
-  hand-written assembly, CUDA at every preset, and all 34 cells of the CPython
-  matrix. The spec had assumed the opposite for both SIMD and GPU.
+  produces `0x89CFFAAC`, every one in `deferred` mode `0x1DFDF34B` — across
+  fourteen languages, five .NET compilation strategies, three JVM
+  configurations, class P in ten languages at every thread count, class V in
+  five languages across four vector widths, hand-written assembly, CUDA at
+  every preset, and all 34 cells of the CPython matrix. The spec had assumed the opposite for both SIMD and GPU.
 - **A language ranking from one class does not carry to the next.** Go sits at
   rank 9 of 16 in class S and wins class P. TypeScript is 3.6× slower than C in
-  class S and scales better than anything else (11.0×). Haskell is at 1.23× in
+  class S and scales better than anything else (9.6×). Haskell is at 1.23× in
   class S and matches C in class R. Java is the fastest garbage-collected
   runtime in class S and the slowest to scale in class P.
 - **A Python file is at 1.30×.** `slimebench_numba.py` is the pure-Python port
@@ -106,11 +106,12 @@ Seven results I would not have predicted:
   3 % of the optimising JIT with a full run's profile behind it, starts seven
   times faster, and has no warm-up ramp at all — 2.0× from first tick to best,
   where the JVM's is 26.3×. §6.
-- **Java's portable vector API matches hand-written AVX-512.** 3.95 ms of
-  diffusion against C's 2.98, and a lower total time — from source that names
-  no instruction set. §8.
+- **A portable vector type costs 20–35 % against hand-written intrinsics.**
+  C#'s `Vector512<float>` is at 1.20× of the best AVX-512 C++ and Java's
+  Vector API — naming no width at all — at 1.35×. Both beat AVX2 intrinsics
+  written in C. §8.
 - **No garbage collector here does anything.** The JVM collects zero times in
-  200 ticks; Go allocates 298 times in the whole run. Six of the fourteen
+  200 ticks; Go allocates 302 times in the whole run. Six of the fourteen
   languages are collected and none of them is being asked to collect, which is
   a limitation of the workload that §11 now states with numbers instead of
   leaving implied.
@@ -142,24 +143,29 @@ letting one win a row would compare two programs. The tier-C profiles are in
 
 | # | Language | Profile | ms/tick | rel. |
 |---:|---|---|---:|---:|
-| 1 | C | o3-native-lto | 0.1903 | 1.00× |
-| 2 | C++ | o3-native | 0.2080 | 1.09× |
-| 3 | C (PGO) | o3-native-pgo | 0.2213 | 1.16× |
-| 4 | **Haskell** | o2-llvm | **0.2343** | **1.23×** |
-| 5 | **Swift** | unchecked | **0.2465** | **1.30×** |
-| 6 | **Python (numba)** | — | **0.2466** | **1.30×** |
-| 7 | **Java** | C2 only | **0.2570** | **1.35×** |
-| 8 | Rust | release-native-lto-unchecked | 0.2581 | 1.36× |
-| 9 | Go | nobounds | 0.2727 | 1.43× |
-| 10 | **C#** | tier1 | **0.2863** | **1.50×** |
-| 11 | **Fortran** | o3 | **0.2995** | **1.57×** |
-| 12 | TypeScript | node | 0.6782 | 3.56× |
-| 13 | Lean 4 | default | 1.5026 | 7.90× |
-| 14 | **OCaml** | unsafe | **1.8818** | **9.89×** |
-| 15 | Python (`--strict-f32`) | — | 87.61 | 460× |
-| 16 | Perl (`--strict-f32`) | — | 124.65 | 655× |
+| 1 | C | o3-native | 0.1912 | 1.00× |
+| 2 | C++ | o3-native | 0.2101 | 1.10× |
+| 3 | C (PGO) | o3-native-pgo | 0.2166 | 1.13× |
+| 4 | **Haskell** | o2-llvm | **0.2330** | **1.22×** |
+| 5 | **Python (numba)** | — | **0.2441** | **1.28×** |
+| 6 | **Swift** | unchecked | **0.2451** | **1.28×** |
+| 7 | **Java** | tiered | **0.2542** | **1.33×** |
+| 8 | Rust | release-native-lto-unchecked | 0.2601 | 1.36× |
+| 9 | Go | nobounds | 0.2725 | 1.42× |
+| 10 | **C#** | Native AOT, `IlcInstructionSet=native` | **0.2882** | **1.51×** |
+| 11 | **Fortran** | o2 | **0.2997** | **1.57×** |
+| 12 | TypeScript | node | 0.6464 | 3.38× |
+| 13 | Lean 4 | default | 1.4411 | 7.54× |
+| 14 | **OCaml** | unsafe | **1.8432** | **9.64×** |
+| 15 | Python (`--strict-f32`) | — | 85.33 | 446× |
+| 16 | Perl (`--strict-f32`) | — | 122.68 | 642× |
 
-**Every tier-A run in this mode: `0x9E8B1688`.**
+**Every tier-A run in this mode: `0x89CFFAAC`.**
+
+Measured after 50 warm-up ticks. That matters for three rows and for nothing
+else: Java, C# and numba are the only targets not at full speed on tick 1, and
+without it their *median* over a hundred cold ticks lands mid-ramp. §6 is where
+the cold measurement lives, on purpose.
 
 ### `--update deferred`
 
@@ -167,27 +173,27 @@ Here numpy and the idiomatic Haskell version can compete as well.
 
 | # | Language | Profile | ms/tick | rel. |
 |---:|---|---|---:|---:|
-| 1 | C | o3-native | 0.1946 | 1.00× |
-| 2 | C++ | o3-native | 0.2127 | 1.09× |
-| 3 | C (PGO) | o3-native-pgo | 0.2181 | 1.12× |
-| 4 | Python (numba) | — | 0.2531 | 1.30× |
-| 5 | Swift | unchecked | 0.2538 | 1.30× |
-| 6 | Haskell | o2-llvm | 0.2543 | 1.31× |
-| 7 | Rust | release-native-lto-unchecked | 0.2645 | 1.36× |
-| 8 | Java | C2 only | 0.2666 | 1.37× |
-| 9 | Go | nobounds | 0.2882 | 1.48× |
-| 10 | Fortran | o3 | 0.3069 | 1.58× |
-| 11 | C# | ReadyToRun | 0.3217 | 1.65× |
-| 12 | Haskell (idiomatic, `vector`) | o2-llvm-vector | 0.4884 | 2.51× |
-| 13 | TypeScript | node | 0.7244 | 3.72× |
-| 14 | Python (numpy) | — | 1.1150 | 5.73× |
-| 15 | Python (numpy, 3.14t) | — | 1.2899 | 6.63× |
-| 16 | OCaml | unsafe | 2.0251 | 10.41× |
-| 17 | Lean 4 | default | 2.2973 | 11.80× |
-| 18 | Python (`--strict-f32`) | — | 93.05 | 478× |
-| 19 | Perl (`--strict-f32`) | — | 134.09 | 689× |
+| 1 | C | o3-native | 0.1928 | 1.00× |
+| 2 | C++ | o3-native | 0.2148 | 1.11× |
+| 3 | C (PGO) | o3-native-pgo | 0.2191 | 1.14× |
+| 4 | Python (numba) | — | 0.2467 | 1.28× |
+| 5 | Swift | unchecked | 0.2500 | 1.30× |
+| 6 | Java | C2 only | 0.2529 | 1.31× |
+| 7 | Haskell | o2-llvm | 0.2539 | 1.32× |
+| 8 | Rust | release-native-lto-unchecked | 0.2627 | 1.36× |
+| 9 | Go | nobounds | 0.2878 | 1.49× |
+| 10 | Fortran | o3 | 0.3050 | 1.58× |
+| 11 | C# | tier1 | 0.3111 | 1.61× |
+| 12 | Haskell (idiomatic, `vector`) | o2-llvm-vector | 0.4918 | 2.55× |
+| 13 | TypeScript | node | 0.7734 | 4.01× |
+| 14 | Python (numpy) | — | 1.1271 | 5.85× |
+| 15 | Python (numpy, 3.14t) | — | 1.2551 | 6.51× |
+| 16 | OCaml | strict-f32 | 1.9619 | 10.18× |
+| 17 | Lean 4 | default | 2.2082 | 11.46× |
+| 18 | Python (`--strict-f32`) | — | 89.78 | 466× |
+| 19 | Perl (`--strict-f32`) | — | 130.05 | 675× |
 
-**Every tier-A run in this mode: `0xAAB0115C`.**
+**Every tier-A run in this mode: `0x1DFDF34B`.**
 
 Worth noting:
 
@@ -631,27 +637,27 @@ even in principle.
 
 | Language | T=1 | T=2 | T=4 | T=8 | T=16 | T=32 | Speedup |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| TypeScript | 13499 | 4509 | 2387 | 1658 | **1229** | 1492 | **11.0×** |
-| **Go** | 6016 | 2452 | 1646 | 873 | 654 | **571** | **10.5×** |
-| Swift | 7095 | 2633 | 1786 | 1080 | **833** | 971 | 8.5× |
-| C | 5623 | 2806 | 1320 | 962 | 719 | **666** | 8.4× |
-| Haskell | 5837 | 2761 | 1270 | **801** | 715 | 831 | 8.2× |
-| C++ | 5199 | 2469 | 1351 | 914 | 660 | **650** | 8.0× |
-| Rust | 6714 | 2947 | 1815 | 1114 | **905** | 1089 | 7.4× |
-| **C#** | 8171 | 3369 | 2151 | 1311 | **1308** | 1995 | 6.2× |
-| **Java** | 6068 | 2613 | 1612 | **1071** | 1117 | 1513 | 5.7× |
-| Python | 9010 | 6376 | 3498 | 2338 | **2065** | 2589 | 4.4× |
-| Perl ¹ | 4547 | — | — | — | — | — | — |
+| TypeScript | 11591 | 4281 | 2286 | 1577 | **1205** | 1419 | **9.6×** |
+| **Go** | 5426 | 2238 | 1569 | 866 | 620 | **576** | **9.4×** |
+| Swift | 5917 | 2399 | 1786 | 938 | **763** | 908 | 7.8× |
+| C | 4538 | 2264 | 1197 | 858 | 669 | **599** | 7.6× |
+| C++ | 4421 | 2287 | 1270 | 798 | 685 | **615** | 7.2× |
+| Haskell | 4984 | 2321 | 1202 | **799** | 711 | 760 | 7.0× |
+| Rust | 5759 | 2698 | 1710 | 998 | **904** | 1059 | 6.4× |
+| **C#** | 6547 | 3107 | 1844 | **1135** | 1247 | 1932 | 5.8× |
+| **Java** | 5304 | 2237 | 1441 | 1155 | **1056** | 1605 | 5.0× |
+| Python | 8124 | 5832 | 3261 | 2220 | **1897** | 2263 | 4.3× |
+| Perl ¹ | 4272 | — | — | — | — | — | — |
 
 ¹ `tiny`, replicated reduction — see below; this series recorded only its
 single-thread row.
 
 **The two managed runtimes come last, and they are last for the same reason.**
-Java peaks at 5.7× and C# at 6.2×, both at or before 16 threads, and both then
-*regress* — Java to 1513 ms at 32 threads from 1071 at 8, C# to 1995 from 1308.
-Their compute is not the problem: at one thread Java is 6068 ms against C's
-5623, a 8 % gap that matches its 1.35× in §2 once the extra work of `deferred`
-is accounted for. What collapses is the barrier.
+Java peaks at 5.0× and C# at 5.8×, both at or before 16 threads, and both then
+*regress* — Java to 1605 ms at 32 threads from 1056 at 16, C# to 1932 from
+1135 at 8. Their compute is not the problem: at one thread Java is 5304 ms
+against C's 4538, a 17 % gap in line with its 1.31× in §2. What collapses is
+the barrier.
 
 Both use their standard library's: Java `java.util.concurrent.CyclicBarrier`,
 C# `System.Threading.Barrier`. That is deliberate — §5 is about where the
@@ -664,19 +670,19 @@ implementations, which is what the phase breakdown below shows directly.
 
 | Language | T=2 | T=4 | T=8 | T=16 | T=32 |
 |---|---:|---:|---:|---:|---:|
-| C | 2967 | 1739 | **1449** | 2914 | 6937 |
-| C++ | 2852 | 1654 | **1327** | 2665 | 6538 |
-| Go | 2116 | **1324** | 1386 | 2444 | 6334 |
-| Swift | 2406 | **1390** | 1301 | 2581 | 7090 |
-| Haskell | 2039 | 1325 | **1215** | 2768 | 7397 |
-| Java | 2213 | **1455** | 1524 | 2958 | 7175 |
-| C# | 2493 | **1560** | 1476 | 2814 | 6494 |
-| Rust | 3243 | 1919 | **1556** | 2766 | 6282 |
-| TypeScript | 7433 | 4072 | **2651** | 3135 | 6760 |
-| Python | 5449 | 3262 | **2556** | 2688 | 3818 |
+| C | 2523 | 1575 | **1275** | 2672 | 6097 |
+| C++ | 2512 | 1555 | **1304** | 2684 | 6270 |
+| Go | 1980 | **1231** | 1205 | 2368 | 5638 |
+| Swift | 1913 | **1232** | 1214 | 2459 | 6064 |
+| Haskell | 1736 | 1149 | **1122** | 2638 | 6720 |
+| Java | 2149 | **1339** | 1461 | 2751 | 6509 |
+| C# | 2125 | **1357** | 1374 | 2640 | 6130 |
+| Rust | 2905 | 1766 | **1403** | 2708 | 5791 |
+| TypeScript | 6572 | 3845 | **2473** | 3029 | 6169 |
+| Python | 5016 | 2949 | **2357** | 2439 | 3403 |
 
-**At 32 threads `private` drops below the serial runtime** — in C to 6937 ms
-against 5623. The reduction reads `T` complete grids: at `medium` with 32
+**At 32 threads `private` drops below the serial runtime** — in C to 6097 ms
+against 4538. The reduction reads `T` complete grids: at `medium` with 32
 threads that is 512 MiB of memory traffic per tick, purely to add deposits
 together. `binned` needs 8 MiB for the same job, independent of thread count.
 So the strategy you naively write first is not only the weaker guarantee, it is
@@ -843,21 +849,22 @@ Milliseconds per tick from a cold process, no warm-up, averaged over blocks:
 
 | ticks | Java tiered | Java C2-only | C# jit | C# tier1 | **C# aot** |
 |---|---:|---:|---:|---:|---:|
-| 1–5 | 3.580 | 4.051 | 1.028 | 0.998 | **0.469** |
-| 6–10 | 0.518 | 0.948 | 0.424 | 0.571 | **0.370** |
-| 11–25 | 0.542 | 0.372 | 0.376 | 0.531 | **0.317** |
-| 26–50 | 0.447 | **0.265** | 0.351 | 0.497 | 0.301 |
-| 51–100 | 0.264 | 0.264 | 0.355 | 0.303 | 0.301 |
-| 201+ | 0.266 | 0.264 | 0.346 | 0.298 | 0.296 |
-| **first tick** | **6.346** | **6.568** | **3.166** | **2.384** | **0.571** |
-| best tick | 0.241 | 0.243 | 0.328 | 0.277 | 0.280 |
-| **first / best** | **26.3×** | **27.0×** | **9.6×** | **8.6×** | **2.0×** |
+| 1–5 | 3.466 | 3.934 | 0.954 | 0.888 | **0.415** |
+| 6–10 | 0.490 | 0.939 | 0.414 | 0.352 | 0.363 |
+| 11–25 | 0.594 | 0.360 | 0.399 | 0.306 | **0.314** |
+| 26–50 | 0.382 | **0.265** | 0.363 | 0.289 | 0.297 |
+| 51–100 | 0.256 | 0.255 | 0.354 | 0.287 | 0.290 |
+| 201+ | 0.258 | 0.255 | 0.337 | 0.283 | 0.292 |
+| **first tick** | **6.245** | **6.392** | **2.918** | **2.837** | **0.496** |
+| best tick | 0.235 | 0.238 | 0.321 | 0.271 | 0.275 |
+| **first / best** | **26.5×** | **26.8×** | **9.1×** | **10.5×** | **1.8×** |
 
 **The JVM's first tick costs 26× its best one.** A benchmark of a hundred ticks
-that forgot `--warmup` would report a number the JVM never actually runs at.
-That is why the Java rows in §2 use the C2-only profile and a warm-up: the
-default profile's *median* over a cold hundred ticks lands mid-ramp, at 0.42
-rather than 0.26.
+that forgot `--warmup` would report a number the JVM never actually runs at —
+which is not hypothetical: both the class S and the class V phases of this
+project did exactly that until the series this document is built from, and
+class V had Java's vector kernel at 179 ms of diffusion against C's 64. With
+the warm-up it is 79.5.
 
 Two smaller results in the same table. **Turning tiering off makes the JVM
 reach steady state sooner, not later** — C2-only is already at 0.265 by tick 26
@@ -877,19 +884,22 @@ Steady state, warm-up 50, best of three:
 
 | Configuration | ms/tick | vs tier1 |
 |---|---:|---:|
-| C# jit (tiered + dynamic PGO) | 0.3541 | 1.20× |
-| C# tier1 (no tiering) | 0.2951 | 1.00× |
-| C# ReadyToRun | 0.3084 | 1.04× |
-| **C# Native AOT** | **0.3027** | **1.03×** |
-| Java C2-only | 0.2705 | — |
-| C gcc `-O3 -march=native` | 0.2586 | — |
+| C# jit (tiered + dynamic PGO) | 0.3430 | 1.16× |
+| C# tier1 (no tiering) | 0.2958 | 1.00× |
+| C# ReadyToRun | 0.2923 | 0.99× |
+| **C# Native AOT** | **0.2951** | **1.00×** |
+| Java C2-only | 0.2558 | — |
+| C gcc `-O3 -march=native` | 0.2532 | — |
 
-**Native AOT lands within 3 % of the optimising JIT with a full run's profile
-behind it.** Same optimiser, one with the data the running program produced and
-one with none, and on this workload the data is worth nothing measurable. The
-20 % the default `jit` profile loses is therefore warm-up and tiering
-overhead, not code quality — the tiered configuration is still re-tiering at
-tick 200.
+**Native AOT lands within 0.3 % of the optimising JIT with a full run's
+profile behind it** — 0.2951 against 0.2958. Same optimiser, one with the data
+the running program produced and one with none, and on this workload the data
+is worth nothing measurable. The 16 % the default `jit` profile loses is
+therefore warm-up and tiering overhead, not code quality; the tiered
+configuration is still re-tiering at tick 200.
+
+That parity is for *scalar* code. §8 shows it does not survive contact with the
+vector unit, for a reason that is not about compiler quality at all.
 
 That is a narrow claim and it should stay narrow. This loop does the same thing
 every tick, takes every branch the same way, and touches the same two arrays.
@@ -1020,67 +1030,71 @@ there only to give the speedups a baseline.
 
 ## 8. SIMD and hand-written assembly (class V)
 
-### Managed runtimes reach the vector unit — one of them all the way
+### Managed runtimes reach the vector unit
 
 Class V was three languages using intrinsics named for one instruction set.
 Java and C# reach it a different way: a portable vector type, no instruction
-set in the source, the width resolved at run time. 256², 16 384 agents,
-`deferred`, 200 ticks after 100 of warm-up; the diffusion column is the one to
-read, because the agent pass is identical in all of them and dilutes the
-difference.
+set in the source, the width resolved at run time. 1024², 300 ticks after 100
+of warm-up. The diffusion column is the one to read — the agent pass is
+identical in all of them and dilutes the difference.
 
-| target | vector | ms/tick | diffuse ms | stencil speed-up |
-|---|---|---:|---:|---:|
-| C, gcc `-O3 -march=native` | — | 0.2645 | 12.86 | — |
-| C, `--simd` | AVX-512 intrinsics | 0.2057 | **2.98** | **4.3×** |
-| Java, C2 | — | 0.2614 | 14.19 | — |
-| **Java, `--simd`** | **Vector API, 512-bit** | **0.2027** | **3.95** | **3.6×** |
-| C#, Native AOT | — | 0.3160 | 20.04 | — |
-| C#, `--simd`, AOT + `IlcInstructionSet=native` | `Vector512<float>` | 0.2556 | 7.81 | 2.6× |
-| C#, `--simd`, JIT | `Vector512<float>` | 0.2522 | 7.78 | 2.6× |
-| C#, `--simd-portable` | `Vector<float>`, 256-bit | 0.2889 | 14.31 | 1.4× |
+| target | vector | diffuse ms | vs best |
+|---|---|---:|---:|
+| C++, g++ `-O3 -march=native` | AVX-512 intrinsics | **58.8** | 1.00× |
+| C, clang | AVX-512 intrinsics | 63.4 | 1.08× |
+| C, gcc | AVX-512 intrinsics | 64.7 | 1.10× |
+| Rust, unchecked | AVX-512 intrinsics | 66.9 | 1.14× |
+| **C#, JIT** | **`Vector512<float>`** | **70.3** | **1.20×** |
+| C++, g++ `-O3 -mavx2` | AVX2 intrinsics | 69.8 | 1.19× |
+| C#, Native AOT + `IlcInstructionSet=native` | `Vector512<float>` | 76.6 | 1.30× |
+| **Java, tiered** | **Vector API, 512-bit** | **79.5** | **1.35×** |
+| Java, C2 only | Vector API, 512-bit | 83.9 | 1.43× |
+| C#, `--simd-portable` | `Vector<float>`, 128-bit | 120.8 | 2.05× |
+| C#, Native AOT, default | `Vector512` unavailable, 128-bit | 121.4 | 2.06× |
 
-Every row above, in both update modes, produces the same hashes as the scalar
-reference — three languages and four vector widths, `0xCEC6D21A` in `serial`
-and `0x5673B1D9` in `deferred`. SPEC-1 §8.1 is why: the stencil does no
-cross-lane work, so each lane performs exactly the scalar computation for its
-own cell in the same order.
+**All sixteen rows produce the same grid hash, `0xEEA4EAB3`** — five languages,
+three ways of reaching the vector unit, four widths. SPEC-1 §8.1 is why: the
+stencil does no cross-lane work, so each lane performs exactly the scalar
+computation for its own cell in the same order.
 
-**Java's Vector API matches the intrinsics.** 3.95 ms of diffusion against C's
-2.98, and on total time it actually wins — 0.2027 against 0.2057 ms/tick. A
-portable vector type with no instruction set named in the source, running on a
-JIT, lands within a few per cent of hand-written AVX-512. That is the single
-most surprising number in this document.
+**A portable vector type gets within 20–35 % of hand-written intrinsics.** C#
+naming `Vector512<float>` lands at 1.20× of the best AVX-512 C++, and Java's
+Vector API — which names no width at all, only `SPECIES_PREFERRED` — at 1.35×.
+Both beat AVX2 intrinsics in C on the same machine. For source that contains no
+instruction set, that is a small price.
 
 **.NET's portable `Vector<T>` will not use AVX-512.** On this machine
 `Vector512.IsHardwareAccelerated` and `Avx512F.IsSupported` are both true and
-`Vector<float>.Count` is 8 — 256 bits.
-`DOTNET_PreferredVectorBitWidth=512` does not change it. Naming
-`Vector512<float>` explicitly does, and is worth 1.8× on the stencil. Java's
-`SPECIES_PREFERRED` has no such reservation and takes the full width.
+`Vector<float>.Count` is 8 — 256 bits. `DOTNET_PreferredVectorBitWidth=512`
+does not change it. Naming `Vector512<float>` explicitly is worth 1.7× on the
+stencil. Java's `SPECIES_PREFERRED` has no such reservation and takes the full
+width without being asked.
 
 ### Ahead-of-time compilation loses the vector unit, and it is one flag
 
 The §6 finding was that Native AOT matches the JIT. On vector code, by
 default, it does not — and the reason is not the compiler quality:
 
-| C# configuration | `Vector<float>.Count` | diffuse ms |
-|---|---:|---:|
-| JIT | 8 (256-bit) | 7.78 with `Vector512` |
-| Native AOT, default | **4 (128-bit)** | 14.31 |
-| Native AOT, `IlcInstructionSet=native` | 16 (512-bit) | 7.81 |
+| C# configuration | widest vector available | diffuse ms |
+|---|---|---:|
+| JIT | `Vector512` | **70.3** |
+| Native AOT, default | **128-bit only** | 121.4 |
+| Native AOT, `IlcInstructionSet=native` | `Vector512` | 76.6 |
 
 **Native AOT compiles for the x64 baseline.** The JIT knows which CPU it is
 running on; the AOT compiler is told at publish time, and by default it is told
 "any x64", which means SSE2. `Vector512.IsHardwareAccelerated` is then *false*
 in a binary running on a machine that has AVX-512.
 
-`-p:IlcInstructionSet=native` fixes it and closes the gap to 0.4 %. It also
-helps the scalar path — 24.73 ms of diffusion becomes 20.04 — because the
-baseline was costing the ordinary code too. The trade is a binary that no
+`-p:IlcInstructionSet=native` fixes it: 121.4 ms of diffusion becomes 76.6,
+within 9 % of the JIT. It helps the scalar path too — that build is the C# row
+in §2's `serial` table, at 1.51×, ahead of the JIT profiles — because the
+baseline was costing the ordinary code as well. The trade is a binary that no
 longer runs anywhere, which is exactly the trade a JIT does not have to make.
+
 So §6's answer needs a qualifier: ahead-of-time compilation matches the JIT
 *once someone tells it what it is compiling for*, and the default does not.
+The default is also the one a build pipeline produces without being asked.
 
 
 
@@ -1385,12 +1399,12 @@ warm-up:
 | runtime | collections | GC time | allocated over the whole run |
 |---|---:|---:|---:|
 | **Java** | **0** | 0 ms | — |
-| Go | 1 | 0.53 ms | 5.2 MiB, 298 mallocs |
+| Go | 1 | 0.55 ms | 5.2 MiB, 302 mallocs |
 | C# | 1 gen0 / 1 gen1 / 1 gen2 | — | 4.7 MiB |
-| Haskell | — | 1 ms of 254 | 7.8 MiB |
+| Haskell | — | 0.000 s of 0.253 | 7.8 MiB |
 | OCaml | 7 minor, 2 major | — | 12.6 MiB of minor words |
 
-**The JVM never collects.** Go allocates 298 times in two hundred ticks, which
+**The JVM never collects.** Go allocates 302 times in two hundred ticks, which
 is startup and nothing else. The reason is structural: the simulation
 allocates its grids and agent arrays once and writes into them for the rest of
 the run, which is what SPEC-1 asks for and what every port does.

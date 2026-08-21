@@ -27,7 +27,7 @@ OUT = ROOT / "docs" / "charts"
 # same machine state as the tables in docs/RESULTS.md, or a reader comparing a
 # chart against a table is comparing two different afternoons. Override with
 #   bench/charts.py results/run-YYYYmmdd-HHMM
-RESULTS = ROOT / "results" / "run-20260821-1113"
+RESULTS = ROOT / "results" / "run-20260821-1447"
 if len(sys.argv) > 1:
     RESULTS = pathlib.Path(sys.argv[1])
 
