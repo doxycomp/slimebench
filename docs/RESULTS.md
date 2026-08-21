@@ -36,6 +36,13 @@ go 1.25 · swift 6.3.3 · python 3.12.3 (+ 3.14t) · perl 5.38.2 · CUDA 12.0
 
 ## Contents
 
+Read first:
+
+- [What this measures, and what it does not](#what-this-measures-and-what-it-does-not)
+- [How to read these numbers](#how-to-read-these-numbers)
+
+Then:
+
 1. [The short version](#1-the-short-version)
 2. [Language comparison (class S)](#2-language-comparison-class-s)
 3. [Compilers](#3-compilers)
@@ -77,6 +84,50 @@ It was written after two near misses in one sitting — a claim about 0.5 %
 resting on a measurement whose own spread was 6 %, and a work/barrier split
 that moved 15 % between single samples. Both were caught by looking. The rule
 exists so the next one is caught by the tooling.
+
+---
+
+## What this measures, and what it does not
+
+One kernel, run fourteen ways. Everything below is conditional on that kernel,
+and it is a narrow one.
+
+**What the hot loop contains.** A flat `float32` array read nine times per
+cell, a second one written once; a million agents each reading three cells,
+taking a four-way branch, and adding a constant to one cell. That is the whole
+program.
+
+**What it therefore never touches:**
+
+| | |
+|---|---|
+| allocation | none after start-up. §11 measures the consequence: the JVM collects **zero** times in 200 ticks, Go allocates 299 times in a whole run. Six of the fourteen languages have a garbage collector and none of them is asked to collect. |
+| data structures | flat arrays only. No map, no tree, no string, no object graph, nothing with a pointer in it. |
+| abstraction | no dynamic dispatch, no virtual calls, no interfaces, no closures in the hot path. Every port was written to avoid them, because the spec fixes the order of operations. |
+| branching | one distribution, measured: 76.6 % / 11.0 % / 11.1 % / 1.3 %. A workload whose branches are unpredictable would ask a different question of every JIT here. |
+| I/O and syscalls | none inside the measured region. |
+| numeric variety | `f32`, and *bit-exact* `f32`. Most numeric code does not demand that and lets the compiler reassociate; §8's fast-math rows are the only place this document lets it. |
+| the machine | one CPU, one OS, one memory configuration. §15 has the list. |
+
+**So the cross-language ranking in §2 is a ranking on flat numeric array
+code.** For C, C++, Fortran and Rust that is home ground. For Java, C#, OCaml,
+Haskell and Go it is the narrowest slice of what those languages are for — no
+allocation, no abstraction, no collector. Java at 1.32× is a real result about
+a real program, and it is not a claim that Java is 1.32× C.
+
+**The results that do not depend on the workload this way** are the ones that
+hold the program constant and change one thing about how it runs:
+
+- the conformance result — fourteen languages producing identical bits, which
+  is a property of the spec and the ports rather than of the kernel;
+- the two machine-checked proofs (§13), which quantify over all thread counts
+  and all inputs;
+- JIT against ahead-of-time compilation (§6), interpreted against compiled
+  (§6), boxed against unboxed (§2), portable vectors against intrinsics (§8),
+  and the class P work/barrier split (§5) — each of those changes exactly one
+  variable, with the same source on both sides.
+
+Those are the parts worth quoting. The ranking is the part worth qualifying.
 
 ---
 
