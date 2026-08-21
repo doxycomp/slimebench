@@ -21,6 +21,8 @@ internal static class Program
           --deposit-reduce M   private|binned  (SPEC-1 5.6)
           --sensor-dist F  --sensor-steps N  --rot-steps N
           --step F  --deposit F  --decay F
+          --simd               vectorised diffusion (SPEC-1 8.1)
+          --simd-portable      force Vector<T> where Vector512 exists
           --headless  --json  --hash-every N  --dump-grid PATH
           -h, --help
         env:
@@ -64,8 +66,10 @@ internal static class Program
             {
                 case "-h" or "--help": Console.WriteLine(Usage); return 0;
                 case "--json": wantJson = true; continue;
-                case "--headless" or "--no-simd": continue;
-                case "--simd": Fail("this target has no vectorised kernel"); continue;
+                case "--headless": continue;
+                case "--no-simd": c.Simd = false; continue;
+                case "--simd": c.Simd = true; continue;
+                case "--simd-portable": c.Simd = true; c.SimdPortable = true; continue;
             }
 
             // Everything below takes exactly one value.
@@ -122,7 +126,16 @@ internal static class Program
         catch (ArgumentException e) { Console.Error.WriteLine("error: " + e.Message); return 2; }
 
         bool logTicks = Environment.GetEnvironmentVariable("SLIMEBENCH_TICK_MS") == "1";
-        string cls = "S", variant = "scalar";
+        string cls = "S";
+        // The variant names the width the runtime picked, as impl/c names the
+        // instruction set: "vector256" and "vector512" are different machine
+        // code from one source and should not share a row.
+        string variant = c.Simd ? Simd.Name(c.SimdPortable) : "scalar";
+        if (c.Simd && !Simd.Available(c.SimdPortable))
+        {
+            Console.Error.WriteLine("error: --simd requested but no vector unit is available");
+            return 2;
+        }
         double msTotal;
         double[] tickMs;
 
@@ -165,9 +178,27 @@ internal static class Program
             fs.Write(buf);
         }
 
+        GcStats(c.Ticks);
+
         if (wantJson) Console.WriteLine(ResultJson(s, cls, variant, msTotal, tickMs));
         else PrintHuman(s, variant, msTotal);
         return 0;
+    }
+
+    /// <summary>
+    /// What the collector did, under SLIMEBENCH_GC_STATS=1. The interesting
+    /// answer is "almost nothing": the arrays are allocated once and written
+    /// into thereafter, so this benchmark runs a garbage-collected runtime
+    /// with an idle collector.
+    /// </summary>
+    private static void GcStats(int ticks)
+    {
+        if (Environment.GetEnvironmentVariable("SLIMEBENCH_GC_STATS") != "1") return;
+        Console.Error.WriteLine(string.Format(CultureInfo.InvariantCulture,
+            "gc_stats collections={0}/{1}/{2} allocated_mib={3:F1} heap_mib={4:F1} ticks={5}",
+            GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2),
+            GC.GetTotalAllocatedBytes(false) / 1048576.0,
+            GC.GetTotalMemory(false) / 1048576.0, ticks));
     }
 
     private static void PrintHuman(Sim s, string variant, double msTotal)

@@ -251,6 +251,27 @@ bench/dotnet-aot.sh results/S-dotnet-aot.txt
   because agent positions are exact by construction and only move once a low
   bit flips a comparison. A gate that hashed only the agents would have
   certified a fast-math build. [docs/RESULTS.md §2](docs/RESULTS.md#2-language-comparison-class-s).
+- **Two of the spec's claims are proved, not just tested.** `binned` is
+  bit-identical to the serial run — §5 checks that by running eight thread
+  counts in ten languages; [impl/lean/Proofs/](impl/lean/Proofs) proves it for
+  *every* thread count and every partition. And the bit-masked torus index is
+  the modulo index, always inside the grid, and injective. Neither proof
+  mentions floating point: Lean has no axioms about `Float32` at all, so the
+  claim is restated as one about the *order* of operations, which then holds
+  for any operation — f32 addition included. `lake build` checks them and CI
+  greps for `sorryAx`.
+- **What a portable vector type costs.** Java's `jdk.incubator.vector`
+  reaches AVX-512 from source naming no instruction set and lands at 1.35× of
+  hand-written intrinsics; C#'s `Vector512<float>` at 1.20×. Both beat AVX2
+  intrinsics written in C. But .NET's *portable* `Vector<T>` refuses to go
+  past 256 bits on a machine with AVX-512, and default Native AOT gets only
+  128 — it compiles for the x64 baseline unless told otherwise, which costs
+  1.6× on the stencil and is one publish flag away.
+- **That no garbage collector here does anything.** The JVM collects zero
+  times in 200 ticks. Six of fourteen languages are collected and none is
+  asked to collect — so the class S ranking is a ranking of managed runtimes
+  with the managed part free. Measured, not assumed:
+  [bench/gc-stats.sh](bench/gc-stats.sh).
 - **What ahead-of-time compilation is worth.** .NET compiles the same source
   four ways, two of them on opposite sides of the JIT/AOT line — the only
   target here that can be asked. Native AOT lands **within 3 %** of the

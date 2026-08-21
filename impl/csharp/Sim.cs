@@ -55,6 +55,9 @@ internal sealed class Sim
         public float Decay = 0.94f;
         public int SensorSteps = 144, RotSteps = 144;
         public int HashEvery = 0;
+        public bool Simd = false;
+        // Force the portable Vector<T> even where Vector512 is available.
+        public bool SimdPortable = false;
         public string Preset = "custom";
     }
 
@@ -177,7 +180,8 @@ internal sealed class Sim
         long t1 = System.Diagnostics.Stopwatch.GetTimestamp();
 
         if (Dep != null) MergeRows(0, Cfg.Height);
-        DiffuseRows(0, Cfg.Height);
+        if (Cfg.Simd) Slimebench.Simd.DiffuseRows(this, 0, Cfg.Height, Cfg.SimdPortable);
+        else DiffuseRows(0, Cfg.Height);
         SwapBuffers();
 
         long t2 = System.Diagnostics.Stopwatch.GetTimestamp();

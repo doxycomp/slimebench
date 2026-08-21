@@ -5,6 +5,7 @@
 #   ./build.sh tier1   TieredCompilation off: everything straight to tier 1
 #   ./build.sh r2r     ReadyToRun -- AOT-compiled IL that the JIT may re-tier
 #   ./build.sh aot     Native AOT: a static binary, no JIT, no runtime
+#   ./build.sh aot-native  the same, told which CPU it will run on
 #
 # This is the reason the C# port exists. Every other language here is on one
 # side of the JIT/AOT line and stays there; .NET compiles the *same source*
@@ -87,6 +88,19 @@ case "$PROFILE" in
     ;;
   aot)
     dotnet publish "${COMMON[@]}" -r linux-x64 -p:PublishAot=true       -p:InvariantGlobalization=true >/dev/null
+    launcher_native
+    ;;
+  aot-native)
+    # Native AOT compiles for the x64 *baseline* by default -- SSE2, so
+    # Vector<float>.Count is 4 and Vector512.IsHardwareAccelerated is false,
+    # even on a machine with AVX-512. The JIT has no such problem: it sees the
+    # CPU it is running on. IlcInstructionSet is the way to tell the AOT
+    # compiler, at the cost of a binary that no longer runs anywhere.
+    #
+    # This profile exists because the difference is a class V result: whether
+    # ahead-of-time compilation keeps up with a JIT turns out to depend on
+    # whether anyone remembered this flag.
+    dotnet publish "${COMMON[@]}" -r linux-x64 -p:PublishAot=true       -p:InvariantGlobalization=true -p:IlcInstructionSet=native >/dev/null
     launcher_native
     ;;
   *) echo "unknown profile '$PROFILE'" >&2; exit 2 ;;

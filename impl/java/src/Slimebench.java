@@ -28,6 +28,7 @@ public final class Slimebench {
           --deposit-reduce M   private|binned  (SPEC-1 5.6)
           --sensor-dist F  --sensor-steps N  --rot-steps N
           --step F  --deposit F  --decay F
+          --simd               vectorised diffusion (SPEC-1 8.1)
           --headless  --json  --hash-every N
           -h, --help
         env:
@@ -64,8 +65,9 @@ public final class Slimebench {
             switch (a) {
                 case "-h", "--help" -> { System.out.println(USAGE); return; }
                 case "--json" -> { wantJson = true; continue; }
-                case "--headless", "--no-simd" -> { continue; }
-                case "--simd" -> { fail("this target has no vectorised kernel"); continue; }
+                case "--headless" -> { continue; }
+                case "--no-simd" -> { c.simd = false; continue; }
+                case "--simd" -> { c.simd = true; continue; }
                 default -> {
                     if (a.startsWith("--")) {
                         if (i + 1 >= argv.length) fail(a + " requires a value");
@@ -121,7 +123,13 @@ public final class Slimebench {
 
         boolean logTicks = "1".equals(System.getenv("SLIMEBENCH_TICK_MS"));
         String cls = "S";
-        String variant = "scalar";
+        // The variant names the width the runtime chose, as impl/c names the
+        // instruction set.
+        String variant = c.simd ? Simd.name() : "scalar";
+        if (c.simd && !Simd.available()) {
+            System.err.println("error: --simd requested but no vector unit is available");
+            System.exit(2);
+        }
         double msTotal;
         double[] tickMs;
 
@@ -150,8 +158,32 @@ public final class Slimebench {
             msTotal = (System.nanoTime() - start) / 1e6;
         }
 
+        gcStats(c.ticks);
+
         if (wantJson) System.out.println(resultJson(s, cls, variant, msTotal, tickMs));
         else printHuman(s, variant, msTotal);
+    }
+
+    /**
+     * What the collector did, under SLIMEBENCH_GC_STATS=1.
+     *
+     * <p>The interesting answer here is "nothing". The simulation allocates
+     * its arrays once and then writes into them for the rest of the run, so a
+     * garbage-collected runtime is running with an idle collector — which is
+     * worth stating, because it means this benchmark does not measure the one
+     * thing that most distinguishes these runtimes from C.</p>
+     */
+    private static void gcStats(int ticks) {
+        if (!"1".equals(System.getenv("SLIMEBENCH_GC_STATS"))) return;
+        long count = 0, millis = 0;
+        for (var b : java.lang.management.ManagementFactory.getGarbageCollectorMXBeans()) {
+            if (b.getCollectionCount() > 0) count += b.getCollectionCount();
+            if (b.getCollectionTime() > 0) millis += b.getCollectionTime();
+        }
+        Runtime rt = Runtime.getRuntime();
+        System.err.printf(Locale.ROOT,
+            "gc_stats collections=%d gc_ms=%d heap_used_mib=%.1f ticks=%d%n",
+            count, millis, (rt.totalMemory() - rt.freeMemory()) / 1048576.0, ticks);
     }
 
     private static void printHuman(Sim s, String variant, double msTotal) {

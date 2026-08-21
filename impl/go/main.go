@@ -198,6 +198,8 @@ func main() {
 		variant = cfg.Reduce.String()
 	}
 
+	gcStats(int(cfg.Ticks))
+
 	if wantJSON {
 		fmt.Println(resultJSON(s, class, variant, msTotal, tickMs))
 	} else {
@@ -217,6 +219,25 @@ func main() {
 		fmt.Printf("  agents     %.2f ms\n", float64(s.NsAgents)/1e6)
 		fmt.Printf("  diffuse    %.2f ms\n", float64(s.NsDiff)/1e6)
 	}
+}
+
+// gcStats reports what the collector did, under SLIMEBENCH_GC_STATS=1.
+//
+// The interesting answer is "almost nothing". The simulation allocates its
+// slices once and writes into them for the rest of the run, so a
+// garbage-collected runtime here is running with an idle collector. That is
+// worth measuring rather than assuming, because it means this benchmark does
+// not exercise the one thing that most separates these runtimes from C.
+func gcStats(ticks int) {
+	if os.Getenv("SLIMEBENCH_GC_STATS") != "1" {
+		return
+	}
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	fmt.Fprintf(os.Stderr,
+		"gc_stats collections=%d gc_ms=%.3f allocated_mib=%.1f mallocs=%d heap_mib=%.1f ticks=%d\n",
+		m.NumGC, float64(m.PauseTotalNs)/1e6, float64(m.TotalAlloc)/1048576.0,
+		m.Mallocs, float64(m.HeapAlloc)/1048576.0, ticks)
 }
 
 func resultJSON(s *sim.Sim, class, variant string, msTotal float64, tickMs []float64) string {

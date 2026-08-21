@@ -1,8 +1,15 @@
 name = "slimebench"
-defaultTargets = ["slimebench"]
+defaultTargets = ["slimebench", "Proofs"]
 
 [[lean_lib]]
 name = "Slimebench"
+
+# The machine-checked parts of SPEC-1. A library rather than an executable:
+# nothing runs, the point is that it elaborates. It is in defaultTargets so a
+# plain `lake build` fails if a proof breaks -- a proof that is not checked by
+# the build is a comment.
+[[lean_lib]]
+name = "Proofs"
 
 [[lean_exe]]
 name = "slimebench"
