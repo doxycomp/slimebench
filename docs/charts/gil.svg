@@ -33,34 +33,34 @@
 <text x="610.0" y="352" class="lbl-s" text-anchor="middle">16</text>
 <line x1="62" y1="263.5" x2="610" y2="263.5" stroke="#8a8a8a" stroke-width="1" stroke-dasharray="5 4"/>
 <text x="616" y="267.5" class="lbl-s">1 thread</text>
-<polyline points="62.0,263.5 199.0,241.8 336.0,289.5 473.0,314.1 610.0,324.3" fill="none" stroke="#e45756" stroke-width="2.2" stroke-linejoin="round"/>
+<polyline points="62.0,263.5 199.0,232.5 336.0,287.9 473.0,313.2 610.0,323.7" fill="none" stroke="#e45756" stroke-width="2.2" stroke-linejoin="round"/>
 <circle cx="62.0" cy="263.5" r="3.2" fill="#e45756"/>
-<circle cx="199.0" cy="241.8" r="3.2" fill="#e45756"/>
-<circle cx="336.0" cy="289.5" r="3.2" fill="#e45756"/>
-<circle cx="473.0" cy="314.1" r="3.2" fill="#e45756"/>
-<circle cx="610.0" cy="324.3" r="3.2" fill="#e45756"/>
-<text x="618.0" y="328.3" class="lbl-s" fill="#e45756">3.12 threads</text>
-<polyline points="62.0,263.5 199.0,224.6 336.0,116.6 473.0,103.9 610.0,165.2" fill="none" stroke="#f58518" stroke-width="2.2" stroke-linejoin="round"/>
+<circle cx="199.0" cy="232.5" r="3.2" fill="#e45756"/>
+<circle cx="336.0" cy="287.9" r="3.2" fill="#e45756"/>
+<circle cx="473.0" cy="313.2" r="3.2" fill="#e45756"/>
+<circle cx="610.0" cy="323.7" r="3.2" fill="#e45756"/>
+<text x="618.0" y="327.7" class="lbl-s" fill="#e45756">3.12 threads</text>
+<polyline points="62.0,263.5 199.0,224.7 336.0,116.3 473.0,98.3 610.0,152.3" fill="none" stroke="#f58518" stroke-width="2.2" stroke-linejoin="round"/>
 <circle cx="62.0" cy="263.5" r="3.2" fill="#f58518"/>
-<circle cx="199.0" cy="224.6" r="3.2" fill="#f58518"/>
-<circle cx="336.0" cy="116.6" r="3.2" fill="#f58518"/>
-<circle cx="473.0" cy="103.9" r="3.2" fill="#f58518"/>
-<circle cx="610.0" cy="165.2" r="3.2" fill="#f58518"/>
-<text x="618.0" y="169.2" class="lbl-s" fill="#f58518">3.12 processes</text>
-<polyline points="62.0,263.5 199.0,230.8 336.0,113.4 473.0,83.5 610.0,142.1" fill="none" stroke="#54a24b" stroke-width="2.2" stroke-linejoin="round"/>
+<circle cx="199.0" cy="224.7" r="3.2" fill="#f58518"/>
+<circle cx="336.0" cy="116.3" r="3.2" fill="#f58518"/>
+<circle cx="473.0" cy="98.3" r="3.2" fill="#f58518"/>
+<circle cx="610.0" cy="152.3" r="3.2" fill="#f58518"/>
+<text x="618.0" y="156.3" class="lbl-s" fill="#f58518">3.12 processes</text>
+<polyline points="62.0,263.5 199.0,226.6 336.0,119.0 473.0,73.4 610.0,135.5" fill="none" stroke="#54a24b" stroke-width="2.2" stroke-linejoin="round"/>
 <circle cx="62.0" cy="263.5" r="3.2" fill="#54a24b"/>
-<circle cx="199.0" cy="230.8" r="3.2" fill="#54a24b"/>
-<circle cx="336.0" cy="113.4" r="3.2" fill="#54a24b"/>
-<circle cx="473.0" cy="83.5" r="3.2" fill="#54a24b"/>
-<circle cx="610.0" cy="142.1" r="3.2" fill="#54a24b"/>
-<text x="618.0" y="146.1" class="lbl-s" fill="#54a24b">3.14t threads</text>
-<polyline points="62.0,263.5 199.0,231.2 336.0,137.0 473.0,127.5 610.0,178.9" fill="none" stroke="#4c78a8" stroke-width="2.2" stroke-linejoin="round"/>
+<circle cx="199.0" cy="226.6" r="3.2" fill="#54a24b"/>
+<circle cx="336.0" cy="119.0" r="3.2" fill="#54a24b"/>
+<circle cx="473.0" cy="73.4" r="3.2" fill="#54a24b"/>
+<circle cx="610.0" cy="135.5" r="3.2" fill="#54a24b"/>
+<text x="618.0" y="139.5" class="lbl-s" fill="#54a24b">3.14t threads</text>
+<polyline points="62.0,263.5 199.0,227.7 336.0,139.6 473.0,117.9 610.0,165.1" fill="none" stroke="#4c78a8" stroke-width="2.2" stroke-linejoin="round"/>
 <circle cx="62.0" cy="263.5" r="3.2" fill="#4c78a8"/>
-<circle cx="199.0" cy="231.2" r="3.2" fill="#4c78a8"/>
-<circle cx="336.0" cy="137.0" r="3.2" fill="#4c78a8"/>
-<circle cx="473.0" cy="127.5" r="3.2" fill="#4c78a8"/>
-<circle cx="610.0" cy="178.9" r="3.2" fill="#4c78a8"/>
-<text x="618.0" y="182.9" class="lbl-s" fill="#4c78a8">3.14t processes</text>
+<circle cx="199.0" cy="227.7" r="3.2" fill="#4c78a8"/>
+<circle cx="336.0" cy="139.6" r="3.2" fill="#4c78a8"/>
+<circle cx="473.0" cy="117.9" r="3.2" fill="#4c78a8"/>
+<circle cx="610.0" cy="165.1" r="3.2" fill="#4c78a8"/>
+<text x="618.0" y="169.1" class="lbl-s" fill="#4c78a8">3.14t processes</text>
 <line x1="62" y1="52" x2="62" y2="334" class="axis"/>
 <line x1="62" y1="334" x2="610" y2="334" class="axis"/>
 <text x="336" y="372" class="lbl-s" text-anchor="middle">threads</text>

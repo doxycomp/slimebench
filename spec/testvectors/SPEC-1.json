@@ -12,6 +12,16 @@
       "--agents",
       "4096"
     ],
+    "fma": [
+      "--width",
+      "128",
+      "--height",
+      "128",
+      "--agents",
+      "4096",
+      "--step",
+      "1.3"
+    ],
     "tiny": [
       "--preset",
       "tiny"
@@ -80,6 +90,26 @@
         "mean": 39.189260648011,
         "stddev": 60.419045313022,
         "frac_gt1": 0.946838378906
+      }
+    },
+    "fma/serial/100": {
+      "grid_hash": "0x1E6D5D5E",
+      "agent_hash": "0x41CCFC08",
+      "metrics": {
+        "sum": 642076.8483479619,
+        "mean": 39.189260763425,
+        "stddev": 61.165674733037,
+        "frac_gt1": 0.930847167969
+      }
+    },
+    "fma/deferred/100": {
+      "grid_hash": "0x6D8A5A7B",
+      "agent_hash": "0x2A6D308A",
+      "metrics": {
+        "sum": 642076.8504495025,
+        "mean": 39.189260891693,
+        "stddev": 67.030668103603,
+        "frac_gt1": 0.913391113281
       }
     },
     "tiny/serial/1": {

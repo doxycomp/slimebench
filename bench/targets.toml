@@ -317,6 +317,28 @@ profiles  = ["default"]
 updates  = ["deferred"]
 optional = true
 
+# The same program as python-pure -- same loops, same order, same names -- with
+# @njit on the kernels. That is the point: the ratio between the two is the
+# interpreter and nothing else. It is tier A without a strictness flag, because
+# numba has f32 as a real type where CPython does not.
+#
+# The `fastmath` profile compiles the identical source with LLVM's fast-math
+# flags and is conformance tier C. Conformance always picks a non-fastmath
+# profile, so it is benchmarked but never asked to be bit-exact -- the same
+# treatment the C targets' ofast builds get.
+[[target]]
+id       = "python-numba"
+lang     = "Python"
+backend  = "numba"
+class    = "S"
+dir      = "impl/python"
+run      = ["{numbapy}", "{dir}/slimebench_numba.py"]
+compilers = ["numba"]
+profiles  = ["default", "fastmath"]
+fastmath_profiles = ["fastmath"]
+profile_args = { fastmath = ["--fastmath"] }
+optional = true
+
 [[target]]
 id       = "python-pure"
 lang     = "Python"
@@ -623,6 +645,177 @@ compilers = ["go"]
 # feature -- a compiler flag rather than a language construct, and documented
 # as unsupported. It is here to price the checks, not to ship.
 profiles  = ["default", "nobounds"]
+
+# ------------------------------------------------------------------------- C#
+#
+# The only target that compiles the same source both through a JIT and ahead of
+# time to a native binary. That is why it is here: every other language in this
+# project sits on one side of that line and stays there, so "what does runtime
+# profile information buy over ahead-of-time compilation?" had no answer.
+#
+# Four profiles, one source, and all four must produce the same hashes:
+#   jit    tiered JIT with dynamic PGO -- what `dotnet run` does
+#   tier1  TieredCompilation off, straight to the optimising JIT
+#   r2r    ReadyToRun: IL compiled ahead of time, runtime still present
+#   aot    Native AOT: a static binary, no JIT, no runtime
+
+[[target]]
+id       = "csharp"
+lang     = "C#"
+backend  = "headless"
+class    = "S"
+dir      = "impl/csharp"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["dotnet"]
+profiles  = ["jit", "tier1", "r2r", "aot"]
+
+[[target]]
+id       = "csharp-par-binned"
+lang     = "C#"
+backend  = "threads/binned"
+class    = "P"
+dir      = "impl/csharp"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["dotnet"]
+# The class P rows use the AOT build: it is the configuration with no warm-up
+# to confound a thread sweep, which matters more here than JIT parity.
+profiles  = ["aot"]
+updates  = ["deferred"]
+extra_args = ["--deposit-reduce", "binned"]
+skip_conformance = true
+
+[[target]]
+id       = "csharp-par-private"
+lang     = "C#"
+backend  = "threads/private"
+class    = "P"
+dir      = "impl/csharp"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["dotnet"]
+profiles  = ["aot"]
+updates  = ["deferred"]
+extra_args = ["--deposit-reduce", "private"]
+skip_conformance = true
+
+# --------------------------------------------------------------------- Fortran
+#
+# The only statically typed port that needed no argument for exactness: a
+# native single-precision real since 1957, and an arithmetic model that says
+# what it does. One flag is still required and it is the same one C needs --
+# -ffp-contract=off, in build.sh, with the reasoning next to it.
+
+[[target]]
+id       = "fortran"
+lang     = "Fortran"
+backend  = "headless"
+class    = "S"
+dir      = "impl/fortran"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["gfortran"]
+profiles  = ["o2", "o3", "o3-native", "ofast-native"]
+# -Ofast implies -ffast-math, which reassociates the nine-term stencil sum.
+fastmath_profiles = ["ofast-native"]
+
+# ----------------------------------------------------------------------- OCaml
+#
+# The mirror image of the Lean port. OCaml's float array is unboxed, which
+# Lean's cannot be; OCaml 4.14 has no float32 type, which Lean does have. So
+# tier A costs a rounding call per operation here and nothing there, and the
+# data layout costs nothing here and everything there.
+
+[[target]]
+id       = "ocaml"
+lang     = "OCaml"
+backend  = "headless"
+class    = "S"
+dir      = "impl/ocaml"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["ocamlopt"]
+# `unsafe` drops array bounds checks -- OCaml's equivalent of Rust's unchecked
+# feature and Go's -gcflags=-B, here to price the checks.
+profiles  = ["default", "unsafe"]
+updates  = ["serial", "deferred"]
+
+# Tier B: the same binary with the f32 rounding switched off, so every
+# intermediate stays f64. Not a fast-math profile -- nothing is reassociated,
+# the arithmetic is simply wider -- so it is a separate target with tier = "B"
+# rather than a profile of the one above.
+[[target]]
+id       = "ocaml-f64"
+lang     = "OCaml"
+backend  = "headless-f64"
+class    = "S"
+dir      = "impl/ocaml"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["ocamlopt"]
+profiles  = ["default"]
+tier     = "B"
+conformance_set = "micro"
+extra_args = ["--f64-intermediates"]
+
+# ------------------------------------------------------------------------ Java
+#
+# A "profile" here is a set of JVM flags, not a compiler setting: javac emits
+# the same bytecode either way and the runtime decides what becomes machine
+# code and when. build.sh writes a launcher applying them, so the target looks
+# like every other binary in this file.
+
+[[target]]
+id       = "java"
+lang     = "Java"
+backend  = "headless"
+class    = "S"
+dir      = "impl/java"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["javac"]
+# `c2` skips the C1 tier, `int` disables the JIT entirely. Neither is a
+# shipping configuration; they are here because Java is the only target whose
+# speed depends on how long it has been running, and the ramp is the finding.
+profiles  = ["default", "c2", "int"]
+
+[[target]]
+id       = "java-par-binned"
+lang     = "Java"
+backend  = "threads/binned"
+class    = "P"
+dir      = "impl/java"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["javac"]
+profiles  = ["default"]
+updates  = ["deferred"]
+extra_args = ["--deposit-reduce", "binned"]
+skip_conformance = true
+
+[[target]]
+id       = "java-par-private"
+lang     = "Java"
+backend  = "threads/private"
+class    = "P"
+dir      = "impl/java"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["javac"]
+profiles  = ["default"]
+updates  = ["deferred"]
+extra_args = ["--deposit-reduce", "private"]
+skip_conformance = true
 
 [[target]]
 id       = "go-par-binned"

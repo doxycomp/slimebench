@@ -375,6 +375,151 @@ sinTable = listArray (0, ndir - 1) (map castWord32ToFloat sinBits)
     write(ROOT / "impl" / "haskell" / "src" / "DirTable.hs", body)
 
 
+def emit_java(cos_b, sin_b, table_hash):
+    # Java has no unsigned int, so the bit patterns are signed literals: a
+    # value above 0x7FFFFFFF does not fit an `int` literal and javac rejects
+    # it. The bits are identical either way -- `Float.intBitsToFloat` reads the
+    # same 32 bits -- and writing them signed is the only thing that compiles.
+    #
+    # Both arrays live in one class. A static initialiser is a method and is
+    # capped at 64 KiB of bytecode; 2880 elements at roughly 8 bytes each is
+    # about 22 KiB, so this fits with room to spare. A larger NDIR would not,
+    # and the fix would be to split the two arrays into two classes.
+    def jrows(bits, per_line=8):
+        out = []
+        for i in range(0, len(bits), per_line):
+            chunk = bits[i : i + per_line]
+            out.append("    " + " ".join(
+                f"{b - (1 << 32) if b >> 31 else b}," for b in chunk))
+        return out
+
+    th = table_hash - (1 << 32) if table_hash >> 31 else table_hash
+    body = f"""// {BANNER}
+// SPEC-1 section 4: quantised direction table, NDIR={NDIR}.
+
+final class Dirtable {{
+    private Dirtable() {{}}
+
+    /** Number of quantised headings. */
+    static final int NDIR = {NDIR};
+
+    /** Recomputed from the arrays at run time; here so it is greppable. */
+    static final int DIRTABLE_HASH = {th};
+
+    static final int[] COS_BITS = {{
+{chr(10).join(jrows(cos_b))}
+    }};
+
+    static final int[] SIN_BITS = {{
+{chr(10).join(jrows(sin_b))}
+    }};
+}}
+"""
+    write(ROOT / "impl" / "java" / "src" / "Dirtable.java", body)
+
+
+def emit_csharp(cos_b, sin_b, table_hash):
+    # C# has a real uint, so unlike the Java emitter these stay unsigned and
+    # the literals need a `u` suffix. Roslyn turns a large constant primitive
+    # array initialiser into a metadata blob plus RuntimeHelpers.InitializeArray
+    # rather than element-by-element IL, so the 64 KiB method limit that
+    # constrains the Java version does not apply here.
+    def crows(bits, per_line=8):
+        out = []
+        for i in range(0, len(bits), per_line):
+            out.append("        " + " ".join(f"0x{b:08X}u," for b in bits[i : i + per_line]))
+        return out
+
+    body = f"""// {BANNER}
+// SPEC-1 section 4: quantised direction table, NDIR={NDIR}.
+
+namespace Slimebench;
+
+internal static class Dirtable
+{{
+    /// <summary>Number of quantised headings.</summary>
+    public const int NDIR = {NDIR};
+
+    /// <summary>Recomputed from the arrays at run time; here so it is greppable.</summary>
+    public const uint DirtableHash = 0x{table_hash:08X}u;
+
+    public static readonly uint[] CosBits =
+    {{
+{chr(10).join(crows(cos_b))}
+    }};
+
+    public static readonly uint[] SinBits =
+    {{
+{chr(10).join(crows(sin_b))}
+    }};
+}}
+"""
+    write(ROOT / "impl" / "csharp" / "Dirtable.cs", body)
+
+
+def emit_ocaml(cos_b, sin_b, table_hash):
+    # OCaml's native `int` is 63-bit, so every one of these fits without the
+    # boxing an Int32 array would bring. The floats are reconstructed once at
+    # module init with Int32.float_of_bits, into a float array -- which OCaml
+    # stores unboxed, the property this port exists to measure.
+    def orows(bits, per_line=8):
+        out = []
+        for i in range(0, len(bits), per_line):
+            out.append("  " + " ".join(f"0x{b:08X};" for b in bits[i : i + per_line]))
+        return out
+
+    body = f"""(* {BANNER} *)
+(* SPEC-1 section 4: quantised direction table, NDIR={NDIR}. *)
+
+let ndir = {NDIR}
+let dirtable_hash = 0x{table_hash:08X}
+
+let cos_bits = [|
+{chr(10).join(orows(cos_b))}
+|]
+
+let sin_bits = [|
+{chr(10).join(orows(sin_b))}
+|]
+"""
+    write(ROOT / "impl" / "ocaml" / "dirtable.ml", body)
+
+
+def emit_fortran(cos_b, sin_b, table_hash):
+    # Fortran has no unsigned integer type at all, so the bit patterns are
+    # signed default integers, reinterpreted with TRANSFER. The `z'...'`
+    # BOZ literal would be the natural spelling and is not portable in an
+    # initialisation expression, so these are decimal.
+    def frows(bits, per_line=6):
+        # Free-form continuation: the ampersand goes at the *end* of a
+        # continued line. A leading "     &" is fixed-form and .f90 is not.
+        out = []
+        for i in range(0, len(bits), per_line):
+            chunk = [str(b - (1 << 32) if b >> 31 else b) for b in bits[i : i + per_line]]
+            out.append("    " + ", ".join(chunk) + ", &")
+        out[-1] = out[-1][: -len(", &")] + " ]"
+        return out
+
+    th = table_hash - (1 << 32) if table_hash >> 31 else table_hash
+    body = f"""! {BANNER}
+! SPEC-1 section 4: quantised direction table, NDIR={NDIR}.
+
+module dirtable
+  use iso_fortran_env, only: int32
+  implicit none
+  integer, parameter :: NDIR = {NDIR}
+  integer(int32), parameter :: DIRTABLE_HASH = {th}
+
+  integer(int32), parameter :: COS_BITS(NDIR) = [ &
+{chr(10).join(frows(cos_b))}
+
+  integer(int32), parameter :: SIN_BITS(NDIR) = [ &
+{chr(10).join(frows(sin_b))}
+end module dirtable
+"""
+    write(ROOT / "impl" / "fortran" / "dirtable.f90", body)
+
+
 def emit_bin(cos_b, sin_b):
     blob = struct.pack(f"<{NDIR}I", *cos_b) + struct.pack(f"<{NDIR}I", *sin_b)
     p = ROOT / "spec" / "data" / f"dirtable_{NDIR}.bin"
@@ -406,6 +551,10 @@ def main() -> int:
     emit_go(cos_b, sin_b, table_hash)
     emit_swift(cos_b, sin_b, table_hash)
     emit_lean(cos_b, sin_b, table_hash)
+    emit_java(cos_b, sin_b, table_hash)
+    emit_ocaml(cos_b, sin_b, table_hash)
+    emit_fortran(cos_b, sin_b, table_hash)
+    emit_csharp(cos_b, sin_b, table_hash)
     emit_bin(cos_b, sin_b)
     return 0
 

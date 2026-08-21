@@ -135,6 +135,32 @@ else
   missing=$((missing + 1))
 fi
 
+for tc in javac:openjdk-21-jdk-headless ocamlopt:ocaml-nox gfortran:gfortran \
+         'dotnet:dotnet-sdk-10.0 dotnet-sdk-aot-10.0'; do
+  printf '  %-14s ' "${tc%%:*}"
+  if command -v "${tc%%:*}" >/dev/null 2>&1; then
+    green "yes"; printf '  %s
+' "$(dim "$("${tc%%:*}" --version 2>&1 | head -1 | cut -c1-48)")"
+    ok=$((ok + 1))
+  else
+    red "no "; printf '   %s
+' "$(dim "-> the ${tc%%:*} target; apt install ${tc##*:}")"
+    missing=$((missing + 1))
+  fi
+done
+
+printf '  %-14s ' "numba"
+NB="${SLIMEBENCH_NUMBAPY:-$HOME/opt/numba/bin/python}"
+if [ -x "$NB" ] && "$NB" -c 'import numba, numpy' 2>/dev/null; then
+  green "yes"; printf '  %s
+' "$(dim "numba $("$NB" -c 'import numba;print(numba.__version__)') on $("$NB" -V 2>&1 | awk '{print $2}')")"
+  ok=$((ok + 1))
+else
+  red "no "; printf '   %s
+' "$(dim '-> python-numba and bench/numba-jit.sh; uv venv --python 3.12 ~/opt/numba && uv pip install --python ~/opt/numba/bin/python numba numpy')"
+  missing=$((missing + 1))
+fi
+
 printf '  %-14s ' "avx512f"
 if grep -qm1 ' avx512f' /proc/cpuinfo 2>/dev/null; then
   green "yes"; printf '  %s

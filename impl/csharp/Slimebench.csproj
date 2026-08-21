@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Slimebench</RootNamespace>
+    <AssemblyName>slimebench</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- A port that compiles with warnings has an unread message in it. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest</AnalysisLevel>
+
+    <!-- Not set here on purpose: Optimize is on by default in Release, and
+         every profile in build.sh is a Release build. The profiles differ in
+         *when* the code is compiled, not in how hard it is optimised (tiered
+         JIT, tier-1 only, ReadyToRun, Native AOT). See build.sh.
+         Note for editors: an XML comment may not contain a double hyphen. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The SDK's default glob is **/*.cs, and it excludes bin/ and obj/ by
+         name only. build.sh gives each profile its own intermediate directory
+         so a ReadyToRun image cannot leak into an AOT build; without these two
+         lines the second profile compiles the first one's generated
+         AssemblyInfo.cs as well and fails with CS0579 duplicate attributes. -->
+    <Compile Remove="build/**" />
+    <Compile Remove="obj/**" />
+  </ItemGroup>
+
+</Project>

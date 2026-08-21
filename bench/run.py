@@ -47,18 +47,38 @@ TESTVECTORS = ROOT / "spec" / "testvectors" / "SPEC-1.json"
 # larger sizes where cache behaviour and index wrapping differ.
 CONFORMANCE_SIZES = {
     "micro": ["--width", "128", "--height", "128", "--agents", "4096"],
+    # Same size, one parameter changed, and it is the only case in this suite
+    # that can catch a fused multiply-add.
+    #
+    # The default --step is 1.0, so `cos[d] * step` is exact and an FMA over it
+    # produces the identical value. The sensor multiply by --sensor-dist 9.0 is
+    # inexact, but its result only feeds an int() truncation, where a 1-ULP
+    # difference almost never crosses a cell boundary. The consequence is that
+    # every port in this project passed every case with or without its
+    # contraction flag: gfortran at -ffp-contract=fast emits thirteen f32 FMAs
+    # into the agent pass and still matched the reference on all twenty.
+    #
+    # Sweeping --step made the rule visible -- 1.0 and 2.0 agree, 1.25, 1.3,
+    # 0.7 and 3.7 diverge -- because only a power of two keeps the multiply
+    # exact. 1.3 is not one, so this case fails the moment a port lets its
+    # compiler fuse.
+    "fma": ["--width", "128", "--height", "128", "--agents", "4096",
+            "--step", "1.3"],
     "tiny": ["--preset", "tiny"],
     "small": ["--preset", "small"],
 }
 CONFORMANCE_TICKS = {
     "micro": [1, 10, 100],
+    "fma": [100],
     "tiny": [1, 10, 100, 1000],
     "small": [1, 10, 100],
 }
-# Which sizes a target runs, by its declared conformance_set.
+# Which sizes a target runs, by its declared conformance_set. "fma" is in both:
+# it costs one run at the smallest size and it is the only guard against a
+# whole class of silent divergence.
 CONFORMANCE_SETS = {
-    "micro": ["micro"],
-    "full": ["micro", "tiny", "small"],
+    "micro": ["micro", "fma"],
+    "full": ["micro", "fma", "tiny", "small"],
 }
 UPDATE_MODES = ["serial", "deferred"]
 
@@ -116,6 +136,11 @@ class Target:
     # "A" = bit-exact, "B" = tolerance-based (SPEC-1 section 7).
     tier: str = "A"
     extra_args: list[str] = field(default_factory=list)
+    # Extra arguments a *profile* adds. A C target expresses "this profile
+    # deliberately breaks tier A" by building a different binary; an
+    # interpreted target has no build step, so it says the same thing with a
+    # flag. See python-numba/fastmath.
+    profile_args: dict[str, list[str]] = field(default_factory=dict)
     # Variants of another target that differ only in a benchmark knob. They
     # would re-verify identical behaviour, so conformance skips them; the
     # target they vary is already covered.
@@ -125,6 +150,7 @@ class Target:
         out = s.replace("{cc}", cc).replace("{profile}", profile)
         out = out.replace("{dir}", str(self.dir))
         out = out.replace("{python314t}", free_threaded_python())
+        out = out.replace("{numbapy}", numba_python())
         if self.binary:
             b = self.binary.replace("{cc}", cc).replace("{profile}", profile)
             out = out.replace("{binary}", str(self.dir / b))
@@ -161,6 +187,7 @@ def load_targets() -> dict[str, Target]:
             conformance_set=t.get("conformance_set", "full"),
             tier=t.get("tier", "A"),
             extra_args=t.get("extra_args", []),
+            profile_args=t.get("profile_args", {}),
             skip_conformance=t.get("skip_conformance", False),
         )
     return out
@@ -337,7 +364,8 @@ def bench_one(t: Target, cc: str, profile: str, a: argparse.Namespace) -> dict:
         return {"target": t.id, "lang": t.lang, "cc": cc, "profile": profile,
                 "status": "build-failed", "log": build.log[-4000:]}
 
-    argv = [t.subst(x, cc, profile) for x in t.run] + sim_args(a) + t.extra_args
+    argv = ([t.subst(x, cc, profile) for x in t.run] + sim_args(a)
+            + t.extra_args + t.profile_args.get(profile, []))
     argv[0] = resolve_exe(argv[0])
     if not runnable(argv):
         print(f"   {argv[0]} not found, skipping")
@@ -403,6 +431,20 @@ def free_threaded_python() -> str:
         return env
     cand = pathlib.Path.home() / "opt" / "ft314" / "bin" / "python"
     return str(cand) if cand.exists() else "python3.14t-not-installed"
+
+
+def numba_python() -> str:
+    """Path to an interpreter with numba, or a name that will not resolve.
+
+    numba is not installable into the system interpreter here (PEP 668), so it
+    lives in its own venv beside the free-threaded build. SLIMEBENCH_NUMBAPY
+    overrides.
+    """
+    env = os.environ.get("SLIMEBENCH_NUMBAPY")
+    if env:
+        return env
+    cand = pathlib.Path.home() / "opt" / "numba" / "bin" / "python"
+    return str(cand) if cand.exists() else "numba-python-not-installed"
 
 
 def runnable(argv: list[str]) -> bool:
@@ -512,7 +554,7 @@ def run_case(t: Target, cc: str, profile: str, size: str, update: str, ticks: in
     argv[0] = resolve_exe(argv[0])
     argv += CONFORMANCE_SIZES[size]
     argv += ["--update", update, "--ticks", str(ticks), "--seed", "12345", "--json"]
-    argv += t.extra_args
+    argv += t.extra_args + t.profile_args.get(profile, [])
     if dump is not None:
         argv += ["--dump-grid", str(dump)]
     r = spawn_measured(argv, t.dir)

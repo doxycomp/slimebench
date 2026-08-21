@@ -11,6 +11,13 @@
 #   scripts/stage-wsl.sh bench --preset medium    # sync, then run the harness
 #
 # Results are copied back into results/ of the original checkout.
+#
+# Build trees are excluded, and two of the exclusions are load-bearing rather
+# than tidy. Swift's .build-*/ModuleCache records the absolute path it was
+# compiled under, so a copied one fails with "missing required module
+# SwiftShims" and the Swift target drops out of the series. Lean's .lake
+# likewise caches a linked binary, which hid a broken link for as long as the
+# cache was carried along.
 
 set -euo pipefail
 
@@ -32,13 +39,16 @@ if command -v rsync >/dev/null 2>&1; then
     --exclude 'node_modules/' \
     --exclude 'build/' \
     --exclude 'target/' \
+    --exclude '.build*/' \
+    --exclude '.lake/' \
     --exclude 'dist-newstyle/' \
     "$SRC/" "$DEST/"
 else
   # Fall back to tar so the script still works on a bare WSL install.
   ( cd "$SRC" && tar -cf - \
       --exclude=.git --exclude=results --exclude=node_modules \
-      --exclude=build --exclude=target --exclude=dist-newstyle . ) \
+      --exclude=build --exclude=target --exclude=dist-newstyle \
+      --exclude='.build*' --exclude=.lake . ) \
     | ( cd "$DEST" && tar -xf - )
 fi
 
