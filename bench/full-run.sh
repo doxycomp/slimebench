@@ -204,19 +204,21 @@ python3 bench/run.py bench --preset small --ticks 300 --warmup 100 --reps "$SB_R
   --out "$OUT/G-simd.jsonl" || true
 
 # The agent pass, which is the other 78 to 89 % of a tick and which nothing
-# above vectorises. Its own phase and its own file, at three sizes, because
-# the interesting part is how the factor moves with the grid: the argument
-# for not doing this was that gathers lose their advantage once the grid
-# leaves cache, and the measurement says the opposite.
+# above vectorises. Its own phase and its own file, at four sizes, because the
+# interesting part is how the factors move with the grid -- and they move in
+# opposite directions. Four targets, so the two changes can be told apart:
+# vectorising cuts instructions, spatial ordering cuts the distance between
+# the addresses those instructions touch, and at `large` the ordering alone
+# beats the vector unit alone.
 phase "class V, the agent pass: scalar against vectorised"
 : > "$OUT/G-agents.jsonl"
-for pre in tiny small medium; do
+for pre in tiny small medium large; do
   # One compiler and one profile on both sides: the question is what the
   # kernel does, and letting the scalar side bring twelve compiler/profile
   # combinations to a two-row comparison only adds rows to filter out
   # again.
   python3 bench/run.py bench --preset "$pre" --ticks 100 --warmup 20 \
-    --reps "$SB_REPS" --update deferred --targets c,c-simd-agents \
+    --reps "$SB_REPS" --update deferred \n    --targets c,c-tiled,c-simd-agents,c-simd-agents-tiled \
     --compilers gcc --profiles o3-native \
     --out "$OUT/G-agents.jsonl" --append || true
 done

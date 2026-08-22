@@ -52,6 +52,47 @@ headless_capable = false
 # docs/RESULTS.md.
 
 [[target]]
+# The agent pass, vectorised *and* spatially ordered. Two changes rather than
+# one, because they answer the same question from opposite ends: the kernel is
+# memory-bound, so the vector version reduces instructions and the ordering
+# reduces the distance between the addresses those instructions touch.
+#
+# Conformance is checked here for the same reason as c-simd-agents, and for
+# one more: this target permutes the agent arrays. That is only sound because
+# SPEC-1 fixes the order deposits are *applied* in, not the order agents are
+# *stepped* in -- and the argument is worth nothing without the gate agreeing.
+id       = "c-simd-agents-tiled"
+lang     = "C"
+backend  = "simd"
+class    = "V"
+dir      = "impl/c"
+build    = "make CC={cc} PROFILE={profile} headless"
+binary   = "build/{cc}-{profile}/slimebench-headless"
+run      = ["{binary}"]
+compilers = ["gcc", "clang"]
+profiles  = ["o3-native"]
+extra_args = ["--simd-agents", "--agent-tile", "2"]
+updates  = ["deferred"]
+
+[[target]]
+# Spatial ordering alone, with the scalar kernel. The pair with the row above
+# separates what the ordering is worth from what the vector unit is worth;
+# without it a single number would be credited to whichever of the two the
+# reader already believed in.
+id       = "c-tiled"
+lang     = "C"
+backend  = "scalar"
+class    = "V"
+dir      = "impl/c"
+build    = "make CC={cc} PROFILE={profile} headless"
+binary   = "build/{cc}-{profile}/slimebench-headless"
+run      = ["{binary}"]
+compilers = ["gcc"]
+profiles  = ["o3-native"]
+extra_args = ["--agent-tile", "2"]
+updates  = ["deferred"]
+
+[[target]]
 # The agent pass, vectorised. A separate target from c-simd because it is a
 # separate kernel answering a separate question: c-simd is the diffusion
 # stencil, which is 11 to 22 % of a tick, and this is the other 78 to 89 %.

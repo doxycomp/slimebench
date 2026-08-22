@@ -16,6 +16,7 @@ void sb_print_usage(FILE *f, const char *argv0) {
         "  --update MODE        serial|deferred\n"
         "  --threads N          class P, requires --update deferred\n"
         "  --simd-agents        vectorised agent pass, deferred only\n"
+        "  --agent-tile N       re-sort agents into 32x32 tiles every N ticks\n"
         "  --deposit-reduce M   private|binned  (SPEC-1 5.6)\n"
         "  --sensor-dist F  --sensor-steps N  --rot-steps N\n"
         "  --step F  --deposit F  --decay F\n"
@@ -110,6 +111,12 @@ int sb_parse_args(int argc, char **argv, sb_config *cfg, sb_cli_opts *opt) {
         /* The agent pass, separately: it answers a different question from
          * the stencil and must not be folded into what class V measures. */
         else if (!strcmp(a, "--simd-agents")) { cfg->simd_agents = 1; }
+        /* Spatial ordering of the agent arrays; the argument is how
+         * many ticks between re-sorts. 0 keeps creation order. */
+        else if (!strcmp(a, "--agent-tile")) {
+            NEED_VALUE(a);
+            cfg->agent_tile = (uint32_t)strtoul(argv[++i], NULL, 10);
+        }
         else if (!strcmp(a, "--no-simd"))    { cfg->simd = 0; }
         else if (!strcmp(a, "--hud"))        { opt->want_hud = 1; }
         else if (!strcmp(a, "--no-hud"))     { opt->want_hud = 0; }
@@ -134,6 +141,13 @@ int sb_parse_args(int argc, char **argv, sb_config *cfg, sb_cli_opts *opt) {
             fprintf(stderr, "error: --asm unavailable here: %s\n", why);
             return 2;
         }
+    }
+    if (cfg->agent_tile && cfg->update != SB_UPDATE_DEFERRED) {
+        /* Same reason as --simd-agents: reordering the step is only sound
+         * when no agent can read another's deposit within the tick. */
+        fprintf(stderr, "error: --agent-tile requires --update deferred "
+                        "(SPEC-1 5.5)\n");
+        return 2;
     }
     if (cfg->simd_agents) {
         /* Refused rather than ignored. A flag that quietly does nothing is
