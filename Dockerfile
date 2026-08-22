@@ -110,6 +110,30 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/b
 ENV SLIMEBENCH_NUMBAPY=/opt/numba/bin/python \
     SLIMEBENCH_PY314T=/opt/ft314/bin/python
 
+# The GL compute host, headless.
+#
+# pygl is class G, not class R: it runs GLSL 4.3 compute shaders and never
+# shows anything. It still needs a GL context, and pygame is what creates one
+# -- three lines, and it was already a dependency of the class R target.
+#
+# SDL's `offscreen` video driver gives that context with no display and no
+# device, over Mesa's software rasteriser, and SDL_VIDEODRIVER is set here so
+# the target works without the caller knowing any of this.
+#
+# Software on purpose, not as a fallback. docs/RESULTS.md measured the two GL
+# paths separately: llvmpipe is tier A and the D3D12/NVIDIA path is about two
+# ULP off. Passing a GPU into the container -- under WSL2 that is
+# `--device=/dev/dxg -v /usr/lib/wsl/lib` -- would make the conformance result
+# depend on the host's driver, which is the one thing an image built for
+# reproducibility must not do. The GPU belongs in a measurement run, where the
+# renderer string is recorded in the row; it does not belong in the gate.
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        --no-install-recommends python3-pygame python3-opengl \
+        libgl1-mesa-dri libglx-mesa0 libegl1 libegl-mesa0 libgbm1 \
+    && rm -rf /var/lib/apt/lists/*
+ENV SDL_VIDEODRIVER=offscreen \
+    LIBGL_ALWAYS_SOFTWARE=1
+
 # Perl's FFI bindings are only needed by the windowed targets, which a
 # container has no display for. The headless Perl target needs nothing.
 

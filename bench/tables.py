@@ -724,6 +724,45 @@ def sec_agents_total(d: pathlib.Path) -> str:
         "### §6d class V, the same runs, ms for the whole program")
 
 
+# The ordering ported to two more languages, at one size. Pairs, because the
+# question is what the change is worth in each language rather than which
+# language is fastest -- the second is what class S is for.
+AGENT_LANGS = [
+    ("C", "c", "c-tiled"),
+    ("C++", "cpp", "cpp-tiled"),
+    ("Rust", "rust", "rust-tiled"),
+    ("Go", "go", "go-tiled"),
+]
+
+
+def sec_agents_langs(d: pathlib.Path) -> str:
+    """Spatial ordering in three languages, `medium`."""
+    rows = [r for r in load(d, "G-agents.jsonl")
+            if r.get("status", "ok") == "ok" and r.get("preset") == "medium"]
+    if not rows:
+        return ""
+    by: dict = {}
+    for r in rows:
+        k = r["target"]
+        if k not in by or r["ms_agents"] < by[k]["ms_agents"]:
+            by[k] = r
+    body = []
+    for name, plain, tiled in AGENT_LANGS:
+        a, b = by.get(plain), by.get(tiled)
+        if not a or not b:
+            continue
+        body.append([name, f"{a['ms_agents']:.1f}", f"{b['ms_agents']:.1f}",
+                     f"**{a['ms_agents'] / b['ms_agents']:.2f}×**",
+                     f"{a['ms_total_best']:.1f}", f"{b['ms_total_best']:.1f}",
+                     f"{a['ms_total_best'] / b['ms_total_best']:.2f}×"])
+    if not body:
+        return ""
+    return ("### §6d spatial ordering in three languages, `medium`\n"
+            + table(["Language", "agents", "agents, ordered", "phase",
+                     "total", "total, ordered", "program"], body, "lrrrrrr")
+            + "\n")
+
+
 # ---------------------------------------------------------------------------
 # Managed tables
 #
@@ -747,6 +786,7 @@ MANAGED: list[tuple[str, list[str]]] = [
     ("sec_simd", ["simd"]),
     ("sec_agents", ["agent-pass"]),
     ("sec_agents_total", ["agent-total"]),
+    ("sec_agents_langs", ["agent-langs"]),
     ("sec_gpu", ["gpu"]),
     ("sec_render", ["render"]),
     ("sec_footprint", ["footprint"]),
@@ -872,6 +912,7 @@ def main() -> int:
 
     for fn in (sec_crosslang, sec_compilers, sec_parallel, sec_gil,
                sec_kernels, sec_simd, sec_agents, sec_agents_total,
+               sec_agents_langs,
                sec_gpu, sec_render, sec_footprint,
                sec_gc, sec_barriers, sec_ramp, sec_interpreters,
                sec_ship, sec_branchy):

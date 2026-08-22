@@ -1569,6 +1569,27 @@ being something the cache can hold. That is why it is a flag with an argument
 rather than a default, and why both tables are here — either one alone
 recommends the wrong thing at half the sizes.
 
+#### The same idea in four languages
+
+The ordering is not a C trick. It is a counting sort and an index array, and
+each port writes it the way that language writes such things: C memcpys
+through staging buffers, C++ swaps `std::vector`s, Rust swaps `Vec`s, Go swaps
+slices the runtime owns.
+
+<!-- sb:table agent-langs -->
+<!-- /sb:table -->
+
+**Go gains the most and ends up fastest**, which neither its class S rank nor
+its class P win would have predicted — the three are different questions, and
+this is the third. The permutation allocates nothing after start-up (the
+staging buffers are made once), but it moves 26 bytes per agent per re-sort,
+and a garbage-collected runtime turns out not to mind.
+
+Every port had the same place to go wrong, and the conformance gate is what
+says none of them did: the agent hash has to walk agents in **agent** order
+through the inverse permutation. Hash the slots instead and the checksum
+starts depending on a performance flag, which is the one thing it must not do.
+
 #### Why this is still tier A
 
 The permutation moves agents around in memory, which sounds like exactly the

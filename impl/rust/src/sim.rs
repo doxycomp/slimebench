@@ -84,6 +84,10 @@ pub struct Config {
     pub sensor_steps: u32,
     pub rot_steps: u32,
     pub simd: bool,
+    /// Ticks between spatial re-sorts of the agent arrays; 0 = never.
+    /// See `Sim::agent_sort` -- it changes which agent sits where, not
+    /// what any of them computes.
+    pub agent_tile: u32,
     pub hash_every: u32,
     pub preset: String,
 }
@@ -107,6 +111,7 @@ impl Default for Config {
             sensor_steps: 144,
             rot_steps: 144,
             simd: false,
+            agent_tile: 0,
             hash_every: 0,
             preset: "custom".to_string(),
         }
@@ -205,6 +210,19 @@ pub struct Sim {
     adir: Vec<u16>,
     arng: Vec<u32>,
 
+    /// Spatial ordering (`Config::agent_tile`). `aid[j]` is the original index
+    /// of the agent now in slot j and `slot[a]` is its inverse; everything
+    /// that has to speak in agent indices rather than slots -- the deposit,
+    /// the agent hash -- goes through one of them. Empty when ordering is off.
+    aid: Vec<u32>,
+    slot: Vec<u32>,
+    agent_idx: Vec<u32>,
+    sort_key: Vec<u32>,
+    sort_f32: Vec<f32>,
+    sort_u32: Vec<u32>,
+    sort_u16: Vec<u16>,
+    ticks_done: u32,
+
     cos_tab: Vec<f32>,
     sin_tab: Vec<f32>,
 
@@ -239,6 +257,14 @@ impl Sim {
             ay: vec![0.0; agents],
             adir: vec![0; agents],
             arng: vec![0; agents * 4],
+            aid: if cfg.agent_tile > 0 { (0..agents as u32).collect() } else { Vec::new() },
+            slot: if cfg.agent_tile > 0 { (0..agents as u32).collect() } else { Vec::new() },
+            agent_idx: if cfg.agent_tile > 0 { vec![0; agents] } else { Vec::new() },
+            sort_key: if cfg.agent_tile > 0 { vec![0; agents] } else { Vec::new() },
+            sort_f32: if cfg.agent_tile > 0 { vec![0.0; agents] } else { Vec::new() },
+            sort_u32: if cfg.agent_tile > 0 { vec![0; agents * 4] } else { Vec::new() },
+            sort_u16: if cfg.agent_tile > 0 { vec![0; agents] } else { Vec::new() },
+            ticks_done: 0,
             cos_tab: COS_BITS.iter().map(|&b| f32::from_bits(b)).collect(),
             sin_tab: SIN_BITS.iter().map(|&b| f32::from_bits(b)).collect(),
             ns_agents: 0,
@@ -278,7 +304,66 @@ impl Sim {
     }
 
     /// SPEC-1 section 5.2.
+    /// A counting sort of the agent arrays into 8x8 tiles of the grid, so
+    /// that three sensor reads of neighbouring agents land in neighbouring
+    /// cache lines. impl/c/sb_core.c carries the measurement behind the tile
+    /// size; this is the same algorithm, and what it is worth in Rust rather
+    /// than C is the question the two rows answer.
+    fn agent_sort(&mut self) {
+        const TILE_SHIFT: u32 = 3; // 8x8 cells
+        let n = self.cfg.agents as usize;
+        let (xmask, ymask) = (self.xmask, self.ymask);
+        let tw = (self.cfg.width + (1 << TILE_SHIFT) - 1) >> TILE_SHIFT;
+        let th = (self.cfg.height + (1 << TILE_SHIFT) - 1) >> TILE_SHIFT;
+
+        let mut count = vec![0u32; (tw as usize) * (th as usize) + 1];
+        for j in 0..n {
+            let x = (self.ax[j] as u32) & xmask;
+            let y = (self.ay[j] as u32) & ymask;
+            let key = (y >> TILE_SHIFT) * tw + (x >> TILE_SHIFT);
+            self.sort_key[j] = key;
+            count[key as usize + 1] += 1;
+        }
+        for t in 1..count.len() {
+            count[t] += count[t - 1];
+        }
+
+        // Stable: walking the agents in their current order keeps a re-sort
+        // cheap when almost nothing has moved.
+        for j in 0..n {
+            let key = self.sort_key[j] as usize;
+            let dst = count[key] as usize;
+            count[key] += 1;
+            self.sort_f32[dst] = self.ax[j];
+            self.sort_u16[dst] = self.adir[j];
+            self.sort_u32[dst * 4..dst * 4 + 4]
+                .copy_from_slice(&self.arng[j * 4..j * 4 + 4]);
+            self.sort_key[j] = dst as u32; // reused as the permutation
+        }
+        std::mem::swap(&mut self.ax, &mut self.sort_f32);
+        std::mem::swap(&mut self.adir, &mut self.sort_u16);
+        std::mem::swap(&mut self.arng, &mut self.sort_u32);
+        for j in 0..n {
+            self.sort_f32[self.sort_key[j] as usize] = self.ay[j];
+        }
+        std::mem::swap(&mut self.ay, &mut self.sort_f32);
+        for j in 0..n {
+            self.sort_u32[self.sort_key[j] as usize] = self.aid[j];
+        }
+        self.aid[..n].copy_from_slice(&self.sort_u32[..n]);
+        for j in 0..n {
+            self.slot[self.aid[j] as usize] = j as u32;
+        }
+    }
+
     pub fn tick(&mut self) {
+        // Re-sort inside the timed region, not beside it: the ordering is only
+        // worth having if it pays for itself.
+        if self.cfg.agent_tile > 0 && self.ticks_done % self.cfg.agent_tile == 0 {
+            self.agent_sort();
+        }
+        self.ticks_done += 1;
+
         let t0 = now_ns();
         self.agent_pass();
         let t1 = now_ns();
@@ -317,14 +402,26 @@ impl Sim {
     /// SPEC-1 section 5.3.
     fn agent_pass(&mut self) {
         let p = self.agent_params();
+        let deferred = self.cfg.update == Update::Deferred;
+        let tiled = self.cfg.agent_tile > 0;
 
         // Disjoint field borrows; no aliasing anywhere.
         let Self {
-            grid, dep, ax, ay, adir, arng, cos_tab, sin_tab, ..
+            grid, dep, ax, ay, adir, arng, cos_tab, sin_tab, aid, agent_idx, ..
         } = self;
         let b = AgentBufs { ax, ay, adir, arng, cos_tab, sin_tab };
 
-        if self.cfg.update == Update::Deferred {
+        if tiled {
+            // With spatial ordering the step order is no longer the agent
+            // order, so the deposits are buffered and applied afterwards in
+            // ascending *agent* index -- the same order, and therefore the
+            // same floats, as the direct loop.
+            agent_loop_tiled(p, grid, aid, agent_idx, b);
+            for i in 0..p.agents {
+                let idx = agent_idx[i];
+                *at_mut!(dep, idx) += p.deposit;
+            }
+        } else if deferred {
             agent_loop::<false>(p, grid, dep, b);
         } else {
             // `read` is unused when INPLACE; pass an empty slice to prove it.
@@ -394,7 +491,11 @@ impl Sim {
 
     pub fn hash_agents(&self) -> u32 {
         let mut h = FNV_OFFSET;
-        for i in 0..self.cfg.agents as usize {
+        // In agent order, which is slot order only when the arrays have not
+        // been spatially re-sorted. A checksum that changed with a performance
+        // flag would defeat the point of having one.
+        for a in 0..self.cfg.agents as usize {
+            let i = if self.slot.is_empty() { a } else { self.slot[a] as usize };
             h = (h ^ self.ax[i].to_bits()).wrapping_mul(FNV_PRIME);
             h = (h ^ self.ay[i].to_bits()).wrapping_mul(FNV_PRIME);
             h = (h ^ self.adir[i] as u32).wrapping_mul(FNV_PRIME);
@@ -562,6 +663,23 @@ pub fn agent_step_one(
 
 /// The agent loop. `INPLACE` selects SPEC-1's `serial` semantics, where the
 /// deposit target is also the sensing source; `read` is then unused.
+/// The same step, in slot order, writing each target cell to the agent's
+/// original index instead of depositing. Deferred only: the tiled path is
+/// refused for `serial` in the CLI, for the reason SPEC-1 5.5 gives.
+fn agent_loop_tiled(
+    p: AgentParams,
+    read: &[f32],
+    aid: &[u32],
+    out: &mut [u32],
+    b: AgentBufs<'_>,
+) {
+    let AgentBufs { ax, ay, adir, arng, cos_tab, sin_tab } = b;
+    for j in 0..p.agents {
+        let idx = agent_step_one(&p, read, ax, ay, adir, arng, cos_tab, sin_tab, j);
+        out[aid[j] as usize] = idx;
+    }
+}
+
 fn agent_loop<const INPLACE: bool>(
     p: AgentParams,
     read: &[f32],

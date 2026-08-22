@@ -75,6 +75,60 @@ extra_args = ["--simd-agents", "--agent-tile", "2"]
 updates  = ["deferred"]
 
 [[target]]
+# The same spatial ordering in C++ and in Rust. Three languages doing the same
+# thing to the same bottleneck: the interesting number is not any one of them
+# but whether the factor survives a different memory model and a different
+# standard library. C memcpys through staging buffers, C++ swaps std::vectors,
+# Rust swaps Vecs -- and all three have to keep the agent hash walking agents
+# in agent order through the inverse permutation, which is where a port of
+# this would most easily go wrong without the gate noticing.
+id       = "cpp-tiled"
+lang     = "C++"
+backend  = "scalar"
+class    = "V"
+dir      = "impl/cpp"
+build    = "make CXX={cc} PROFILE={profile} headless"
+binary   = "build/{cc}-{profile}/slimebench-headless"
+run      = ["{binary}"]
+compilers = ["g++"]
+profiles  = ["o3-native"]
+extra_args = ["--agent-tile", "2"]
+updates  = ["deferred"]
+
+[[target]]
+# Go as well, because it is the one collected language here whose agent arrays
+# are slices the runtime owns. The permutation allocates nothing -- the
+# staging buffers are made once -- but it moves 26 bytes per agent per
+# re-sort, and whether a garbage-collected runtime minds that is not something
+# the C row can answer.
+id       = "go-tiled"
+lang     = "Go"
+backend  = "scalar"
+class    = "V"
+dir      = "impl/go"
+build    = "./build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["go"]
+profiles  = ["nobounds"]
+extra_args = ["--agent-tile", "2"]
+updates  = ["deferred"]
+
+[[target]]
+id       = "rust-tiled"
+lang     = "Rust"
+backend  = "scalar"
+class    = "V"
+dir      = "impl/rust"
+build    = "cargo build --release"
+binary   = "target/release/slimebench"
+run      = ["{binary}"]
+compilers = ["cargo"]
+profiles  = ["release"]
+extra_args = ["--agent-tile", "2"]
+updates  = ["deferred"]
+
+[[target]]
 # Spatial ordering alone, with the scalar kernel. The pair with the row above
 # separates what the ordering is worth from what the vector unit is worth;
 # without it a single number would be credited to whichever of the two the

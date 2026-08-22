@@ -43,6 +43,7 @@ void printUsage(std::FILE* f, const char* argv0) {
         "  --agents N  --ticks N  --warmup N  --seed N\n"
         "  --update MODE        serial|deferred\n"
         "  --threads N          class P, requires --update deferred\n"
+        "  --agent-tile N       re-sort agents into 8x8 tiles every N ticks\n"
         "  --deposit-reduce M   private|binned  (SPEC-1 5.6)\n"
         "  --sensor-dist F  --sensor-steps N  --rot-steps N\n"
         "  --step F  --deposit F  --decay F\n"
@@ -113,6 +114,13 @@ int parseArgs(int argc, char** argv, Config& cfg, CliOpts& opt) {
         else if (a == "--json")       { opt.want_json = true; }
         else if (a == "--freeze-sim") { opt.freeze_sim = true; }
         else if (a == "--simd")       { cfg.simd = true; }
+        // Spatial ordering of the agent arrays; the argument is how many
+        // ticks between re-sorts. 0 keeps creation order.
+        else if (a == "--agent-tile") {
+            cfg.agent_tile = static_cast<std::uint32_t>(
+                std::strtoul(std::string(need(i++, "--agent-tile")).c_str(),
+                             nullptr, 10));
+        }
         else if (a == "--no-simd")    { cfg.simd = false; }
         else if (a == "--hud")        { opt.want_hud = 1; }
         else if (a == "--no-hud")     { opt.want_hud = 0; }

@@ -111,6 +111,10 @@ func main() {
 			cfg.Seed = u32(next())
 		case "--threads":
 			cfg.Threads = u32(next())
+		// Spatial ordering of the agent arrays; the argument is how many
+		// ticks between re-sorts. 0 keeps creation order.
+		case "--agent-tile":
+			cfg.AgentTile = u32(next())
 		case "--hash-every":
 			cfg.HashEvery = u32(next())
 		case "--sensor-steps":

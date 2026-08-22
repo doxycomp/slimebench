@@ -224,6 +224,15 @@ for pre in tiny small medium large; do
     --out "$OUT/G-agents.jsonl" --append || true
 done
 
+# The same ordering in C++ and in Rust, at one size. Whether the factor
+# survives a different memory model and a different standard library is a
+# separate question from how big it is in C, and it needs one preset to
+# answer, not four.
+python3 bench/run.py bench --preset medium --ticks 100 --warmup 20 \
+  --reps "$SB_REPS" --update deferred \
+  --targets cpp,cpp-tiled,rust,rust-tiled,go,go-tiled \
+  --out "$OUT/G-agents.jsonl" --append || true
+
 # The four-way kernel comparison, reported as ms_diffuse: the agent pass is
 # identical in all of them and would dilute the difference. Needs AVX-512 and
 # ASM=1; the script says so and writes nothing if either is missing.

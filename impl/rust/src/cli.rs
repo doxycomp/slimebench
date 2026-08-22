@@ -127,6 +127,9 @@ pub fn parse_args() -> Opts {
                 i += 1;
             }
             "--simd" => o.cfg.simd = true,
+            // Spatial ordering of the agent arrays; the argument is how
+            // many ticks between re-sorts. 0 keeps creation order.
+            "--agent-tile" => { o.cfg.agent_tile = u32v(&need(i, &argv, a)); i += 1; }
             "--no-simd" => o.cfg.simd = false,
             "--hud" => hud_flag = Some(true),
             "--no-hud" => hud_flag = Some(false),
