@@ -88,15 +88,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Three generators write source that is committed: the trig table into
-      # every language, the GLSL shaders into a C header, and the Rust copy of
-      # the bitmap font. Committed generated output drifts from its generator
+      # Four generators write source that is committed: the trig table into
+      # every language, the GLSL shaders into a C header, and the Rust and
+      # Python copies of the bitmap font. Committed generated output drifts from its generator
       # the first time someone edits the output by hand, and nothing notices.
       # This job notices.
       - name: Re-run the generators
         run: |
           python3 spec/tools/gen_dirtable.py
           python3 spec/tools/gen_rust_font.py
+          python3 spec/tools/gen_python_font.py
           python3 impl/glcompute/gen_shaders.py
 
       - name: Working tree must be unchanged

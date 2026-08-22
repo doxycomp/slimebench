@@ -140,7 +140,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
             BOOTSTRAP_HASKELL_INSTALL_NO_STACK=1 \
             BOOTSTRAP_HASKELL_ADJUST_BASHRC=0 sh
 ENV PATH=/opt/.ghcup/bin:${PATH}
-RUN cabal update && cabal install --lib vector
+# vector is the only non-boot package the ports need, but naming just it
+# builds a package environment that *hides* the boot packages -- GHC then
+# refuses `Data.Array.Unboxed` as "a member of the hidden package array".
+# So every package the sources import is named, boot or not.
+#
+# This has to happen inside the image. impl/haskell/build.sh documents a local
+# `--package-env .` file instead, which cabal writes with the absolute path of
+# its store baked in; that file is machine-specific and is excluded from the
+# build context for exactly that reason.
+RUN cabal update     && cabal install --lib vector array bytestring text
 
 # Swift ships its own clang. It goes on the PATH *after* the system one on
 # purpose: prepending it would shadow clang 18 and silently change what the

@@ -95,6 +95,12 @@ int sb_sim_init(sb_sim *s, const sb_config *cfg) {
     for (uint32_t d = 0; d < SB_NDIR; d++) {
         s->cos_tab[d] = bits_to_f32(SB_COS_BITS[d]);
         s->sin_tab[d] = bits_to_f32(SB_SIN_BITS[d]);
+        /* Interleaved and pre-scaled; see the comment on sens_tab. Exactly
+         * the multiply the scalar step performs, hoisted out of the loop. */
+        s->sens_tab[d * 2 + 0] = s->cos_tab[d] * cfg->sensor_dist;
+        s->sens_tab[d * 2 + 1] = s->sin_tab[d] * cfg->sensor_dist;
+        s->move_tab[d * 2 + 0] = s->cos_tab[d] * cfg->step;
+        s->move_tab[d * 2 + 1] = s->sin_tab[d] * cfg->step;
     }
 
     const size_t cells = (size_t)cfg->width * cfg->height;

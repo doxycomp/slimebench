@@ -62,6 +62,23 @@ typedef struct {
      * Allocated only when that path is on. */
     uint32_t *agent_idx;
 
+    /* The same trig values, multiplied by the two distances the tick uses and
+     * interleaved as (x, y) pairs.
+     *
+     * Bit-identical to computing cos_tab[d] * sensor_dist in the loop -- same
+     * two operands, same multiply, done once instead of a million times a
+     * tick -- and the pairing lets a vector kernel fetch both components of a
+     * direction in one eight-byte gather element instead of two four-byte
+     * ones. That halves the load-port traffic of the eight table gathers the
+     * agent step needs, which measurement puts at 54 % of its time.
+     *
+     * Built in sb_sim_init after cos_tab and sin_tab, used by
+     * sb_simd_agents.c and impl/asm/sb_agents_avx512.S. The scalar path does
+     * not read them: it must keep doing the multiply where SPEC-1 5.3 puts
+     * it, so that the two paths can be compared rather than assumed equal. */
+    float sens_tab[SB_NDIR * 2];   /* cos*sensor_dist, sin*sensor_dist */
+    float move_tab[SB_NDIR * 2];   /* cos*step,        sin*step        */
+
     float cos_tab[SB_NDIR];
     float sin_tab[SB_NDIR];
 

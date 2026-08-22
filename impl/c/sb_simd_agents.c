@@ -75,20 +75,44 @@ static inline __m512i modv(__m512i t, __m512i ndir) {
     return _mm512_mask_sub_epi32(t, ge, t, ndir);
 }
 
+/* Both components of sixteen directions, from an interleaved table.
+ *
+ * The pair (x, y) for one direction is eight contiguous bytes, so one gather
+ * element fetches both -- sixteen eight-byte accesses where two separate
+ * tables need thirty-two four-byte ones. The two halves come back as
+ * [x0 y0 x1 y1 ...] and are separated with two permutes, which cost far less
+ * than the sixteen load-port slots they save.
+ *
+ * The values are pre-scaled by sensor_dist or step; see sb_core.h. That is
+ * the same multiply the scalar step does, with the same two operands, hoisted
+ * out of a loop that runs a million times a tick. */
+static inline void pairv(const float *tab, __m512i d, __m512 *ox, __m512 *oy) {
+    const __m512 lo = _mm512_castpd_ps(_mm512_i32gather_pd(
+        _mm512_castsi512_si256(d), tab, 8));
+    const __m512 hi = _mm512_castpd_ps(_mm512_i32gather_pd(
+        _mm512_extracti64x4_epi64(d, 1), tab, 8));
+    const __m512i even = _mm512_setr_epi32(0, 2, 4, 6, 8, 10, 12, 14,
+                                           16, 18, 20, 22, 24, 26, 28, 30);
+    const __m512i odd = _mm512_setr_epi32(1, 3, 5, 7, 9, 11, 13, 15,
+                                          17, 19, 21, 23, 25, 27, 29, 31);
+    *ox = _mm512_permutex2var_ps(lo, even, hi);
+    *oy = _mm512_permutex2var_ps(lo, odd, hi);
+}
+
 /* The cell a sensor at direction `d` reads, sixteen agents at a time. */
-static inline __m512 sensev(const sb_agent_ctx *k, __m512 x, __m512 y,
-                            __m512i d, __m512 fw, __m512 fh, __m512 sdist,
+static inline __m512 sensev(const sb_sim *sim, __m512 x, __m512 y,
+                            __m512i d, __m512 fw, __m512 fh,
                             __m512i xmask, __m512i ymask, __m512i log2w) {
-    const __m512 c = _mm512_i32gather_ps(d, k->cos_tab, 4);
-    const __m512 s = _mm512_i32gather_ps(d, k->sin_tab, 4);
-    /* Separate multiply and add. Fusing these is the one thing that would
-     * take this out of tier A. */
-    const __m512 sx = wrapv(_mm512_add_ps(x, _mm512_mul_ps(c, sdist)), fw);
-    const __m512 sy = wrapv(_mm512_add_ps(y, _mm512_mul_ps(s, sdist)), fh);
+    __m512 ox, oy;
+    pairv(sim->sens_tab, d, &ox, &oy);
+    /* A plain add: the multiply by sensor_dist is already in the table, and
+     * it is the same multiply. Nothing here may be fused. */
+    const __m512 sx = wrapv(_mm512_add_ps(x, ox), fw);
+    const __m512 sy = wrapv(_mm512_add_ps(y, oy), fh);
     const __m512i ix = _mm512_and_epi32(_mm512_cvttps_epu32(sx), xmask);
     const __m512i iy = _mm512_and_epi32(_mm512_cvttps_epu32(sy), ymask);
     const __m512i idx = _mm512_or_epi32(_mm512_sllv_epi32(iy, log2w), ix);
-    return _mm512_i32gather_ps(idx, k->grid, 4);
+    return _mm512_i32gather_ps(idx, sim->grid, 4);
 }
 
 /* Advances agents [i0, i0+VW) and writes their target cells into out[0..VW).
@@ -97,8 +121,6 @@ static inline void agents_block(const sb_agent_ctx *k, sb_sim *s, uint32_t i0,
                                 uint32_t *out) {
     const __m512 fw = _mm512_set1_ps(k->fw);
     const __m512 fh = _mm512_set1_ps(k->fh);
-    const __m512 sdist = _mm512_set1_ps(k->sdist);
-    const __m512 step = _mm512_set1_ps(k->step);
     const __m512i xmask = _mm512_set1_epi32((int)k->xmask);
     const __m512i ymask = _mm512_set1_epi32((int)k->ymask);
     const __m512i log2w = _mm512_set1_epi32((int)k->log2w);
@@ -116,9 +138,9 @@ static inline void agents_block(const sb_agent_ctx *k, sb_sim *s, uint32_t i0,
                             ndir);
     const __m512i dr = modv(_mm512_add_epi32(d, ss), ndir);
 
-    const __m512 fl = sensev(k, x, y, dl, fw, fh, sdist, xmask, ymask, log2w);
-    const __m512 fc = sensev(k, x, y, d, fw, fh, sdist, xmask, ymask, log2w);
-    const __m512 fr = sensev(k, x, y, dr, fw, fh, sdist, xmask, ymask, log2w);
+    const __m512 fl = sensev(s, x, y, dl, fw, fh, xmask, ymask, log2w);
+    const __m512 fc = sensev(s, x, y, d, fw, fh, xmask, ymask, log2w);
+    const __m512 fr = sensev(s, x, y, dr, fw, fh, xmask, ymask, log2w);
 
     /* The same four cases as sb_agent_step, in the same order of precedence,
      * as masks rather than as branches. */
@@ -159,10 +181,10 @@ static inline void agents_block(const sb_agent_ctx *k, sb_sim *s, uint32_t i0,
         dn = _mm512_loadu_si512((const void *)dv);
     }
 
-    const __m512 cn = _mm512_i32gather_ps(dn, k->cos_tab, 4);
-    const __m512 sn = _mm512_i32gather_ps(dn, k->sin_tab, 4);
-    x = wrapv(_mm512_add_ps(x, _mm512_mul_ps(cn, step)), fw);
-    y = wrapv(_mm512_add_ps(y, _mm512_mul_ps(sn, step)), fh);
+    __m512 mx, my;
+    pairv(s->move_tab, dn, &mx, &my);
+    x = wrapv(_mm512_add_ps(x, mx), fw);
+    y = wrapv(_mm512_add_ps(y, my), fh);
 
     _mm256_storeu_si256((__m256i *)(void *)(s->adir + i0),
                         _mm512_cvtepi32_epi16(dn));

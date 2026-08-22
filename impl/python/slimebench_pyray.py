@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from raylib import ffi, rl  # noqa: E402
 
 from slimebench import common  # noqa: E402
+from slimebench import hud as sbhud  # noqa: E402
 from slimebench.render import RenderStats  # noqa: E402
 import slimebench_numpy as sbn  # noqa: E402
 
@@ -63,19 +64,71 @@ def main() -> int:
 
     black = ffi.new("Color *", [0, 0, 0, 255])[0]
     white = ffi.new("Color *", [255, 255, 255, 255])[0]
-    scale = np.float32(255.0 / o.display_max)
+    display_max = float(o.display_max)
+    scale = np.float32(255.0 / display_max)
+
+    h = sbhud.Hud(label="Python / raylib", show_hud=not o.want_json)
+    hv = sbhud.HudView(
+        width=cfg.width, height=cfg.height, agents=cfg.agents,
+        threads=getattr(cfg, "threads", 1) or 1,
+        rot_steps=cfg.rot_steps, deposit=cfg.deposit, decay=cfg.decay,
+        sensor_dist=cfg.sensor_dist, step=cfg.step,
+        deferred=(cfg.update == "deferred"))
+    # raylib's key codes are ASCII for the printable keys, which is why this
+    # map is shorter than pygame's.
+    keymap = {
+        256: "quit", ord("Q"): "quit", ord(" "): "pause", ord("N"): "step",
+        ord("R"): "reset", 258: "hud", ord("H"): "help", 290: "help",
+        ord("C"): "hash", ord("F"): "freeze",
+        ord("1"): "deposit-", ord("2"): "deposit+",
+        ord("3"): "decay-", ord("4"): "decay+",
+        ord("5"): "sensor-", ord("6"): "sensor+",
+        ord("7"): "step-", ord("8"): "step+",
+        ord("9"): "rot-", ord("0"): "rot+",
+        ord("-"): "bright-", ord("="): "bright+",
+    }
+    # A two-dimensional view of the same C buffer, for the overlay to draw in.
+    grid2d = view.reshape(cfg.height, cfg.width)
 
     stats = RenderStats()
     for _ in range(frames):
         if rl.WindowShouldClose():
             break
-        if not o.freeze_sim:
+        for key, action in keymap.items():
+            if not rl.IsKeyPressed(key):
+                continue
+            before = display_max
+            display_max = sbhud.act(h, hv, action, display_max)
+            if display_max != before:
+                scale = np.float32(255.0 / display_max)
+            cfg.deposit, cfg.decay = hv.deposit, hv.decay
+            cfg.sensor_dist, cfg.step = hv.sensor_dist, hv.step
+            cfg.rot_steps = hv.rot_steps
+        if h.want_quit:
+            break
+        if h.want_reset:
+            sim = sbn.Sim(cfg)
+            h.tick = 0
+            h.want_reset = False
+        if h.want_hash:
+            print(f"grid {sim.hash_grid()}  agents {sim.hash_agents()}"
+                  f"  tick {h.tick}"
+                  f"{'  EDITED' if h.edited else ''}", file=sys.stderr)
+            h.want_hash = False
+
+        s0 = time.perf_counter_ns()
+        if not o.freeze_sim and not h.frozen and (not h.paused or h.step_once):
             sim.tick()
+            h.tick += 1
+            h.step_once = False
+        sim_ns = time.perf_counter_ns() - s0
 
         r0 = time.perf_counter_ns()
         # Straight into the C buffer the texture reads from -- no Python-side
         # copy of the frame.
         view[:] = np.clip(sim.grid * scale, 0, 255)
+        sbhud.draw(grid2d, h, hv, display_max)
+        h.smooth(sim_ns / 1e6, stats.recent_mean(1))
         rl.UpdateTexture(tex, cbuf)
 
         rl.BeginDrawing()
