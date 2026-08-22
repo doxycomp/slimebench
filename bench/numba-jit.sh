@@ -49,7 +49,6 @@ echo "=== A. the same program, interpreted and compiled (128x128/4096, 100 ticks
 printf '%-32s %-12s %-12s %10s %8s\n' target grid agents ms/tick spread
 row() { # reps label cmd...
   local reps=$1 label=$2; shift 2
-  local i
   for _ in $(seq "$reps"); do
     "$@" $CFG --json 2>/dev/null | grep -m1 '^{'
   done | LBL="$label" python3 -c '
