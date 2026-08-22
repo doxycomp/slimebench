@@ -539,6 +539,27 @@ def runnable(argv: list[str]) -> bool:
     return shutil.which(exe) is not None
 
 
+def device_available(argv: list[str], update: str) -> tuple[bool, str]:
+    """Whether a class G target can reach its GPU, asked by trying.
+
+    Returns (False, reason) when a zero-tick run does not succeed. The reason
+    is the last line the target wrote to stderr, so the skip says what was
+    missing rather than only that something was.
+    """
+    try:
+        # The update mode is the target's own, not a default: pygl rejects
+        # `serial` on principle (SPEC-1 5.5) and exits non-zero for it, which
+        # would read as a missing device.
+        r = subprocess.run([*argv, "--ticks", "0", "--update", update, "--json"],
+                           capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return False, f"no device ({type(e).__name__})"
+    if r.returncode == 0:
+        return True, ""
+    tail = [l for l in (r.stderr or "").splitlines() if l.strip()]
+    return False, tail[-1].strip()[:120] if tail else f"exit {r.returncode}"
+
+
 def resolve_exe(x: str) -> str:
     # absolute(), not resolve(): a virtualenv's bin/python is a symlink to the
     # base interpreter, and a venv works by the path it was *invoked* through.
@@ -670,18 +691,41 @@ def cmd_conformance(a: argparse.Namespace) -> int:
         if t.build and not shutil.which(cc.split("/")[-1]):
             print(f"-- {t.id}: {cc} not installed, skipping")
             continue
-        probe = [t.subst(x, cc, profile) for x in t.run]
-        probe[0] = resolve_exe(probe[0])
-        if not runnable(probe):
-            print(f"-- {t.id}: {probe[0]} not found, skipping")
-            continue
-
+        # Build first, then check the binary exists. The other order looks
+        # equivalent and is not: it asks whether a target is runnable *before*
+        # anything has built it, so on a machine where nothing is pre-built --
+        # a fresh container, for instance -- every compiled target skips with
+        # "not found" and the gate silently checks the interpreted ones only.
+        # That is how the container job came to assert twelve languages while
+        # exercising five.
         b = do_build(t, cc, profile, a.verbose)
         if not b.ok:
             print(f"-- {t.id}: BUILD FAILED")
             print(indent(b.log[-2000:]))
             failures += 1
             continue
+
+        probe = [t.subst(x, cc, profile) for x in t.run]
+        probe[0] = resolve_exe(probe[0])
+        if not runnable(probe):
+            print(f"-- {t.id}: {probe[0]} not found, skipping")
+            continue
+        # `runnable` answers whether the OS can start argv[0], which is the
+        # right question for a compiled binary and the wrong one for a script:
+        # `python3` always exists, so a GPU target whose device is absent
+        # passed that check, started, and failed every conformance case. In a
+        # container without a GL device that is eleven reported divergences
+        # for a target that never computed anything -- exactly the failure
+        # `runnable` was written to stop, one level further in.
+        #
+        # So class G targets are asked to do nothing at all first. A device
+        # that is not there fails a zero-tick run just as surely as a
+        # thousand-tick one, and costs one process to find out.
+        if t.cls == "G":
+            ok, why = device_available(probe, t.updates[0])
+            if not ok:
+                print(f"-- {t.id}: {why}, skipping")
+                continue
 
         skipped = [m for m in UPDATE_MODES if m not in t.updates]
         note = f"  [tier {t.tier}, {t.conformance_set} set"
