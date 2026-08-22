@@ -646,6 +646,84 @@ def sec_branchy(d: pathlib.Path) -> str:
                      "stencil, ms"], body, "lrrr") + "\n")
 
 
+# The agent pass, four ways. Two changes that attack the same bottleneck from
+# opposite ends -- fewer instructions, and shorter distances between the
+# addresses those instructions touch -- so they are reported together, and
+# separately, at four grid sizes.
+AGENT_VARIANTS = [
+    ("c", "scalar"),
+    ("c-tiled", "+ tiles"),
+    ("c-simd-agents", "+ simd"),
+    ("c-simd-agents-tiled", "both"),
+]
+
+
+def _agent_grid(d: pathlib.Path) -> tuple[list[str], dict]:
+    rows = load(d, "G-agents.jsonl")
+    by: dict = {}
+    presets: list[str] = []
+    for r in rows:
+        if r.get("status", "ok") != "ok":
+            continue
+        pre = r["preset"]
+        if pre not in presets:
+            presets.append(pre)
+        k = (pre, r["target"])
+        if k not in by or r["ms_agents"] < by[k]["ms_agents"]:
+            by[k] = r
+    # tiny before large, whatever order the run emitted them in.
+    order = ["tiny", "small", "medium", "large", "huge"]
+    presets.sort(key=lambda x: order.index(x) if x in order else 99)
+    return presets, by
+
+
+def _agent_table(d: pathlib.Path, field: str, heading: str) -> str:
+    presets, by = _agent_grid(d)
+    if not by:
+        return ""
+    body = []
+    for pre in presets:
+        got = [by.get((pre, t)) for t, _ in AGENT_VARIANTS]
+        if not got[0]:
+            continue
+        ref = got[0]
+        mib = ref["width"] * ref["height"] * 4 / 1048576
+        vals = [r[field] if r else None for r in got]
+        best = min(v for v in vals if v is not None)
+        cells = []
+        for v in vals:
+            if v is None:
+                cells.append("—")
+            elif v == best and best != vals[0]:
+                cells.append(f"**{v:.1f}**")
+            else:
+                cells.append(f"{v:.1f}")
+        body.append([pre, f"{mib:.0f} MiB"] + cells
+                    + [f"{vals[0] / best:.2f}×"])
+    return (heading + "\n"
+            + table(["preset", "grid"] + [n for _, n in AGENT_VARIANTS]
+                    + ["best"], body, "lrrrrrr") + "\n")
+
+
+def sec_agents(d: pathlib.Path) -> str:
+    """Class V, the agent pass -- the phase itself."""
+    return _agent_table(
+        d, "ms_agents",
+        "### §6d class V, the agent pass, ms in the agent phase")
+
+
+def sec_agents_total(d: pathlib.Path) -> str:
+    """The same runs, whole program.
+
+    Separate from the phase table because the two disagree, and that is the
+    finding: on a grid that fits in cache the sort costs more than the
+    locality saves, so the phase improves and the program does not.
+    """
+    return _agent_table(
+        d, "ms_total_best",
+        "### §6d class V, the same runs, ms for the whole program")
+
+
 # ---------------------------------------------------------------------------
 # Managed tables
 #
@@ -667,6 +745,8 @@ MANAGED: list[tuple[str, list[str]]] = [
     ("sec_parallel", ["p-binned", "p-private", "p-atomic", "p-replicated"]),
     ("sec_gil", ["gil-binned", "gil-private"]),
     ("sec_simd", ["simd"]),
+    ("sec_agents", ["agent-pass"]),
+    ("sec_agents_total", ["agent-total"]),
     ("sec_gpu", ["gpu"]),
     ("sec_render", ["render"]),
     ("sec_footprint", ["footprint"]),
@@ -791,7 +871,8 @@ def main() -> int:
         print("```\n" + env.read_text(encoding="utf-8").rstrip() + "\n```\n")
 
     for fn in (sec_crosslang, sec_compilers, sec_parallel, sec_gil,
-               sec_kernels, sec_simd, sec_gpu, sec_render, sec_footprint,
+               sec_kernels, sec_simd, sec_agents, sec_agents_total,
+               sec_gpu, sec_render, sec_footprint,
                sec_gc, sec_barriers, sec_ramp, sec_interpreters,
                sec_ship, sec_branchy):
         s = fn(d)

@@ -20,30 +20,32 @@
 
 <text x="16" y="22" class="ttl">How far the same simulation goes</text>
 <text x="16" y="39" class="sub">2048x2048, 1 048 576 agents, 100 ticks, deferred. Log scale.</text>
-<line x1="240.7" y1="44" x2="240.7" y2="176" class="grid"/>
-<text x="240.7" y="190" class="lbl-s" text-anchor="middle">50</text>
-<line x1="305.7" y1="44" x2="305.7" y2="176" class="grid"/>
-<text x="305.7" y="190" class="lbl-s" text-anchor="middle">100</text>
-<line x1="370.7" y1="44" x2="370.7" y2="176" class="grid"/>
-<text x="370.7" y="190" class="lbl-s" text-anchor="middle">200</text>
-<line x1="456.7" y1="44" x2="456.7" y2="176" class="grid"/>
-<text x="456.7" y="190" class="lbl-s" text-anchor="middle">500</text>
-<line x1="521.7" y1="44" x2="521.7" y2="176" class="grid"/>
-<text x="521.7" y="190" class="lbl-s" text-anchor="middle">1000</text>
-<line x1="586.7" y1="44" x2="586.7" y2="176" class="grid"/>
-<text x="586.7" y="190" class="lbl-s" text-anchor="middle">2000</text>
+<line x1="229.7" y1="44" x2="229.7" y2="176" class="grid"/>
+<text x="229.7" y="190" class="lbl-s" text-anchor="middle">50</text>
+<line x1="292.1" y1="44" x2="292.1" y2="176" class="grid"/>
+<text x="292.1" y="190" class="lbl-s" text-anchor="middle">100</text>
+<line x1="354.4" y1="44" x2="354.4" y2="176" class="grid"/>
+<text x="354.4" y="190" class="lbl-s" text-anchor="middle">200</text>
+<line x1="436.8" y1="44" x2="436.8" y2="176" class="grid"/>
+<text x="436.8" y="190" class="lbl-s" text-anchor="middle">500</text>
+<line x1="499.2" y1="44" x2="499.2" y2="176" class="grid"/>
+<text x="499.2" y="190" class="lbl-s" text-anchor="middle">1000</text>
+<line x1="561.5" y1="44" x2="561.5" y2="176" class="grid"/>
+<text x="561.5" y="190" class="lbl-s" text-anchor="middle">2000</text>
+<line x1="644.0" y1="44" x2="644.0" y2="176" class="grid"/>
+<text x="644.0" y="190" class="lbl-s" text-anchor="middle">5000</text>
 <text x="430" y="202" class="lbl-s" text-anchor="middle">ms total (log)</text>
 <text x="180" y="69" class="lbl" text-anchor="end">C, 1 thread (class S)</text>
-<rect x="190" y="52" width="466.9" height="24" rx="2" fill="#4c78a8"/>
-<text x="664.9" y="69" class="lbl-s">4,227  1x</text>
+<rect x="190" y="52" width="467.4" height="24" rx="2" fill="#4c78a8"/>
+<text x="665.4" y="69" class="lbl-s">5,808  1x</text>
 <text x="180" y="99" class="lbl" text-anchor="end">C++, 32 threads (class P)</text>
-<rect x="190" y="82" width="283.9" height="24" rx="2" fill="#f58518"/>
-<text x="481.9" y="99" class="lbl-s">600  7x</text>
+<rect x="190" y="82" width="275.9" height="24" rx="2" fill="#f58518"/>
+<text x="473.9" y="99" class="lbl-s">691  8x</text>
 <text x="180" y="129" class="lbl" text-anchor="end">GL compute (class G)</text>
-<rect x="190" y="112" width="418.9" height="24" rx="2" fill="#bab0ac"/>
-<text x="616.9" y="129" class="lbl-s">2,534  2x</text>
+<rect x="190" y="112" width="402.4" height="24" rx="2" fill="#bab0ac"/>
+<text x="600.4" y="129" class="lbl-s">2,819  2x</text>
 <text x="180" y="159" class="lbl" text-anchor="end">CUDA (class G)</text>
-<rect x="190" y="142" width="44.1" height="24" rx="2" fill="#9d755d"/>
-<text x="242.1" y="159" class="lbl-s">47  91x</text>
+<rect x="190" y="142" width="42.3" height="24" rx="2" fill="#9d755d"/>
+<text x="240.3" y="159" class="lbl-s">51  113x</text>
 <line x1="190" y1="44" x2="190" y2="176" class="axis"/>
 </svg>

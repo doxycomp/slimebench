@@ -46,22 +46,22 @@
 <text x="610.0" y="352" class="lbl-s" text-anchor="middle">32</text>
 <polyline points="62.0,325.2 610.0,52.0" fill="none" stroke="#8a8a8a" stroke-width="1" stroke-dasharray="4 4"/>
 <text x="616.0" y="56.0" class="lbl-s">linear</text>
-<polyline points="62.0,325.2 171.6,316.9 281.2,301.9 390.8,289.8 500.4,275.0 610.0,268.8" fill="none" stroke="#4c78a8" stroke-width="2.2" stroke-linejoin="round"/>
+<polyline points="62.0,325.2 171.6,315.3 281.2,297.4 390.8,285.8 500.4,267.7 610.0,260.1" fill="none" stroke="#4c78a8" stroke-width="2.2" stroke-linejoin="round"/>
 <circle cx="62.0" cy="325.2" r="3.2" fill="#4c78a8"/>
-<circle cx="171.6" cy="316.9" r="3.2" fill="#4c78a8"/>
-<circle cx="281.2" cy="301.9" r="3.2" fill="#4c78a8"/>
-<circle cx="390.8" cy="289.8" r="3.2" fill="#4c78a8"/>
-<circle cx="500.4" cy="275.0" r="3.2" fill="#4c78a8"/>
-<circle cx="610.0" cy="268.8" r="3.2" fill="#4c78a8"/>
-<text x="618.0" y="272.8" class="lbl-s" fill="#4c78a8">binned</text>
-<polyline points="62.0,325.2 171.6,318.7 281.2,310.0 390.8,304.1 500.4,319.5 610.0,327.7" fill="none" stroke="#e45756" stroke-width="2.2" stroke-linejoin="round"/>
+<circle cx="171.6" cy="315.3" r="3.2" fill="#4c78a8"/>
+<circle cx="281.2" cy="297.4" r="3.2" fill="#4c78a8"/>
+<circle cx="390.8" cy="285.8" r="3.2" fill="#4c78a8"/>
+<circle cx="500.4" cy="267.7" r="3.2" fill="#4c78a8"/>
+<circle cx="610.0" cy="260.1" r="3.2" fill="#4c78a8"/>
+<text x="618.0" y="264.1" class="lbl-s" fill="#4c78a8">binned</text>
+<polyline points="62.0,325.2 171.6,317.2 281.2,306.5 390.8,301.3 500.4,317.0 610.0,327.2" fill="none" stroke="#e45756" stroke-width="2.2" stroke-linejoin="round"/>
 <circle cx="62.0" cy="325.2" r="3.2" fill="#e45756"/>
-<circle cx="171.6" cy="318.7" r="3.2" fill="#e45756"/>
-<circle cx="281.2" cy="310.0" r="3.2" fill="#e45756"/>
-<circle cx="390.8" cy="304.1" r="3.2" fill="#e45756"/>
-<circle cx="500.4" cy="319.5" r="3.2" fill="#e45756"/>
-<circle cx="610.0" cy="327.7" r="3.2" fill="#e45756"/>
-<text x="618.0" y="331.7" class="lbl-s" fill="#e45756">private</text>
+<circle cx="171.6" cy="317.2" r="3.2" fill="#e45756"/>
+<circle cx="281.2" cy="306.5" r="3.2" fill="#e45756"/>
+<circle cx="390.8" cy="301.3" r="3.2" fill="#e45756"/>
+<circle cx="500.4" cy="317.0" r="3.2" fill="#e45756"/>
+<circle cx="610.0" cy="327.2" r="3.2" fill="#e45756"/>
+<text x="618.0" y="331.2" class="lbl-s" fill="#e45756">private</text>
 <line x1="62" y1="52" x2="62" y2="334" class="axis"/>
 <line x1="62" y1="334" x2="610" y2="334" class="axis"/>
 <text x="336" y="372" class="lbl-s" text-anchor="middle">threads</text>
