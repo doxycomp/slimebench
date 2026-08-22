@@ -1080,6 +1080,7 @@ pass is parallel.
 `SLIMEBENCH_PHASE_STATS=1` separates work from barrier wait
 (C, `medium`, T=32, thread 0), milliseconds per tick:
 
+<!-- sb:table barrier-phase -->
 | Phase | work | barrier | total |
 |---|---:|---:|---:|
 | agents | 1.876 | 1.107 | 2.983 |
@@ -1088,6 +1089,7 @@ pass is parallel.
 | deposit | 0.284 | 0.671 | 0.955 |
 | merge | 0.209 | 0.771 | 0.980 |
 | diffuse | 0.224 | — | 0.224 |
+<!-- /sb:table -->
 
 **Barriers are 39 % of the runtime at T=16 and 60 % at T=32.** Past sixteen
 threads C stops getting faster not because the work stops dividing — it keeps
@@ -1124,6 +1126,7 @@ All numbers below are 256×256 with 16 384 agents,
 
 Milliseconds per tick from a cold process, no warm-up, averaged over blocks:
 
+<!-- sb:table ramp -->
 | ticks | Java tiered | Java C2-only | C# jit | C# tier1 | **C# aot** |
 |---|---:|---:|---:|---:|---:|
 | 1–5 | 3.297 | 3.760 | 0.928 | 0.856 | **0.420** |
@@ -1135,6 +1138,7 @@ Milliseconds per tick from a cold process, no warm-up, averaged over blocks:
 | **first tick** | **5.842** | **6.081** | **2.831** | **2.725** | **0.488** |
 | best tick | 0.233 | 0.235 | 0.318 | 0.267 | 0.271 |
 | **first / best** | **25.1×** | **25.9×** | **8.9×** | **10.2×** | **1.8×** |
+<!-- /sb:table -->
 
 **The JVM's first tick costs 25× its best one.** A benchmark of a hundred ticks
 that forgot `--warmup` would report a number the JVM never actually runs at —
@@ -1201,11 +1205,13 @@ the simulation rather than of one of them:
 Skewed, but not a branch a predictor gets for free. 512², 262 144 agents, 200
 ticks after 100 of warm-up, best of five:
 
+<!-- sb:table branchy -->
 | configuration | agent pass, ms | spread | stencil, ms |
 |---|---:|---:|---:|
 | JIT, tier-1 | 705.69 | 0.6 % | 98.36 |
 | Native AOT, default | 716.81 | 0.7 % | 79.24 |
 | Native AOT, `IlcInstructionSet=native` | **698.05** | 0.6 % | 97.66 |
+<!-- /sb:table -->
 
 **The ahead-of-time build wins the branchy half.** The three differ by 2.7 %
 end to end, against run-to-run spreads of 0.6–0.7 % — so unlike most
@@ -1224,11 +1230,13 @@ the same reason.
 
 ### What each configuration costs to ship
 
+<!-- sb:table ship -->
 | Configuration | published | start-up |
 |---|---:|---:|
 | C# jit / tier1 | 156 KiB + runtime | 25.0 / 31.6 ms |
 | C# ReadyToRun | 80 MiB | 19.9 ms |
 | **C# Native AOT** | **3.8 MiB** | **3.7 ms** |
+<!-- /sb:table -->
 
 Start-up is five runs of `--ticks 0`, warm page cache; the first measurement of
 ReadyToRun after building it read 217 ms, so treat that column as an ordering
@@ -1244,6 +1252,7 @@ comparable to CPython running the identical algorithm at the identical
 conformance tier — a comparison available nowhere else in this project, because
 no other runtime here has an interpreter you can pin it to.
 
+<!-- sb:table interpreters -->
 | Runtime | ms/tick | spread | vs C |
 |---|---:|---:|---:|
 | numba | 0.2446 | 1.8% | 0.98× |
@@ -1253,6 +1262,7 @@ no other runtime here has an interpreter you can pin it to.
 | Go, `-gcflags=-B` | 0.2708 | 0.7% | 1.09× |
 | **Java, `-Xint`** | **5.4735** | 0.7% | **21.9×** |
 | **Python pure `--strict-f32`** | **84.1937** | — | **337×** |
+<!-- /sb:table -->
 
 Same algorithm, same exactness, same grid hash on every row: `0x89CFFAAC`. The
 top four rows are inside each other's spread and are not ranked against one
@@ -1737,6 +1747,7 @@ numbers rather than leaving as an assumption.
 [`bench/gc-stats.sh`](../bench/gc-stats.sh), `tiny`, 200 ticks after 20 of
 warm-up:
 
+<!-- sb:table gc -->
 | runtime | collections | GC time | allocated over the whole run |
 |---|---:|---:|---:|
 | **Java** | **0** | 0 ms | — |
@@ -1744,6 +1755,7 @@ warm-up:
 | C# | 1 gen0 / 1 gen1 / 1 gen2 | — | 4.7 MiB |
 | Haskell | — | 0.000 s of 0.247 | 7.8 MiB |
 | OCaml | 7 minor, 2 major | — | 12.1 MiB of minor words |
+<!-- /sb:table -->
 
 **The JVM never collects.** Go allocates 300 times in two hundred ticks, which
 is startup and nothing else. The reason is structural: the simulation
