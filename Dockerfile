@@ -8,10 +8,11 @@
 #
 #   full  adds GHC, Swift and Lean and comes to 20.9 GiB, which does not fit
 #         a GitHub runner's disk -- so CI does not build it and every push
-#         verifies `core` only. It has been built and run by hand: fourteen
-#         languages, of which thirteen reach the conformance gate inside the
-#         image (pygl needs a GL device a container does not have). Two things
-#         found by doing that, both of which had been guesses:
+#         verifies `core` only. It has been built and run by hand, and all
+#         fourteen languages pass the conformance gate inside it; the only
+#         target that skips is pygl, which needs a GL device a container does
+#         not have. Three things found by doing that, all of them guesses
+#         before:
 #
 #           - the size. This said 14 GiB, from adding up download sizes.
 #           - the Haskell build failed on a file from the author's laptop.
@@ -19,6 +20,9 @@
 #             sources with the absolute path of its package store baked in;
 #             copied into the image it pointed at a home directory that is not
 #             there. It is in .dockerignore now.
+#           - with that file gone, impl/haskell/build.sh refused the `vector`
+#             profiles: it checked for the file rather than for the package,
+#             and the package was reachable without it. It asks GHC now.
 #
 #         Treat a failure here as a bug report rather than as your mistake.
 #
