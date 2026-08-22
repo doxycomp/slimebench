@@ -23,3 +23,10 @@ results
 # a language from the conformance gate.
 impl/fortran/**/*.mod
 docs/charts
+
+# cabal writes this next to the sources when you `cabal install --lib`,
+# and it hard-codes the absolute path of the store it was written
+# against. Copied into the image it points at a home directory that is
+# not there, and GHC refuses with "can't find a package database" --
+# a Haskell build failing because of a file from someone's laptop.
+**/.ghc.environment.*

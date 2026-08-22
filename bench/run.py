@@ -355,7 +355,9 @@ def cmd_bench(a: argparse.Namespace) -> int:
     outpath.parent.mkdir(parents=True, exist_ok=True)
 
     rows: list[dict] = []
-    with outpath.open("w", encoding="utf-8") as sink:
+    # "a" when asked: a phase that sweeps several presets is one table, and
+    # writing it needs several invocations because --preset takes one value.
+    with outpath.open("a" if a.append else "w", encoding="utf-8") as sink:
         for t in selected:
             if not t.headless_capable:
                 print(f"-- {t.id}: skipped (not headless-capable)")
@@ -975,6 +977,8 @@ def main() -> int:
     b.add_argument("--compilers", help="comma-separated compiler filter")
     b.add_argument("--profiles", help="comma-separated profile filter")
     b.add_argument("--out", help="output .jsonl path")
+    b.add_argument("--append", action="store_true",
+                   help="add to --out instead of replacing it")
     b.add_argument("-v", "--verbose", action="store_true")
     b.set_defaults(fn=cmd_bench)
 

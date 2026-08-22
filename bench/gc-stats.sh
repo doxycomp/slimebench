@@ -20,6 +20,9 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 OUT="${1:-results/S-gc-stats.txt}"
 case "$OUT" in /*) ;; *) OUT="$PWD/$OUT" ;; esac
 mkdir -p "$(dirname "$OUT")"
+# shellcheck source=bench/jsonl.sh
+. "$(dirname "$0")/jsonl.sh"
+jsonl_for "$OUT"
 
 [ -d "$HOME/opt/go/bin" ] && export PATH="$PATH:$HOME/opt/go/bin"
 [ -f "$HOME/.ghcup/env" ] && . "$HOME/.ghcup/env"
@@ -38,6 +41,10 @@ run() { # label binary...
   local line
   line=$(SLIMEBENCH_GC_STATS=1 "$@" "${CFG[@]}" 2>&1 >/dev/null | grep -m1 '^gc_stats')
   printf '  %-10s %s\n' "$label" "${line:-no gc_stats output}"
+  # The runtimes already report key=value pairs; jrow takes them as they are,
+  # so a runtime that reports a field the others do not keeps it.
+  # shellcheck disable=SC2086
+  [ -n "$line" ] && jrow table=gc lang="$label" ${line#gc_stats }
 }
 run go     impl/go/build/nobounds/slimebench
 run java   impl/java/build/c2/slimebench
@@ -52,6 +59,15 @@ HS=impl/haskell/build/o2-llvm/slimebench
 if [ -x "$HS" ] && "$HS" "${CFG[@]}" +RTS -s -RTS >/dev/null 2>/tmp/sb-hs-rts; then
   grep -E 'bytes allocated|collections|Total.*elapsed|GC .*time' /tmp/sb-hs-rts \
     | head -6 | sed 's/^/  /'
+  # GHC's -s output is prose, not key=value, so the three numbers the table
+  # uses are pulled out here rather than in the generator.
+  jrow table=gc lang=haskell \
+    allocated_bytes="$(sed -n 's/^ *\([0-9,]*\) bytes allocated in the heap.*/\1/p' \
+                        /tmp/sb-hs-rts | head -1 | tr -d ,)" \
+    gc_seconds="$(sed -n 's/^ *GC *time *\([0-9.]*\)s.*/\1/p' \
+                   /tmp/sb-hs-rts | head -1)" \
+    total_seconds="$(sed -n 's/^ *Total *time *\([0-9.]*\)s.*/\1/p' \
+                      /tmp/sb-hs-rts | head -1)"
   rm -f /tmp/sb-hs-rts
 else
   echo "  not built, or not linked with -rtsopts"

@@ -473,6 +473,180 @@ def sec_simd(d: pathlib.Path) -> str:
 
 
 # ---------------------------------------------------------------------------
+# The four phases driven by shell scripts rather than by bench/run.py. They
+# used to produce column-aligned text and nothing else, so their tables were
+# transcribed into the document by hand. They now write a .jsonl beside the
+# .txt -- see bench/jsonl.sh -- and these read it.
+
+
+def rows_of(d: pathlib.Path, fn: str, table: str) -> list[dict]:
+    return [r for r in load(d, fn) if r.get("table") == table]
+
+
+def sec_gc(d: pathlib.Path) -> str:
+    """What each collected runtime's collector did. Mostly: nothing."""
+    rows = rows_of(d, "S-gc-stats.jsonl", "gc")
+    if not rows:
+        return ""
+    by = {r["lang"]: r for r in rows}
+
+    def cell(lang: str) -> list[str] | None:
+        r = by.get(lang)
+        if not r:
+            return None
+        if lang == "go":
+            return ["Go", str(r.get("collections", "—")),
+                    f"{r.get('gc_ms', 0):.2f} ms",
+                    f"{r.get('allocated_mib', 0)} MiB, "
+                    f"{r.get('mallocs', 0)} mallocs"]
+        if lang == "java":
+            return ["**Java**", f"**{r.get('collections', '—')}**",
+                    f"{r.get('gc_ms', 0):.0f} ms", "—"]
+        if lang == "csharp":
+            c = str(r.get("collections", "—")).split("/")
+            gens = " / ".join(f"{n} gen{i}" for i, n in enumerate(c))
+            return ["C#", gens, "—", f"{r.get('allocated_mib', 0)} MiB"]
+        if lang == "ocaml":
+            return ["OCaml",
+                    f"{r.get('minor_collections', 0)} minor, "
+                    f"{r.get('major_collections', 0)} major", "—",
+                    f"{r.get('minor_words', 0) * 8 / 1048576:.1f} MiB "
+                    f"of minor words"]
+        if lang == "haskell":
+            return ["Haskell", "—",
+                    f"{r.get('gc_seconds', 0):.3f} s of "
+                    f"{r.get('total_seconds', 0):.3f}",
+                    f"{r.get('allocated_bytes', 0) / 1048576:.1f} MiB"]
+        return None
+
+    body = [c for c in (cell(k) for k in
+                        ("java", "go", "csharp", "haskell", "ocaml")) if c]
+    return ("### §11 garbage collection, `tiny`, 200 ticks\n"
+            + table(["runtime", "collections", "GC time",
+                     "allocated over the whole run"], body, "lrrr") + "\n")
+
+
+def sec_barriers(d: pathlib.Path) -> str:
+    """Work against barrier wait, per phase, for the C reference."""
+    rows = [r for r in rows_of(d, "P-barriers.jsonl", "barrier-phase")
+            if r.get("lang") == "c"]
+    if not rows:
+        return ""
+    order = ["agents", "prefix", "scatter", "deposit", "merge", "diffuse"]
+    rows.sort(key=lambda r: order.index(r["phase"])
+              if r["phase"] in order else 99)
+    body = []
+    for r in rows:
+        w, b = r["work"], r["barrier"]
+        # The diffusion pass ends the tick, so there is no barrier after it.
+        bar = "—" if r["phase"] == "diffuse" else f"{b:.3f}"
+        body.append([r["phase"],
+                     f"**{w:.3f}**" if r["phase"] == "prefix" else f"{w:.3f}",
+                     bar, f"{w + b:.3f}"])
+    return ("### §5 work and barrier per phase, C, `medium`, T=32\n"
+            + table(["Phase", "work", "barrier", "total"], body, "lrrr")
+            + "\n")
+
+
+def sec_ramp(d: pathlib.Path) -> str:
+    """The cold-start ramp, both runtimes in one table.
+
+    Two scripts measure it -- the JVM's halves in jvm-warmup, .NET's three in
+    dotnet-aot -- and the document has always shown them side by side. They
+    are joined here on the block label rather than by hand.
+    """
+    jv = {r["block"]: r for r in rows_of(d, "S-jvm-warmup.jsonl", "ramp")}
+    dn = {r["block"]: r for r in rows_of(d, "S-dotnet-aot.jsonl", "ramp-dotnet")}
+    if not jv or not dn:
+        return ""
+    # The two scripts label their last block differently (the JVM runs to 400
+    # ticks, .NET to 300) and their ratio rows differently again.
+    pairs = [("1-5", "1-5"), ("6-10", "6-10"), ("11-25", "11-25"),
+             ("26-50", "26-50"), ("51-100", "51-100"),
+             ("200-400", "200-300"), ("first tick", "first tick"),
+             ("best tick", "best tick"), ("first / best", "first/best")]
+    show = {"200-400": "201+", "first tick": "**first tick**",
+            "first / best": "**first / best**"}
+    body = []
+    for jk, dk in pairs:
+        a, b = jv.get(jk), dn.get(dk)
+        if not a or not b:
+            continue
+        suffix = "×" if jk == "first / best" else ""
+        vals = [a["java_tiered"], a["java_c2"],
+                b["csharp_jit"], b["csharp_tier1"], b["csharp_aot"]]
+        fmt = [f"{v:.1f}{suffix}" if suffix else f"{v:.3f}" for v in vals]
+        if jk in ("first tick", "first / best"):
+            fmt = [f"**{v}**" for v in fmt]
+        body.append([show.get(jk, jk)] + fmt)
+    return ("### §6 the cold-start ramp, ms per tick\n"
+            + table(["ticks", "Java tiered", "Java C2-only", "C# jit",
+                     "C# tier1", "**C# aot**"], body) + "\n")
+
+
+def sec_interpreters(d: pathlib.Path) -> str:
+    """Two interpreters and three compiled paths, same algorithm."""
+    rows = rows_of(d, "S-jvm-warmup.jsonl", "interpreters")
+    if not rows:
+        return ""
+    rows.sort(key=lambda r: r["ms_per_tick"])
+    base = min(r["ms_per_tick"] for r in rows
+               if r["runtime"].startswith("c gcc")) or rows[0]["ms_per_tick"]
+    body = []
+    for r in rows:
+        v = r["ms_per_tick"]
+        loud = v / base > 10
+        name = f"**{r['runtime']}**" if loud else r["runtime"]
+        val = f"**{v:.4f}**" if loud else f"{v:.4f}"
+        rel = f"**{v / base:.0f}×**" if loud else f"{v / base:.2f}×"
+        sp = r.get("spread")
+        body.append([name, val, "—" if sp is None else f"{sp * 100:.1f}%", rel])
+    return ("### §6 two interpreters and three compiled paths\n"
+            + table(["Runtime", "ms/tick", "spread", "vs C"], body, "lrrr")
+            + "\n")
+
+
+def sec_ship(d: pathlib.Path) -> str:
+    """What each .NET configuration costs to publish and to start."""
+    rows = rows_of(d, "S-dotnet-aot.jsonl", "ship")
+    if not rows:
+        return ""
+    name = {"jit": "C# jit", "tier1": "C# tier1", "r2r": "C# ReadyToRun",
+            "aot": "**C# Native AOT**"}
+    body = []
+    for r in rows:
+        n = name.get(r["profile"], r["profile"])
+        sz, st = r.get("size", "—"), r.get("start_ms", 0)
+        if r["profile"] == "aot":
+            sz, st = f"**{sz}**", f"**{st} ms**"
+        else:
+            st = f"{st} ms"
+        body.append([n, sz, st])
+    return ("### §6 what each configuration costs to ship\n"
+            + table(["Configuration", "published", "start-up"], body, "lrr")
+            + "\n")
+
+
+def sec_branchy(d: pathlib.Path) -> str:
+    """The agent pass, which has branches, against the stencil, which does not."""
+    rows = rows_of(d, "S-dotnet-aot.jsonl", "branchy")
+    if not rows:
+        return ""
+    name = {"tier1": "JIT, tier-1", "aot": "Native AOT, default",
+            "aot-native": "Native AOT, `IlcInstructionSet=native`"}
+    best = min(r["ms_agents"] for r in rows)
+    body = []
+    for r in rows:
+        a = f"**{r['ms_agents']:.2f}**" if r["ms_agents"] == best \
+            else f"{r['ms_agents']:.2f}"
+        body.append([name.get(r["profile"], r["profile"]), a,
+                     f"{r['spread'] * 100:.1f} %", f"{r['ms_diffuse']:.2f}"])
+    return ("### §6 straight-line code against branchy code\n"
+            + table(["configuration", "agent pass, ms", "spread",
+                     "stencil, ms"], body, "lrrr") + "\n")
+
+
+# ---------------------------------------------------------------------------
 # Managed tables
 #
 # Half of docs/RESULTS.md used to be generated and half typed in by hand, and
@@ -496,6 +670,12 @@ MANAGED: list[tuple[str, list[str]]] = [
     ("sec_gpu", ["gpu"]),
     ("sec_render", ["render"]),
     ("sec_footprint", ["footprint"]),
+    ("sec_gc", ["gc"]),
+    ("sec_barriers", ["barrier-phase"]),
+    ("sec_ramp", ["ramp"]),
+    ("sec_interpreters", ["interpreters"]),
+    ("sec_ship", ["ship"]),
+    ("sec_branchy", ["branchy"]),
 ]
 
 OPEN = "<!-- sb:table {} -->"
@@ -611,7 +791,9 @@ def main() -> int:
         print("```\n" + env.read_text(encoding="utf-8").rstrip() + "\n```\n")
 
     for fn in (sec_crosslang, sec_compilers, sec_parallel, sec_gil,
-               sec_kernels, sec_simd, sec_gpu, sec_render, sec_footprint):
+               sec_kernels, sec_simd, sec_gpu, sec_render, sec_footprint,
+               sec_gc, sec_barriers, sec_ramp, sec_interpreters,
+               sec_ship, sec_branchy):
         s = fn(d)
         if s:
             print(s)

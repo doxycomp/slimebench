@@ -203,6 +203,24 @@ python3 bench/run.py bench --preset small --ticks 300 --warmup 100 --reps "$SB_R
   --targets c-simd,cpp-simd,rust-simd,java-simd,csharp-simd,csharp-simd-portable \
   --out "$OUT/G-simd.jsonl" || true
 
+# The agent pass, which is the other 78 to 89 % of a tick and which nothing
+# above vectorises. Its own phase and its own file, at three sizes, because
+# the interesting part is how the factor moves with the grid: the argument
+# for not doing this was that gathers lose their advantage once the grid
+# leaves cache, and the measurement says the opposite.
+phase "class V, the agent pass: scalar against vectorised"
+: > "$OUT/G-agents.jsonl"
+for pre in tiny small medium; do
+  # One compiler and one profile on both sides: the question is what the
+  # kernel does, and letting the scalar side bring twelve compiler/profile
+  # combinations to a two-row comparison only adds rows to filter out
+  # again.
+  python3 bench/run.py bench --preset "$pre" --ticks 100 --warmup 20 \
+    --reps "$SB_REPS" --update deferred --targets c,c-simd-agents \
+    --compilers gcc --profiles o3-native \
+    --out "$OUT/G-agents.jsonl" --append || true
+done
+
 # The four-way kernel comparison, reported as ms_diffuse: the agent pass is
 # identical in all of them and would dilute the difference. Needs AVX-512 and
 # ASM=1; the script says so and writes nothing if either is missing.

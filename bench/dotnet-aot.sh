@@ -38,6 +38,10 @@ for p in jit tier1 r2r aot; do
   [ -x "impl/csharp/build/$p/slimebench" ] || ( cd impl/csharp && ./build.sh "$p" ) >/dev/null 2>&1
 done
 
+# shellcheck source=bench/jsonl.sh
+. "$(dirname "$0")/jsonl.sh"
+jsonl_for "$OUT"
+
 SIZE="--width 256 --height 256 --agents 16384"
 
 {
@@ -79,15 +83,30 @@ for p in jit tier1 aot; do
   awk '/^tick_ms/{print $3}' "$OUT.$p.raw" > "$OUT.$p.ms"
   rm -f "$OUT.$p.raw"
 done
-python3 - "$OUT.jit.ms" "$OUT.tier1.ms" "$OUT.aot.ms" <<'PY'
-import sys
+python3 - "$OUT.jit.ms" "$OUT.tier1.ms" "$OUT.aot.ms" "$JSONL" <<'PY'
+import json, sys
 v = [[float(x) for x in open(f)] for f in sys.argv[1:4]]
+rows = []
 def blk(a, lo, hi): return sum(a[lo:hi]) / (hi - lo)
+def rec(label, vals, digits=3):
+    rows.append({"table": "ramp-dotnet", "block": label,
+                 "csharp_jit": round(vals[0], digits),
+                 "csharp_tier1": round(vals[1], digits),
+                 "csharp_aot": round(vals[2], digits)})
 for lo, hi in ((0,5),(5,10),(10,25),(25,50),(50,100),(100,200),(200,300)):
-    print("%-12s %9.3f %9.3f %9.3f" % (f"{lo+1}-{hi}", *[blk(a,lo,hi) for a in v]))
+    label = f"{lo+1}-{hi}"
+    cur = [blk(a, lo, hi) for a in v]
+    print("%-12s %9.3f %9.3f %9.3f" % (label, *cur))
+    rec(label, cur)
 print("%-12s %9.3f %9.3f %9.3f" % ("first tick", *[a[0] for a in v]))
+rec("first tick", [a[0] for a in v])
 print("%-12s %9.3f %9.3f %9.3f" % ("best tick", *[min(a) for a in v]))
+rec("best tick", [min(a) for a in v])
 print("%-12s %8.1fx %8.1fx %8.1fx" % ("first/best", *[a[0]/min(a) for a in v]))
+rec("first/best", [a[0]/min(a) for a in v], 1)
+with open(sys.argv[4], "a") as f:
+    for r in rows:
+        f.write(json.dumps(r) + "\n")
 PY
 rm -f "$OUT".jit.ms "$OUT".tier1.ms "$OUT".aot.ms
 echo
@@ -104,8 +123,9 @@ for p in jit tier1 r2r aot; do
   # Five runs, so divide by five. Doing the arithmetic in awk rather than in
   # printf: an earlier version passed "129e-1" to %.1f, which printf duly read
   # as 12.9 and reported half the real figure.
-  printf '%-12s %10s %12s\n' "$p" "$sz" \
-    "$(awk -v n="$((t1 - t0))" 'BEGIN{printf "%.1f", n / 5 / 1000000}')"
+  start=$(awk -v n="$((t1 - t0))" 'BEGIN{printf "%.1f", n / 5 / 1000000}')
+  printf '%-12s %10s %12s\n' "$p" "$sz" "$start"
+  jrow table=ship profile="$p" size="$sz" start_ms="$start"
 done
 echo
 
@@ -137,7 +157,7 @@ for p in tier1 aot aot-native; do
   [ -x "impl/csharp/build/$p/slimebench" ] || continue
   for _ in 1 2 3 4 5; do
     "impl/csharp/build/$p/slimebench" $BIG --json 2>/dev/null | grep -m1 '^{'
-  done | P="$p" python3 -c '
+  done | P="$p" JSONL="$JSONL" python3 -c '
 import json, os, sys
 rows = [json.loads(l) for l in sys.stdin if l.startswith("{")]
 if not rows:
@@ -145,8 +165,15 @@ if not rows:
 else:
     a = sorted(r["ms_agents"] for r in rows)
     d = min(r["ms_diffuse"] for r in rows)
+    sp = (a[-1] - a[0]) / a[0]
     print("  %-24s %12.2f %9.1f%% %12.2f"
-          % (os.environ["P"], a[0], 100 * (a[-1] - a[0]) / a[0], d))'
+          % (os.environ["P"], a[0], 100 * sp, d))
+    with open(os.environ["JSONL"], "a") as f:
+        f.write(json.dumps({"table": "branchy", "profile": os.environ["P"],
+                            "ms_agents": round(a[0], 2),
+                            "spread": round(sp, 4),
+                            "ms_diffuse": round(d, 2),
+                            "reps": len(a)}) + chr(10))'
 done
 echo
 echo "   If ahead-of-time compilation only kept up on straight-line code, the"

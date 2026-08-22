@@ -6,13 +6,21 @@
 #         by CI on every push -- the conformance suite runs inside it, so this
 #         image is verified rather than merely written.
 #
-#   full  adds GHC, Swift and Lean, about 14 GiB. Those three are 12 GiB
-#         between them, which does not fit a GitHub runner's disk, so this
-#         target is NOT built by CI -- and therefore not verified. It is
-#         written from the install steps in scripts/setup-wsl.sh, which are
-#         known to work on the machine the published series ran on, but nobody
-#         has built this stage. Treat a failure in it as a bug report rather
-#         than as your mistake. `core` is verified on every push.
+#   full  adds GHC, Swift and Lean and comes to 20.9 GiB, which does not fit
+#         a GitHub runner's disk -- so CI does not build it and every push
+#         verifies `core` only. It has been built and run by hand: fourteen
+#         languages, of which thirteen reach the conformance gate inside the
+#         image (pygl needs a GL device a container does not have). Two things
+#         found by doing that, both of which had been guesses:
+#
+#           - the size. This said 14 GiB, from adding up download sizes.
+#           - the Haskell build failed on a file from the author's laptop.
+#             `cabal install --lib` writes .ghc.environment.* next to the
+#             sources with the absolute path of its package store baked in;
+#             copied into the image it pointed at a home directory that is not
+#             there. It is in .dockerignore now.
+#
+#         Treat a failure here as a bug report rather than as your mistake.
 #
 #     docker build --target core -t slimebench:core .
 #     docker run --rm slimebench:core bench/run.py conformance
