@@ -20,7 +20,7 @@ backends and compilers.
 | C | ✅ | ✅ | ✅ | ✅ | ✅ | tier A (reference) |
 | C++ | ✅ | ✅ | ✅ | ✅ | ✅ | tier A |
 | Rust (safe + unchecked) | ✅ | ✅ | ✅ | ✅ | ✅ | tier A |
-| Haskell (2 styles) | ✅ | ✅ | ✅ | ✅ | — | tier A |
+| Haskell (2 styles) | ✅ | ✅ | ✅ | ✅ | ✅ | tier A |
 | Go | ✅ | ✅ | — | — | — | tier A |
 | Swift | ✅ | ✅ | — | — | — | tier A |
 | Lean 4 | ✅ | — | — | — | — | tier A |

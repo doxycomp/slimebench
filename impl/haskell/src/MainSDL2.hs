@@ -15,14 +15,17 @@
 -- was most of the gap between the two backends.
 module Main (main) where
 
-import Control.Monad (unless, when)
+import Control.Monad (when)
 import Data.Word (Word8)
+import System.IO (hPutStrLn, stderr)
+import Text.Printf (printf)
 import Foreign.ForeignPtr (ForeignPtr, mallocForeignPtrBytes, withForeignPtr)
 import Foreign.Ptr (castPtr)
 import qualified Data.ByteString.Unsafe as BU
 import qualified Data.Text as T
 import qualified SDL
 
+import qualified Hud
 import Render
 import RenderCli (RenderOpts (..), parseRenderArgs, titleFor)
 import Sim
@@ -49,15 +52,54 @@ main = do
   fp <- mallocForeignPtrBytes (cells * 4) :: IO (ForeignPtr Word8)
 
   stats <- newStats
-  let loop !i
+  -- The overlay carries the interactive state, so the loop threads it along
+  -- with the simulation. `sim` is threaded too: editing a parameter replaces
+  -- the config with a record update, which shares every mutable array and so
+  -- costs nothing in the tick -- the alternative, an IORef in Sim, would put
+  -- an indirection in the hot loop and change what class S measures.
+  let hud0 = Hud.newHud "Haskell / SDL2" (not roJson)
+      view0 = Hud.HudView
+        { Hud.hvWidth = cfgWidth, Hud.hvHeight = cfgHeight
+        , Hud.hvAgents = cfgAgents, Hud.hvThreads = max 1 cfgThreads
+        , Hud.hvRotSteps = cfgRotSteps, Hud.hvDeposit = cfgDeposit
+        , Hud.hvDecay = cfgDecay, Hud.hvSensorDist = cfgSensorDist
+        , Hud.hvStep = cfgStep, Hud.hvDeferred = True }
+      loop !i !sm !hud !view !bright
         | i >= frames = pure ()
         | otherwise = do
             evs <- SDL.pollEvents
-            unless (any isQuit evs) $ do
-              unless roFreeze (tick sim)
+            let (hud1, view1, bright1) =
+                  foldl applyEvent (hud, view, bright) evs
+            if Hud.hQuit hud1 then pure () else do
+              sm1 <- if Hud.hReset hud1 then newSim (cfgOf sm view1)
+                                        else pure (withView sm view1)
+              let hud2 = if Hud.hReset hud1
+                           then hud1 { Hud.hReset = False, Hud.hTick = 0 }
+                           else hud1
+              hud3 <- if Hud.hHash hud2
+                        then do
+                          g <- hashGrid sm1
+                          a <- hashAgents sm1
+                          hPutStrLn stderr $ printf
+                            "grid 0x%08X  agents 0x%08X  tick %d%s"
+                            g a (Hud.hTick hud2)
+                            (if Hud.hEdited hud2 then "  EDITED" else ""
+                              :: String)
+                          pure hud2 { Hud.hHash = False }
+                        else pure hud2
+              let runIt = not roFreeze && not (Hud.hFrozen hud3)
+                          && (not (Hud.hPaused hud3) || Hud.hStepOnce hud3)
+              !s0 <- nowNs
+              when runIt (tick sm1)
+              !s1 <- nowNs
+              let hud4 = if runIt
+                           then hud3 { Hud.hTick = Hud.hTick hud3 + 1
+                                     , Hud.hStepOnce = False }
+                           else hud3
               !r0 <- nowNs
               withForeignPtr fp $ \p -> do
-                renderArgbPtr sim roDisplayMax p
+                renderArgbPtr sm1 bright1 p
+                Hud.draw 4 p hud4 view1 bright1
                 -- Zero-copy view of the staging buffer; the ByteString does
                 -- not outlive this block.
                 bs <- BU.unsafePackCStringLen (castPtr p, cells * 4)
@@ -68,14 +110,21 @@ main = do
               SDL.present renderer
               !r1 <- nowNs
               addFrame stats (r1 - r0)
+              let hud5 = Hud.smooth (fromIntegral (s1 - s0) / 1e6)
+                                    (fromIntegral (r1 - r0) / 1e6) hud4
 
               n <- sinceTitle stats
               when (n >= 60) $ do
                 ms <- recentMean stats 60
                 SDL.windowTitle window SDL.$= T.pack (titleFor "SDL2" ms)
                 resetTitle stats
-              loop (i + 1)
-  loop (0 :: Int)
+              loop (i + 1) sm1 hud5 view1 bright1
+      cfgOf sm v = (simCfg sm)
+        { cfgDeposit = Hud.hvDeposit v, cfgDecay = Hud.hvDecay v
+        , cfgSensorDist = Hud.hvSensorDist v, cfgStep = Hud.hvStep v
+        , cfgRotSteps = Hud.hvRotSteps v }
+      withView sm v = sm { simCfg = cfgOf sm v }
+  loop (0 :: Int) sim hud0 view0 roDisplayMax
 
   SDL.destroyTexture tex
   SDL.destroyRenderer renderer
@@ -84,10 +133,30 @@ main = do
 
   when roJson $ statsJson stats cfg "sdl2" >>= mapM_ putStrLn
 
-isQuit :: SDL.Event -> Bool
-isQuit e = case SDL.eventPayload e of
-  SDL.QuitEvent -> True
-  SDL.KeyboardEvent k ->
-    SDL.keyboardEventKeyMotion k == SDL.Pressed
-      && SDL.keysymKeycode (SDL.keyboardEventKeysym k) == SDL.KeycodeEscape
-  _ -> False
+-- | One SDL event folded into the overlay state. Key codes live here and
+-- named actions live in Hud, for the reason that header gives: SDL2 and
+-- raylib spell the same key differently.
+applyEvent :: (Hud.Hud, Hud.HudView, Float) -> SDL.Event
+           -> (Hud.Hud, Hud.HudView, Float)
+applyEvent (h, v, b) e = case SDL.eventPayload e of
+  SDL.QuitEvent -> (h { Hud.hQuit = True }, v, b)
+  SDL.KeyboardEvent k
+    | SDL.keyboardEventKeyMotion k == SDL.Pressed ->
+        maybe (h, v, b) (\a -> Hud.act a h v b)
+              (lookup (SDL.keysymKeycode (SDL.keyboardEventKeysym k)) keymap)
+  _ -> (h, v, b)
+
+keymap :: [(SDL.Keycode, String)]
+keymap =
+  [ (SDL.KeycodeEscape, "quit"), (SDL.KeycodeQ, "quit")
+  , (SDL.KeycodeSpace, "pause"), (SDL.KeycodeN, "step")
+  , (SDL.KeycodeR, "reset"), (SDL.KeycodeTab, "hud")
+  , (SDL.KeycodeH, "help"), (SDL.KeycodeF1, "help")
+  , (SDL.KeycodeC, "hash"), (SDL.KeycodeF, "freeze")
+  , (SDL.Keycode1, "deposit-"), (SDL.Keycode2, "deposit+")
+  , (SDL.Keycode3, "decay-"), (SDL.Keycode4, "decay+")
+  , (SDL.Keycode5, "sensor-"), (SDL.Keycode6, "sensor+")
+  , (SDL.Keycode7, "step-"), (SDL.Keycode8, "step+")
+  , (SDL.Keycode9, "rot-"), (SDL.Keycode0, "rot+")
+  , (SDL.KeycodeMinus, "bright-"), (SDL.KeycodeEquals, "bright+")
+  ]
