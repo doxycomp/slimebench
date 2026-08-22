@@ -1,0 +1,23 @@
+# host: Linux 6.18.33.2-microsoft-standard-WSL2
+# tiny (512x512, 65 536 agents), 200 ticks, 20 warm-up
+
+=== collected runtimes, instrumented (SLIMEBENCH_GC_STATS=1)
+  go         gc_stats collections=1 gc_ms=0.570 allocated_mib=5.2 mallocs=300 heap_mib=5.2 ticks=200
+  java       gc_stats collections=0 gc_ms=0 heap_used_mib=9.0 ticks=200
+  csharp     gc_stats collections=1/1/1 allocated_mib=4.7 heap_mib=4.7 ticks=200
+  ocaml      gc_stats minor_words=1579273 minor_collections=7 major_collections=2 heap_mib=14.2 ticks=200
+
+=== haskell, from the RTS
+         7,789,056 bytes allocated in the heap
+    GC      time    0.000s  (  0.000s elapsed)
+    Total   time    0.247s  (  0.246s elapsed)
+
+=== the control: no collector at all
+  c, c++, rust, fortran, swift and the two Python targets have no
+  garbage collector on this path. Their allocation after startup is
+  zero by construction, which is what the rows above converge to.
+
+Reading: a collection count in single digits over 200 ticks, and a total
+GC time under a millisecond, mean the collector is idle. Whatever these
+numbers say about the runtimes, they do not say it about their
+collectors -- so docs/RESULTS.md should not, either.

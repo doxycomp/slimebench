@@ -1,0 +1,27 @@
+# host: Linux 6.18.33.2-microsoft-standard-WSL2  cores: 32
+# numba: 0.67.0  on Python 3.12.3
+
+=== A. the same program, interpreted and compiled (128x128/4096, 100 ticks, serial)
+target                           grid         agents          ms/tick   spread
+python pure (tier B)             0x44625B3D   0xBA19E66B       9.8277       —
+python pure --strict-f32 (A)     0xB1D75130   0xD1E6D1C1      21.2041       —
+numba (tier A)                   0xB1D75130   0xD1E6D1C1       0.0622   67.6%
+numba --fastmath (tier C)        0xF9B2609A   0xD1E6D1C1       0.0614    3.1%
+c gcc-o2 (tier A)                0xB1D75130   0xD1E6D1C1       0.0590    0.8%
+
+=== B. compile time, against the work it is compiled for
+jit_compile_ms 673.2 fastmath=0
+   (compiled against a 4x4 grid before the clock starts; see _precompile)
+
+=== C. how long the agent hash keeps saying 'conformant' (512x512/65536)
+mode         ticks   grid       agents    
+serial           1   DIFF       same      
+serial           5   DIFF       same      
+serial          50   DIFF       same      
+serial         400   DIFF       same      
+serial         800   DIFF       DIFF      
+deferred         1   DIFF       same      
+deferred         5   DIFF       DIFF      
+deferred        50   DIFF       DIFF      
+deferred       400   DIFF       DIFF      
+deferred       800   DIFF       DIFF      

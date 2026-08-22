@@ -1,8 +1,8 @@
 # Results
 
 Every number in this document comes from **one** run,
-[`results/run-20260820-0330/`](../results/run-20260820-0330/), commit
-`41bdcc0`, produced by a single invocation of:
+[`results/run-20260822-0311/`](../results/run-20260822-0311/), commit
+`41c64f7`, produced by a single invocation of:
 
 ```bash
 bench/full-run.sh
@@ -18,19 +18,24 @@ the same directory with `bench/charts.py` — nothing here is typed by hand.
 cpu     AMD Ryzen 9 9950X3D  (16C/32T, Zen 5, 128 MB L3)
 gpu     NVIDIA RTX 5080 (84 SMs), via Mesa D3D12
 os      Ubuntu 24.04 under WSL2, 46 GiB
-gcc 13.3 · clang 18.1.3 · rustc 1.97.1 · GHC 9.10.3 · Node 25.5
-go 1.25 · swift 6.3.3 · python 3.12.3 (+ 3.14t) · perl 5.38.2 · CUDA 12.0
+gcc 13.3.0 · clang 18.1.3 · gfortran 13.3.0 · rustc 1.97.1 · GHC 9.10.3
+go 1.27.0 · swift 6.3.3 · JDK 21.0.11 · .NET 10.0.111 · OCaml 4.14.1
+Lean 4.33.0 · Node 25.5.0 · python 3.12.3 (+ 3.14t, numba 0.67) · perl 5.38.2
+CUDA 12.0.140
 ```
 
-> Two caveats up front. The run happened on the Windows filesystem across the
-> 9p bridge, not after `scripts/stage-wsl.sh`; that distorts build times and
-> I/O, neither of which appears in this document — the simulation is CPU-bound,
-> and binary sizes and RSS are unaffected either way.
->
-> And: **differences below roughly 5 % are not resolved by these tables.**
-> Three repetitions are not enough for that, and two series thirty minutes
-> apart disagree on small effects right down to the sign. Where that affects a
-> claim, it is said next to the claim.
+Those versions are pinned in [`versions.env`](../versions.env), which the
+Dockerfile, `scripts/setup-wsl.sh` and `bench/preflight.sh` all read; preflight
+reports in red where the machine it is running on has drifted from them.
+
+> **How small a difference these tables resolve is measured, not asserted.**
+> Every timed row is the minimum of at least three repetitions, and carries the
+> spread `(max − min) / min` across them. Rows whose spread exceeds 5 % are
+> marked ⚠ and are not ranked against a neighbour closer than that. The spread
+> quoted is always the one belonging to the column the table sorts by — the
+> per-tick median and the wall-clock total differ by an order of magnitude in
+> noise, and quoting the wrong one puts a warning beside a number nobody is
+> reading. [The full rule](#how-to-read-these-numbers).
 
 ---
 
@@ -107,7 +112,7 @@ program.
 
 | | |
 |---|---|
-| allocation | none after start-up. §11 measures the consequence: the JVM collects **zero** times in 200 ticks, Go allocates 299 times in a whole run. Six of the fourteen languages have a garbage collector and none of them is asked to collect. |
+| allocation | none after start-up. §11 measures the consequence: the JVM collects **zero** times in 200 ticks, Go allocates 300 times in a whole run. Six of the fourteen languages have a garbage collector and none of them is asked to collect. |
 | data structures | flat arrays only. No map, no tree, no string, no object graph, nothing with a pointer in it. |
 | abstraction | no dynamic dispatch, no virtual calls, no interfaces, no closures in the hot path. Every port was written to avoid them, because the spec fixes the order of operations. |
 | branching | one distribution, measured: 76.6 % / 11.0 % / 11.1 % / 1.3 %. A workload whose branches are unpredictable would ask a different question of every JIT here. |
@@ -141,30 +146,31 @@ Those are the parts worth quoting. The ranking is the part worth qualifying.
 
 The same simulation in **fourteen languages**, from a Perl interpreter to 84
 streaming multiprocessors, plus CUDA and GLSL compute as GPU hosts. Every
-number in this document comes from one series on one machine, recorded in one
-sitting: `results/run-20260821-2246`, commit `fd84e2a`. Numbers from two
-different series are not comparable and this document does not mix them.
+number in this document comes from the one series named at the top of this
+file, on one machine, recorded in one sitting. Numbers from two different
+series are not comparable and this document does not mix them.
 
 ![Class overview](charts/classes.svg)
 
 | Class | best configuration | `medium`, 100 ticks | vs. 1 CPU core |
 |---|---|---:|---:|
-| S — one thread | C, gcc `-O3 -march=native` | 5682 ms | 1× |
-| P — 32 threads | **Go**, `binned` | 609 ms | **9.3×** |
-| G — GPU | CUDA, RTX 5080 | **51 ms** | **112×** |
+| S — one thread | C, gcc `-O3 -march=native` | 4227 ms | 1× |
+| P — 32 threads | **Go**, `binned` | 554 ms | **7.6×** |
+| G — GPU | CUDA, RTX 5080 | **47 ms** | **90×** |
 
 Two things that are not in that table and are the most interesting results of
 this series:
 
-**Go wins class P**, not C and not C++ — 609 ms against 637 and 662, from a
-14 % single-thread deficit. §5 measures why: its barrier is 17 % cheaper, and
-the gap is concentrated in the one phase where 31 workers wait for one.
+**Go wins class P**, not C and not C++ — 554 ms against 571 and 600, from a
+17 % single-thread deficit. §5 measures why: at 32 threads its barrier costs a
+third less than C's (2.52 against 3.95 ms per tick), and the gap is
+concentrated in the one phase where 31 workers wait for one.
 
 **Hand-written AVX-512 assembly beats the intrinsics by about 11 %**, and not
 with better instructions but with a third of the loads; §8.
 
-Class V is not in the table because it is measured at `small` — there AVX-512
-buys **1.25×** (1085 → 871 ms). The diffusion pass alone gets 4.5× faster, but
+Class V is not in the table because it is measured at 1024² — there AVX-512
+buys **1.32×** (1117 → 845 ms). The diffusion pass alone gets 4.7× faster, but
 it is only a quarter of the runtime; §8.
 
 Seven results I would not have predicted:
@@ -176,12 +182,12 @@ Seven results I would not have predicted:
   five languages across four vector widths, hand-written assembly, CUDA at
   every preset, and all 34 cells of the CPython matrix. The spec had assumed the opposite for both SIMD and GPU.
 - **A language ranking from one class does not carry to the next.** Go sits at
-  rank 9 of 16 in class S and wins class P. TypeScript is 3.6× slower than C in
-  class S and scales better than anything but Go (10.3×). Haskell is at 1.23× in
+  rank 9 of 20 in class S and wins class P. TypeScript is 3.6× slower than C in
+  class S and scales better than anything but Go (9.1×). Haskell is at 1.23× in
   class S and matches C in class R. Java is the fastest garbage-collected
   runtime in class S and the slowest to scale in class P.
-- **A Python file is at 1.30×.** `slimebench_numba.py` is the pure-Python port
-  with `@njit` on the kernels — same loops, same order, same names — and 349×
+- **A Python file is at 1.26×.** `slimebench_numba.py` is the pure-Python port
+  with `@njit` on the kernels — same loops, same order, same names — and 345×
   faster than it at the same conformance tier. That ratio is the cleanest
   measurement of an interpreter here, because nothing else about the program
   changed; §2.
@@ -232,25 +238,29 @@ Conformance tier A only: a fast-math profile computes different numbers, so
 letting one win a row would compare two programs. The tier-C profiles are in
 §3.
 
-| # | Language | Profile | ms/tick | rel. |
-|---:|---|---|---:|---:|
-| 1 | C | o3-native-lto | 0.1961 | 1.00× |
-| 2 | C++ | o3-native | 0.2182 | 1.11× |
-| 3 | C (PGO) | o3-native-pgo | 0.2291 | 1.17× |
-| 4 | **Haskell** | o2-llvm | **0.2411** | **1.23×** |
-| 5 | **Swift** | unchecked | **0.2509** | **1.28×** |
-| 6 | **Python (numba)** | — | **0.2514** | **1.28×** |
-| 7 | **Java** | tiered | **0.2587** | **1.32×** |
-| 8 | Rust | release-native-lto-unchecked | 0.2661 | 1.36× |
-| 9 | Go | nobounds | 0.2772 | 1.41× |
-| 10 | **C#** | Native AOT, `IlcInstructionSet=native` | **0.2910** | **1.48×** |
-| 11 | **Fortran** | o2 | **0.3072** | **1.57×** |
-| 12 | TypeScript | node | 0.6721 | 3.43× |
-| 13 | **OCaml, C stub** | cstub-unsafe | **0.9270** | **4.73×** |
-| 14 | Lean 4 | default | 1.4948 | 7.62× |
-| 15 | OCaml, `Int32` round-trip | unsafe | 1.8549 | 9.46× |
-| 16 | Python (`--strict-f32`) | — | 86.27 | 440× |
-| 17 | Perl (`--strict-f32`) | — | 123.94 | 632× |
+| # | Language | Profile | Tier | ms/tick | rel. | spread | RSS MiB |
+|---:|---|---:|:-:|---:|---:|---:|---:|
+| 1 | C (clang) | o3-native-lto | A | 0.196 | 1.00× | 0.5% | 18 |
+| 2 | C++ (clang++) | o3-native | A | 0.219 | 1.12× | 0.8% | 18 |
+| 3 | C (gcc) | o2 | A | 0.223 | 1.14× | 0.4% | 18 |
+| 4 | C++ (g++) | o3 | A | 0.224 | 1.14× | 3.7% | 18 |
+| 5 | Haskell | o2-llvm | A | 0.232 | 1.19× | 1.1% | 18 |
+| 6 | Swift (swift) | unchecked | A | 0.245 | 1.25× | 3.0% | 19 |
+| 7 | Java (javac) | default | A | 0.252 | 1.29× | 0.7% | 49 |
+| 8 | Python (numba) | default | A | 0.255 | 1.30× | 55.2% ⚠ | 167 |
+| 9 | Rust (unchecked) | release-native-lto-unchecked | A | 0.263 | 1.35× | 1.7% | 18 |
+| 10 | Go (go) | nobounds | A | 0.269 | 1.38× | 1.0% | 18 |
+| 11 | C# (dotnet) | aot-native | A | 0.286 | 1.46× | 1.5% | 18 |
+| 12 | Rust (safe) | release | A | 0.293 | 1.50× | 1.0% | 18 |
+| 13 | Fortran (gfortran) | o2 | A | 0.299 | 1.53× | 1.3% | 18 |
+| 14 | OCaml (f64) | default | B | 0.330 | 1.69× | 0.4% | 18 |
+| 15 | TypeScript | default | A | 0.658 | 3.36× | 5.8% ⚠ | 80 |
+| 16 | OCaml (strict-f32) | cstub-unsafe | A | 0.904 | 4.62× | 2.6% | 18 |
+| 17 | Lean (lake) | default | A | 1.432 | 7.32× | 1.8% | 18 |
+| 18 | Perl (plain) | default | B | 37.138 | 189.79× | 1.0% | 22 |
+| 19 | Python (pure) | default | B | 38.845 | 198.52× | 3.1% | 18 |
+| 20 | Python (pure-strict) | default | A | 85.198 | 435.41× | 0.3% | 18 |
+| 21 | Perl (strict-f32) | default | A | 120.938 | 618.06× | 0.7% | 22 |
 
 **Every tier-A run in this mode: `0x89CFFAAC`.**
 
@@ -263,28 +273,31 @@ the cold measurement lives, on purpose.
 
 Here numpy and the idiomatic Haskell version can compete as well.
 
-| # | Language | Profile | ms/tick | rel. |
-|---:|---|---|---:|---:|
-| 1 | C | o3-native-lto | 0.1969 | 1.00× |
-| 2 | C++ | o3-native | 0.2158 | 1.10× |
-| 3 | C (PGO) | o3-native-pgo | 0.2226 | 1.13× |
-| 4 | Haskell | o2-llvm | 0.2486 | 1.26× |
-| 5 | Swift | unchecked | 0.2530 | 1.29× |
-| 6 | Java | C2 only | 0.2575 | 1.31× |
-| 7 | Python (numba) | — | 0.2581 | 1.31× |
-| 8 | Rust | release-native-lto-unchecked | 0.2676 | 1.36× |
-| 9 | Go | nobounds | 0.2880 | 1.46× |
-| 10 | Fortran | o3 | 0.3081 | 1.56× |
-| 11 | C# | ReadyToRun | 0.3213 | 1.63× |
-| 12 | Haskell (idiomatic, `vector`) | o2-llvm-vector | 0.4995 | 2.54× |
-| 13 | TypeScript | node | 0.7869 | 4.00× |
-| 14 | **OCaml, C stub** | cstub-unsafe | **0.9820** | **4.99×** |
-| 15 | Python (numpy) | — | 1.1635 | 5.91× |
-| 16 | Python (numpy, 3.14t) | — | 1.3336 | 6.77× |
-| 17 | OCaml, `Int32` round-trip | unsafe | 1.9870 | 10.09× |
-| 18 | Lean 4 | o3-native | 2.2587 | 11.47× |
-| 19 | Python (`--strict-f32`) | — | 91.25 | 463× |
-| 20 | Perl (`--strict-f32`) | — | 133.84 | 680× |
+| # | Language | Profile | Tier | ms/tick | rel. | spread | RSS MiB |
+|---:|---|---:|:-:|---:|---:|---:|---:|
+| 1 | C (clang) | o3-native | A | 0.191 | 1.00× | 0.3% | 18 |
+| 2 | C++ (clang++) | o3-native | A | 0.211 | 1.10× | 0.2% | 18 |
+| 3 | C++ (g++) | o3 | A | 0.219 | 1.14× | 2.0% | 18 |
+| 4 | C (gcc) | o3 | A | 0.221 | 1.15× | 0.7% | 18 |
+| 5 | Swift (swift) | unchecked | A | 0.246 | 1.28× | 2.1% | 19 |
+| 6 | Haskell | o2-llvm | A | 0.246 | 1.29× | 0.4% | 18 |
+| 7 | Python (numba) | default | A | 0.247 | 1.29× | 0.3% | 167 |
+| 8 | Java (javac) | c2 | A | 0.252 | 1.32× | 2.7% | 49 |
+| 9 | Rust (unchecked) | release-native-lto-unchecked | A | 0.261 | 1.36× | 0.2% | 18 |
+| 10 | Go (go) | nobounds | A | 0.284 | 1.48× | 1.8% | 18 |
+| 11 | Rust (safe) | release | A | 0.289 | 1.51× | 0.5% | 18 |
+| 12 | Fortran (gfortran) | o3 | A | 0.301 | 1.57× | 1.8% | 18 |
+| 13 | C# (dotnet) | tier1 | A | 0.309 | 1.61× | 1.7% | 30 |
+| 14 | OCaml (f64) | default | B | 0.371 | 1.94× | 0.8% | 18 |
+| 15 | Haskell (vector) | o2-llvm-vector | A | 0.479 | 2.50× | 3.6% | 23 |
+| 16 | TypeScript | default | A | 0.766 | 4.00× | 2.8% | 81 |
+| 17 | OCaml (strict-f32) | cstub-unsafe | A | 0.959 | 5.01× | 2.3% | 18 |
+| 18 | Python (numpy) | default | A | 1.097 | 5.73× | 2.9% | 39 |
+| 19 | Lean (lake) | o3-native | A | 2.192 | 11.45× | 2.5% | 18 |
+| 20 | Python (pure) | default | B | 41.681 | 217.78× | 0.4% | 18 |
+| 21 | Perl (plain) | default | B | 42.336 | 221.20× | 0.4% | 30 |
+| 22 | Python (pure-strict) | default | A | 88.085 | 460.23× | 1.5% | 18 |
+| 23 | Perl (strict-f32) | default | A | 129.254 | 675.33× | 0.9% | 24 |
 
 **Every tier-A run in this mode: `0x1DFDF34B`.**
 
@@ -470,18 +483,27 @@ names, the same file structure. The only differences are the decorator and
 128², 4096 agents, 100 ticks, `serial`, measured by
 [`bench/numba-jit.sh`](../bench/numba-jit.sh):
 
-| Target | tier | grid hash | ms/tick | vs numba |
-|---|:-:|---|---:|---:|
-| python pure | B | `0x44625B3D` | 9.9502 | 154× |
-| python pure `--strict-f32` | A | `0xB1D75130` | 22.4882 | **349×** |
-| **numba** | **A** | `0xB1D75130` | **0.0645** | 1.00× |
-| numba `--fastmath` | C | `0xF9B2609A` | 0.0710 | 1.10× |
-| c gcc `-O2` | A | `0xB1D75130` | 0.0618 | 0.96× |
+| Target | tier | grid hash | ms/tick | spread | vs numba |
+|---|:-:|---|---:|---:|---:|
+| python pure | B | `0x44625B3D` | 9.8277 | — | 158× |
+| python pure `--strict-f32` | A | `0xB1D75130` | 21.2041 | — | **341×** |
+| **numba** | **A** | `0xB1D75130` | **0.0622** | 67.6% ⚠ | 1.00× |
+| numba `--fastmath` | C | `0xF9B2609A` | 0.0614 | 3.1% | 0.99× |
+| c gcc `-O2` | A | `0xB1D75130` | 0.0590 | 0.8% | 0.95× |
 
-**Against the honest comparison — tier A against tier A — CPython costs 349×.**
-Not 154×: the tier-B row is a different computation, one that happens to be
+**Against the honest comparison — tier A against tier A — CPython costs 341×.**
+Not 158×: the tier-B row is a different computation, one that happens to be
 cheaper because it is wrong. And what is left after the interpreter is removed
-is 4 %: numba runs the identical source at **1.04× of gcc `-O2`**.
+is about 5 %: numba runs the identical source at **1.05× of gcc `-O2`**.
+
+> That last figure is the least solid number in this section. At 128² a tick
+> is 60 microseconds, and the numba row's three repetitions spread 67.6 % —
+> the compiled kernel is fast enough here that the measurement is mostly
+> scheduling noise. The gap between numba and gcc is real in the class S table
+> at 256², where both rows are steady (1.26× against C's best, spreads under
+> 4 %); the 1.05× here should be read as "the same order", not as a ranking.
+> The 341× is unaffected: it is a ratio between numbers three orders of
+> magnitude apart.
 
 The second finding is about the exactness surcharge, and it inverts. Pure
 Python needs `--strict-f32` and pays 2.2× for tier A, because CPython has no
@@ -568,44 +590,60 @@ toolchains, each with its own profile axis.
 
 ![Compiler matrix](charts/compilers.svg)
 
-| Language | Compiler | Profile | Tier | ms | rel. | Binary KiB |
-|---|---|---:|:-:|---:|---:|---:|
-| C | clang | o3-native | A | **1085** | 1.00× | 54 |
-| C++ | g++ | ofast-native | **C** | 1132 | 1.04× | 74 |
-| C | gcc | o2 | A | 1148 | 1.06× | 50 |
-| C++ | g++ | o3 | A | 1151 | 1.06× | 70 |
-| C | clang | o3-native-lto | A | 1158 | 1.07× | 54 |
-| C | gcc | o3 | A | 1159 | 1.07× | 58 |
-| C++ | clang++ | o3-native | A | 1206 | 1.11× | 63 |
-| C++ | g++ | o3-native | A | 1216 | 1.12× | 74 |
-| C++ | clang++ | o3-native-lto | A | 1217 | 1.12× | 63 |
-| C | gcc | ofast-native | **C** | 1248 | 1.15× | 62 |
-| C++ | g++ | o2 | A | 1257 | 1.16× | 62 |
-| C | gcc | o3-native | A | 1274 | 1.17× | 62 |
-| C | gcc | o3-native-lto | A | 1288 | 1.19× | 54 |
-| C | clang | o2 | A | 1292 | 1.19× | 50 |
-| Haskell | ghc | o2-llvm | A | 1304 | 1.20× | 2860 |
-| C | clang | o3 | A | 1322 | 1.22× | 50 |
-| Swift | swift | unchecked | A | 1350 | 1.24× | 96 |
-| C++ | g++ | o3-native-lto | A | 1368 | 1.26× | 66 |
-| Go | go | nobounds | A | 1399 | 1.29× | 1552 |
-| C++ | clang++ | o3 | A | 1415 | 1.30× | 59 |
-| C++ | clang++ | o2 | A | 1420 | 1.31× | 59 |
-| Swift | swift | release | A | 1434 | 1.32× | 100 |
-| Rust | cargo | release-native-lto-unchecked | A | 1460 | 1.34× | 442 |
-| Go | go | default | A | 1460 | 1.35× | 1592 |
-| Rust | cargo | release-native-unchecked | A | 1481 | 1.36× | 475 |
-| Rust | cargo | release | A | 1491 | 1.37× | 471 |
-| Rust | cargo | release-unchecked | A | 1562 | 1.44× | 468 |
-| C++ | clang++ | ofast-native | **C** | 1612 | 1.49× | 63 |
-| Haskell | ghc | o2 | A | 1640 | 1.51× | 2832 |
-| C | clang | ofast-native | **C** | 1643 | 1.51× | 54 |
-| Rust | cargo | release-native | A | 1648 | 1.52× | 476 |
-| Haskell | ghc | o1 | A | 2881 | 2.65× | 2779 |
-| C | clang | o0 | A | 3522 | 3.25× | 54 |
-| C | gcc | o0 | A | 4340 | 4.00× | 114 |
-| C++ | clang++ | o0 | A | 4413 | 4.07× | 155 |
-| C++ | g++ | o0 | A | 4837 | 4.46× | 166 |
+| Language | Compiler | Profile | Tier | ms | rel. | spread | Binary KiB |
+|---|---|---:|:-:|---:|---:|---:|---:|
+| C | clang | o3-native | A | 1 117 | 1.00× | 1.6% | 54 |
+| C | clang | o3-native-lto | A | 1 121 | 1.00× | 1.5% | 54 |
+| C | clang | o3-native-pgo | A | 1 163 | 1.04× | 2.1% | 50 |
+| C++ | g++ | o3 | A | 1 177 | 1.05× | 0.6% | 70 |
+| C | gcc | o2 | A | 1 193 | 1.07× | 2.4% | 50 |
+| C | gcc | o3 | A | 1 215 | 1.09× | 0.4% | 58 |
+| C++ | g++ | o3-native | A | 1 221 | 1.09× | 1.1% | 74 |
+| C++ | g++ | ofast-native | C | 1 234 | 1.10× | 0.8% | 74 |
+| C++ | clang++ | o3-native | A | 1 236 | 1.11× | 0.4% | 63 |
+| C++ | clang++ | o3-native-lto | A | 1 296 | 1.16× | 1.0% | 63 |
+| C++ | g++ | o2 | A | 1 310 | 1.17× | 1.5% | 62 |
+| C | gcc | o3-native | A | 1 315 | 1.18× | 1.7% | 62 |
+| C | gcc | o3-native-lto | A | 1 320 | 1.18× | 0.6% | 54 |
+| C | gcc | o3-native-pgo | A | 1 328 | 1.19× | 2.7% | 62 |
+| C | gcc | ofast-native | C | 1 336 | 1.20× | 0.7% | 62 |
+| Haskell | ghc | o2-llvm | A | 1 341 | 1.20× | 0.6% | 2 860 |
+| C | clang | o3 | A | 1 362 | 1.22× | 0.2% | 50 |
+| C | clang | o2 | A | 1 362 | 1.22× | 0.5% | 50 |
+| Java | javac | default | A | 1 403 | 1.26× | 1.8% | — |
+| Java | javac | c2 | A | 1 427 | 1.28× | 0.6% | — |
+| C++ | g++ | o3-native-lto | A | 1 436 | 1.29× | 0.9% | 66 |
+| C++ | clang++ | o3 | A | 1 459 | 1.31× | 4.2% | 59 |
+| Swift | swift | unchecked | A | 1 464 | 1.31× | 1.4% | 96 |
+| Go | go | nobounds | A | 1 464 | 1.31× | 4.1% | 1 564 |
+| C++ | clang++ | o2 | A | 1 474 | 1.32× | 2.0% | 59 |
+| Go | go | default | A | 1 508 | 1.35× | 0.8% | 1 604 |
+| Rust | cargo | release-native-unchecked | A | 1 510 | 1.35× | 0.8% | 475 |
+| Rust | cargo | release-native-lto-unchecked | A | 1 521 | 1.36× | 0.1% | 442 |
+| Swift | swift | release | A | 1 536 | 1.37× | 8.6% ⚠ | 100 |
+| C# | dotnet | aot-native | A | 1 561 | 1.40× | 0.9% | — |
+| Fortran | gfortran | ofast-native | C | 1 565 | 1.40× | 0.5% | 78 |
+| C# | dotnet | tier1 | A | 1 568 | 1.40× | 0.4% | — |
+| Fortran | gfortran | o3 | A | 1 572 | 1.41× | 0.9% | 78 |
+| Fortran | gfortran | o2 | A | 1 575 | 1.41× | 0.7% | 74 |
+| C# | dotnet | jit | A | 1 586 | 1.42× | 0.4% | — |
+| C# | dotnet | aot | A | 1 603 | 1.44× | 0.9% | — |
+| Rust | cargo | release-unchecked | A | 1 627 | 1.46× | 1.2% | 468 |
+| Rust | cargo | release | A | 1 630 | 1.46× | 0.6% | 471 |
+| Fortran | gfortran | o3-native | A | 1 639 | 1.47× | 0.3% | 78 |
+| C# | dotnet | r2r | A | 1 648 | 1.48× | 0.6% | — |
+| Rust | cargo | release-native | A | 1 677 | 1.50× | 1.7% | 476 |
+| C | clang | ofast-native | C | 1 694 | 1.52× | 1.0% | 54 |
+| Haskell | ghc | o2 | A | 1 700 | 1.52× | 1.0% | 2 832 |
+| C++ | clang++ | ofast-native | C | 1 794 | 1.61× | 0.6% | 63 |
+| Haskell | ghc | o1 | A | 3 118 | 2.79× | 4.0% | 2 779 |
+| C | clang | o0 | A | 3 753 | 3.36× | 0.8% | 54 |
+| C | gcc | o0 | A | 4 652 | 4.16× | 0.9% | 114 |
+| C++ | clang++ | o0 | A | 4 722 | 4.23× | 2.1% | 155 |
+| C++ | g++ | o0 | A | 5 076 | 4.54× | 0.7% | 166 |
+| OCaml | ocamlopt | default | A | 9 824 | 8.80× | 0.8% | 1 182 |
+| OCaml | ocamlopt | unsafe | A | 9 827 | 8.80× | 1.8% | 1 178 |
+| Java | javac | int | A | 26 518 | 23.74× | 0.3% | — |
 
 **Every tier-A run agrees.** The four fast-math builds diverge, and they
 diverge *differently per compiler* — which is exactly why fast-math is a
@@ -750,24 +788,39 @@ even in principle.
 `medium` (2048², 1 048 576 agents), 100 ticks, milliseconds. Perl runs at
 `tiny`, because `medium` there would take hours.
 
+> **Class P is the one section that does not follow the statistics rule.**
+> Every row here is a single measurement: the sweep is twelve languages × six
+> thread counts × up to three reduction strategies, and repeating each point
+> would make it by far the longest phase in the run. So these rows carry no
+> spread column, and they should not be read to two significant figures.
+>
+> How much that matters is measurable, because this table was recorded twice
+> forty minutes apart on an otherwise idle machine: C's single-thread baseline
+> came out 4 227 ms and 5 351 ms, a 21 % swing, and its speedup moved from
+> 7.4× to 8.2×. Comparisons *within* one sweep are on firmer ground — every
+> language ran in the same session, in the same thermal state — but a 0.5×
+> difference in the speedup column is not a finding, and the ordering of
+> languages within half a turn of each other is not either.
+
 ### `binned` — bit-identical to the serial run
 
 | Language | T=1 | T=2 | T=4 | T=8 | T=16 | T=32 | Speedup |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| **Go** | 6492 | 2625 | 1659 | 918 | 656 | **609** | **10.7×** |
-| TypeScript | 13612 | 4545 | 2515 | 1624 | **1318** | 1515 | 10.3× |
-| C | 5682 | 2668 | 1326 | 983 | 717 | **637** | 8.9× |
-| Swift | 7145 | 2694 | 1831 | 994 | **833** | 987 | 8.6× |
-| Haskell | 6371 | 2689 | 1287 | **837** | 748 | 860 | 8.5× |
-| C++ | 5304 | 2525 | 1321 | 908 | 695 | **662** | 8.0× |
-| Rust | 7330 | 3216 | 1836 | 1176 | **921** | 1111 | 8.0× |
-| **Java** | 6618 | 2548 | 1450 | **1062** | 1112 | 1502 | 6.2× |
-| **C#** | 8243 | 2914 | 2057 | **1384** | 1416 | 2109 | 6.0× |
-| Python | 9504 | 6546 | 3626 | 2407 | **2151** | 2542 | 4.4× |
-| Perl ¹ | 4819 | — | — | — | — | — | — |
+| TypeScript | 11 156 | 3 968 | 2 257 | 1 544 | 1 227 | 1 336 | 9.1× |
+| Go | 4 934 | 2 205 | 1 575 | 846 | 563 | 554 | 8.9× |
+| Swift | 5 963 | 2 486 | 1 660 | 940 | 761 | 886 | 7.8× |
+| Haskell | 5 026 | 2 378 | 1 121 | 727 | 678 | 744 | 7.4× |
+| C | 4 227 | 2 178 | 1 160 | 843 | 631 | 571 | 7.4× |
+| C++ | 4 149 | 2 188 | 1 246 | 802 | 633 | 600 | 6.9× |
+| Rust | 5 553 | 2 741 | 1 720 | 1 045 | 869 | 1 061 | 6.4× |
+| C# | 6 371 | 2 591 | 1 659 | 1 217 | 1 196 | 1 886 | 5.3× |
+| Java | 5 306 | 2 146 | 1 365 | 1 070 | 1 076 | 1 391 | 5.0× |
+| Python | 8 013 | 5 887 | 3 185 | 2 212 | 1 830 | 2 206 | 4.4× |
 
-¹ `tiny`, replicated reduction — see below; this series recorded only its
-single-thread row.
+Two languages are missing from that table because neither implements
+`binned`: Fortran reduces with an atomic and Perl by replication across
+processes. Both have their own table below, and neither number belongs in a
+column headed by a strategy it does not use.
 
 **The two managed runtimes come last, and it is not for the same reason.**
 
@@ -838,20 +891,50 @@ the thing being measured with a copy of someone else's answer. The consequence
 is that the class P ranking at 32 threads is a ranking of barrier
 implementations, which is what the phase breakdown below shows directly.
 
+### `atomic` — Fortran, in three directives
+
+`!$omp parallel do` over the agent pass, `!$omp atomic` on the deposit, and
+`!$omp parallel do` over the diffusion stencil. No bin buffers, no prefix sum,
+no scatter, no explicit barrier — the reduction is a locked add and OpenMP
+closes each parallel region itself.
+
+| Language | T=1 | T=2 | T=4 | T=8 | T=16 | T=32 | Speedup |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Fortran | 6 239 | 2 966 | 1 453 | 922 | 739 | 1 034 | 8.4× |
+
+**And it is tier A for every thread count**, `0xB4AC535B / 0x6A2394F4` from
+T=1 to T=32. That is not a property of the atomic; it is a property of the
+workload. SPEC-1's deposit adds a *constant*, so a cell's final value is its
+starting value plus a count, and no order of arrival can change it. Swap the
+constant for anything that depends on the agent and the atomic stops being
+bit-exact immediately, while `binned` keeps working — which is why the spec
+defines `binned` and not this.
+
+Within that limit it is the cheapest parallelism in the document: **8.4× on
+three directives**, behind only TypeScript and Go, both of which needed a
+hand-written binned reduction with six barriers per tick to get there. The
+peak is at T=16 and the regression at T=32 is the same one every other
+language shows. Subject to the caveat above — in the previous sweep the same
+three directives measured 9.6× and sat in the same place.
+
+The measured T=1 baseline here is the reason [`bench/full-run.sh`](../bench/full-run.sh)
+now passes `--threads` explicitly at every thread count and times the T=1 rows
+under `/usr/bin/time`; see §14.
+
 ### `private` — reproducible per thread count only
 
-| Language | T=2 | T=4 | T=8 | T=16 | T=32 |
-|---|---:|---:|---:|---:|---:|
-| C | 2858 | 1747 | **1475** | 2770 | 7105 |
-| C++ | 2844 | 1678 | **1368** | 2716 | 6941 |
-| Go | 2422 | 1410 | **1319** | 2560 | 6234 |
-| Swift | 2248 | **1331** | 1404 | 2487 | 6834 |
-| Haskell | 2210 | **1311** | 1318 | 2854 | 7659 |
-| Java | 2341 | **1423** | 1451 | 2769 | 6995 |
-| C# | 2483 | **1474** | 1540 | 2850 | 6916 |
-| Rust | 3378 | 1915 | **1524** | 2798 | 6924 |
-| TypeScript | 7211 | 4011 | **2674** | 3111 | 6892 |
-| Python | 5883 | 3420 | **2539** | 2809 | 3790 |
+| Language | T=1 | T=2 | T=4 | T=8 | T=16 | T=32 | Speedup |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Swift | 5 963 | 1 854 | 1 185 | 1 152 | 2 360 | 5 807 | 5.2× |
+| C# | 6 371 | 2 146 | 1 328 | 1 325 | 2 589 | 5 744 | 4.8× |
+| TypeScript | 11 156 | 6 425 | 3 657 | 2 422 | 2 909 | 5 943 | 4.6× |
+| Haskell | 5 026 | 1 805 | 1 148 | 1 168 | 2 630 | 6 493 | 4.4× |
+| Go | 4 934 | 1 890 | 1 189 | 1 154 | 2 342 | 5 335 | 4.3× |
+| Java | 5 306 | 1 982 | 1 304 | 1 334 | 2 646 | 6 291 | 4.1× |
+| Rust | 5 553 | 2 910 | 1 811 | 1 372 | 2 606 | 5 697 | 4.0× |
+| C | 4 227 | 2 437 | 1 552 | 1 244 | 2 562 | 5 924 | 3.4× |
+| Python | 8 013 | 4 991 | 2 876 | 2 359 | 2 373 | 3 272 | 3.4× |
+| C++ | 4 149 | 2 449 | 1 516 | 1 222 | 2 543 | 5 894 | 3.4× |
 
 **At 32 threads `private` drops below the serial runtime** — in C to 7105 ms
 against 5682. The reduction reads `T` complete grids: at `medium` with 32
@@ -970,26 +1053,34 @@ That forces a third reduction strategy, one [SPEC §5.6](../spec/SPEC.md) does
 not define: **replicated**. Every process applies *every* deposit, in ascending
 agent index — exactly the serial chain, bit-identical for any process count,
 without the `binned` sort. The price is that the deposit and merge passes run N
-times instead of once, and that is what caps the speedup at 2.8×: only the
-agent pass is parallel.
+times instead of once, and that is what caps the speedup: only the agent
+pass is parallel.
+
+| Language | T=1 | T=2 | T=4 | T=8 | T=16 | T=32 | Speedup |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Perl | 4 198 | 2 422 | 1 739 | 1 530 | 1 780 | 2 696 | 2.7× |
+
 
 ### The bottleneck is the barriers
 
 `SLIMEBENCH_PHASE_STATS=1` separates work from barrier wait
-(C, `medium`, T=16, thread 0), milliseconds per tick:
+(C, `medium`, T=32, thread 0), milliseconds per tick:
 
 | Phase | work | barrier | total |
 |---|---:|---:|---:|
-| agents | 2.755 | 1.085 | 3.839 |
-| prefix | **0.000** | 0.265 | 0.265 |
-| scatter | 0.074 | 0.269 | 0.343 |
-| deposit | 0.425 | 0.335 | 0.761 |
-| merge | 0.356 | 0.354 | 0.710 |
-| diffuse | 0.424 | — | 0.424 |
+| agents | 1.876 | 1.107 | 2.983 |
+| prefix | **0.001** | 0.661 | 0.662 |
+| scatter | 0.059 | 0.637 | 0.696 |
+| deposit | 0.284 | 0.671 | 0.955 |
+| merge | 0.209 | 0.771 | 0.980 |
+| diffuse | 0.224 | — | 0.224 |
 
-**Barriers are 35 % of the runtime at T=16 and 53 % at T=32.** The prefix sum,
-previously suspected of being a "serial O(T²) section", does 0.000 ms of
-measurable work.
+**Barriers are 39 % of the runtime at T=16 and 60 % at T=32.** Past sixteen
+threads C stops getting faster not because the work stops dividing — it keeps
+dividing, 4.77 ms per tick at T=16 against 2.62 at T=32 — but because the
+waiting grows faster than the work shrinks. The prefix sum, previously
+suspected of being a "serial O(T²) section", does 0.001 ms of measurable
+work.
 
 Lines of code for the same guarantee: **C 326, C++ 264** — the difference is
 almost entirely lifecycle (`std::jthread` joins on destruction, `std::barrier`
@@ -1021,17 +1112,17 @@ Milliseconds per tick from a cold process, no warm-up, averaged over blocks:
 
 | ticks | Java tiered | Java C2-only | C# jit | C# tier1 | **C# aot** |
 |---|---:|---:|---:|---:|---:|
-| 1–5 | 3.466 | 3.934 | 0.954 | 0.888 | **0.415** |
-| 6–10 | 0.490 | 0.939 | 0.414 | 0.352 | 0.363 |
-| 11–25 | 0.594 | 0.360 | 0.399 | 0.306 | **0.314** |
-| 26–50 | 0.382 | **0.265** | 0.363 | 0.289 | 0.297 |
-| 51–100 | 0.256 | 0.255 | 0.354 | 0.287 | 0.290 |
-| 201+ | 0.258 | 0.255 | 0.337 | 0.283 | 0.292 |
-| **first tick** | **6.245** | **6.392** | **2.918** | **2.837** | **0.496** |
-| best tick | 0.235 | 0.238 | 0.321 | 0.271 | 0.275 |
-| **first / best** | **26.5×** | **26.8×** | **9.1×** | **10.5×** | **1.8×** |
+| 1–5 | 3.297 | 3.760 | 0.928 | 0.856 | **0.420** |
+| 6–10 | 0.490 | 0.925 | 0.402 | 0.350 | 0.357 |
+| 11–25 | 0.428 | 0.347 | 0.364 | 0.298 | **0.309** |
+| 26–50 | 0.402 | **0.251** | 0.334 | 0.285 | 0.289 |
+| 51–100 | 0.263 | 0.253 | 0.333 | 0.286 | 0.287 |
+| 201+ | 0.251 | 0.249 | 0.332 | 0.279 | 0.282 |
+| **first tick** | **5.842** | **6.081** | **2.831** | **2.725** | **0.488** |
+| best tick | 0.233 | 0.235 | 0.318 | 0.267 | 0.271 |
+| **first / best** | **25.1×** | **25.9×** | **8.9×** | **10.2×** | **1.8×** |
 
-**The JVM's first tick costs 26× its best one.** A benchmark of a hundred ticks
+**The JVM's first tick costs 25× its best one.** A benchmark of a hundred ticks
 that forgot `--warmup` would report a number the JVM never actually runs at —
 which is not hypothetical: both the class S and the class V phases of this
 project did exactly that until the series this document is built from, and
@@ -1039,12 +1130,12 @@ class V had Java's vector kernel at 179 ms of diffusion against C's 64. With
 the warm-up it is 79.5.
 
 Two smaller results in the same table. **Turning tiering off makes the JVM
-reach steady state sooner, not later** — C2-only is already at 0.265 by tick 26
-where tiered is still at 0.447, and only catches up at 51. The intuition that
+reach steady state sooner, not later** — C2-only is already at 0.251 by tick 26
+where tiered is still at 0.402, and only catches up at 51. The intuition that
 skipping C1 means a longer slow phase is the wrong way round here: C1 code is
 slower than the interpreter is fast, and having to climb out of it costs more
 than compiling once. And **.NET's ramp is a third of the JVM's** — 9.6× against
-26.3× — but it converges to a worse number.
+25.5× — but it converges to a worse number.
 
 **Native AOT is flat.** 2.0× from first tick to best, and the first tick is
 0.571 ms against the JVM's 6.346. There is no ramp because there is no
@@ -1098,21 +1189,21 @@ ticks after 100 of warm-up, best of five:
 
 | configuration | agent pass, ms | spread | stencil, ms |
 |---|---:|---:|---:|
-| JIT, tier-1 | 748.55 | 2.5 % | 103.51 |
-| Native AOT, default | 757.83 | 0.7 % | 86.10 |
-| Native AOT, `IlcInstructionSet=native` | **737.02** | 1.6 % | 103.29 |
+| JIT, tier-1 | 705.69 | 0.6 % | 98.36 |
+| Native AOT, default | 716.81 | 0.7 % | 79.24 |
+| Native AOT, `IlcInstructionSet=native` | **698.05** | 0.6 % | 97.66 |
 
-**Indistinguishable.** The three differ by at most 2.8 %, against run-to-run
-spreads of 0.7–2.5 %, and the ahead-of-time build with the right instruction
-set is nominally the fastest. Whatever dynamic profile-guided optimisation is
-doing on this workload, it is not visible on the half of it that has branches.
+**The ahead-of-time build wins the branchy half.** The three differ by 2.7 %
+end to end, against run-to-run spreads of 0.6–0.7 % — so unlike most
+comparisons in this document the ordering here is resolved, and it puts Native
+AOT with the right instruction set ahead of the JIT rather than merely level
+with it. Whatever dynamic profile-guided optimisation is doing on this
+workload, it is not winning the half of it that has branches.
 
 That is a narrow claim about one branch distribution and it should stay
-narrow. It is also the branch distribution this benchmark has.
-
-That is a narrow claim and it should stay narrow. This loop does the same thing
-every tick, takes every branch the same way, and touches the same two arrays.
-It is close to the best case for ahead-of-time compilation and the worst case
+narrow. This loop does the same thing every tick, takes every branch the same
+way, and touches the same two arrays. It is close to the best case for
+ahead-of-time compilation and the worst case
 for profile-guided anything. The C reference agrees, from a different
 direction: §12 records PGO buying nothing on gcc and *losing* 6 % on clang for
 the same reason.
@@ -1121,9 +1212,9 @@ the same reason.
 
 | Configuration | published | start-up |
 |---|---:|---:|
-| C# jit / tier1 | 148 KiB + runtime | 27.7 / 32.5 ms |
-| C# ReadyToRun | 80 MiB | 21.0 ms |
-| **C# Native AOT** | **3.8 MiB** | **3.8 ms** |
+| C# jit / tier1 | 156 KiB + runtime | 25.0 / 31.6 ms |
+| C# ReadyToRun | 80 MiB | 19.9 ms |
+| **C# Native AOT** | **3.8 MiB** | **3.7 ms** |
 
 Start-up is five runs of `--ticks 0`, warm page cache; the first measurement of
 ReadyToRun after building it read 217 ms, so treat that column as an ordering
@@ -1139,19 +1230,22 @@ comparable to CPython running the identical algorithm at the identical
 conformance tier — a comparison available nowhere else in this project, because
 no other runtime here has an interpreter you can pin it to.
 
-| Runtime | ms/tick | vs C |
-|---|---:|---:|
-| c gcc `-O3 -march=native` | 0.2556 | 1.0× |
-| numba | 0.2554 | 1.0× |
-| Java, tiered | 0.2674 | 1.0× |
-| Java, C2 only | 0.2710 | 1.1× |
-| Go, `-gcflags=-B` | 0.2798 | 1.1× |
-| **Java, `-Xint`** | **5.6955** | **22×** |
-| **Python pure `--strict-f32`** | **89.05** | **348×** |
+| Runtime | ms/tick | spread | vs C |
+|---|---:|---:|---:|
+| numba | 0.2446 | 1.8% | 0.98× |
+| c gcc `-O3 -march=native` | 0.2495 | 0.4% | 1.00× |
+| Java, C2 only | 0.2529 | 1.5% | 1.01× |
+| Java, tiered | 0.2546 | 1.8% | 1.02× |
+| Go, `-gcflags=-B` | 0.2708 | 0.7% | 1.09× |
+| **Java, `-Xint`** | **5.4735** | 0.7% | **21.9×** |
+| **Python pure `--strict-f32`** | **84.1937** | — | **337×** |
 
-Same algorithm, same exactness, same grid hash on every row: `0x89CFFAAC`.
+Same algorithm, same exactness, same grid hash on every row: `0x89CFFAAC`. The
+top four rows are inside each other's spread and are not ranked against one
+another — numba, C, and the JVM in both configurations are the same number
+here.
 
-**CPython's interpreter is 15.6× slower than the JVM's.** "Interpreted" is not
+**CPython's interpreter is 15.4× slower than the JVM's.** "Interpreted" is not
 one performance class — the gap between these two interpreters is larger than
 the gap between the JVM's and optimised C.
 
@@ -1167,27 +1261,27 @@ reduction, the same machine. Exactly two things vary — which interpreter runs
 
 ![GIL against free-threading](charts/gil.svg)
 
-`small` (1024², 262 144 agents), 100 ticks. One thread: 3.12 **1907 ms**,
-3.14t **1751 ms**.
+`small` (1024², 262 144 agents), 100 ticks. One thread: 3.12 **1991 ms**,
+3.14t **1868 ms**.
 
 **`binned`** — milliseconds, with the speedup against the same interpreter at
 one thread in brackets:
 
-| | 3.12 threads | 3.12 processes | 3.14t threads | 3.14t processes |
+|  | 3.12 threads | 3.12 processes | 3.14t threads | 3.14t processes |
 |---|---:|---:|---:|---:|
-| T=2 | 1459 (1.31×) | 1229 (1.55×) | 1197 (1.46×) | 1201 (1.46×) |
-| T=4 | 3025 (**0.63×**) | 618 (3.08×) | **560** (3.13×) | 627 (2.79×) |
-| T=8 | 6761 (**0.28×**) | 584 (3.26×) | **493** (3.55×) | 598 (2.93×) |
-| T=16 | 13933 (**0.14×**) | 797 (2.39×) | **643** (2.72×) | 796 (2.20×) |
+| T=2 | 1 526 (1.30×) | 1 311 (1.52×) | 1 259 (1.48×) | 1 217 (1.54×) |
+| T=4 | 3 130 (0.64×) | 658 (3.03×) | 609 (3.07×) | 678 (2.76×) |
+| T=8 | 7 073 (0.28×) | 620 (3.21×) | 527 (3.54×) | 645 (2.90×) |
+| T=16 | 14 550 (0.14×) | 833 (2.39×) | 671 (2.78×) | 824 (2.27×) |
 
 **`private`**, same units:
 
-| | 3.12 threads | 3.12 processes | 3.14t threads | 3.14t processes |
+|  | 3.12 threads | 3.12 processes | 3.14t threads | 3.14t processes |
 |---|---:|---:|---:|---:|
-| T=2 | 1198 (1.59×) | 999 (1.91×) | 971 (1.80×) | 952 (1.84×) |
-| T=4 | 2493 (0.77×) | **456** (4.18×) | 464 (3.77×) | 490 (3.58×) |
-| T=8 | 5932 (0.32×) | **413** (4.61×) | 405 (4.33×) | 428 (4.09×) |
-| T=16 | 12502 (0.15×) | 496 (3.84×) | 487 (3.60×) | 514 (3.41×) |
+| T=2 | 1 287 (1.55×) | 1 052 (1.89×) | 1 012 (1.85×) | 1 005 (1.86×) |
+| T=4 | 2 660 (0.75×) | 485 (4.10×) | 498 (3.75×) | 505 (3.70×) |
+| T=8 | 6 225 (0.32×) | 448 (4.45×) | 438 (4.27×) | 465 (4.01×) |
+| T=16 | 13 013 (0.15×) | 528 (3.77×) | 462 (4.04×) | 531 (3.52×) |
 
 **All 34 runs produce the same result:** grid `0x65DF83A7`, agents
 `0xE02D7B6A` — across two interpreters, two backends, four thread counts and
@@ -1196,40 +1290,48 @@ both reductions.
 ### The first column is the actual finding
 
 CPython 3.12 with threads does not merely fail to scale, it **degrades
-super-linearly**: 13.9 seconds at 16 threads against 1.9 at one, so **7.3×
+super-linearly**: 14.6 seconds at 16 threads against 2.0 at one, so **7.3×
 slower** than the serial run. And cleanly proportional to the thread count —
-0.63×, 0.28×, 0.14× is almost exactly a halving per doubling.
+0.64×, 0.28×, 0.14× is almost exactly a halving per doubling.
 
 That is more than "the GIL serialises" explains: pure serialisation would be
-1.0×, not 0.14×. The order of magnitude fits convoying at the barriers. 139 ms
-per tick at 16 threads with six barriers is 96 crossings at 1.4 ms each, and
+1.0×, not 0.14×. The order of magnitude fits convoying at the barriers. 146 ms
+per tick at 16 threads with six barriers is 96 crossings at 1.5 ms each, and
 CPython's switch interval is 5 ms — so a waiter that gives up the GIL at a
 barrier does not get it straight back. I have not measured that; it is the
 arithmetic working out, not the proof.
 
-### Without the GIL, threads beat processes — but only for `binned`
+### Without the GIL, threads beat processes, and most where there are more barriers
 
-In `binned`, threads win at every thread count: by 18 % at T=8 (493 against
-598 ms) and by 19 % at T=16. In `private` they are level (405 against 428, 487
-against 496 — inside the noise).
+Both columns are 3.14t, so the only variable is threads against processes. In
+`binned`, threads win at every thread count: by 18 % at T=8 (527 against
+645 ms) and by 19 % at T=16 (671 against 824). In `private` the margin is
+smaller but the same sign — 6 % at T=8 (438 against 465) and 13 % at T=16
+(462 against 531).
 
-The difference between the two reductions is the number of phases: `binned` has
-five, `private` has two. Every phase boundary is a barrier, and a barrier
-between processes is an OS object where one between threads is a futex in the
-same address space. Where more synchronisation happens, the shared address
-space pays off.
+The size of the margin tracks the number of phases: `binned` has five,
+`private` has two. Every phase boundary is a barrier, and a barrier between
+processes is an OS object where one between threads is a futex in the same
+address space. Where more synchronisation happens, the shared address space
+pays off more — which is why the reduction with two and a half times the
+barriers shows two to three times the advantage.
+
+An earlier series had `private` level rather than ahead, and this heading said
+threads won "only for `binned`". They win in both; the difference is how much.
 
 ### And the honest reading
 
-**The fastest value in the whole table belongs to CPython 3.12** — 413 ms,
-`private`, eight processes. So free-threading does not make this workload
+**The fastest value in the whole table belongs to CPython 3.14t** — 438 ms,
+`private`, eight threads, with 3.12's eight processes 2 % behind it at 448.
+Between two numbers that close the ordering is not the point; what matters is
+that free-threading reaches the same place. So free-threading does not make this workload
 faster. It makes the workaround unnecessary: no `shared_memory` block, no
 hand-computed byte offsets, no `fork` requirement, no copying the arrays back
 at the end. Roughly 120 of the 350 lines in
 [`slimebench_mp.py`](../impl/python/slimebench_mp.py) exist only because
 threads were not an option.
 
-The single-thread comparison (1751 against 1907 ms) looks like an argument that
+The single-thread comparison (1868 against 1991 ms) looks like an argument that
 free-threading costs nothing — **it is not one**. The two interpreters carry
 numpy 2.5.2 and 1.26.4, and the difference between two numpy versions is
 exactly the order of magnitude in question. That pair is confounded and is
@@ -1247,28 +1349,29 @@ set in the source, the width resolved at run time. 1024², 300 ticks after 100
 of warm-up. The diffusion column is the one to read — the agent pass is
 identical in all of them and dilutes the difference.
 
-| target | vector | diffuse ms | vs best |
-|---|---|---:|---:|
-| C++, `-O3 -march=native` | AVX-512 intrinsics | **75.4** | 1.00× |
-| C, `-O3 -mavx2` | AVX2 intrinsics | 80.8 | 1.07× |
-| C++, `-O3 -mavx2` | AVX2 intrinsics | 81.0 | 1.07× |
-| C, `-O3 -march=native` | AVX-512 intrinsics | 81.8 | 1.08× |
-| Rust, safe | AVX-512 intrinsics | 86.3 | 1.14× |
-| **C#, Native AOT + `IlcInstructionSet=native`** | **`Vector512<float>`** | **93.0** | **1.23×** |
-| Rust, unchecked | AVX-512 intrinsics | 93.5 | 1.24× |
-| C#, JIT | `Vector512<float>` | 93.8 | 1.24× |
-| **Java, tiered** | **Vector API, 512-bit** | **98.7** | **1.31×** |
-| Java, C2 only | Vector API, 512-bit | 107.2 | 1.42× |
-| C#, Native AOT, default | `Vector512` unavailable, 128-bit | 133.4 | 1.77× |
-| C#, `--simd-portable` | `Vector<float>`, 128-bit | 133.4 | 1.77× |
+| Target | Vector | diffuse ms | vs best |
+|---|---:|---:|---:|
+| C++, `-O3 -march=native` | AVX-512 intrinsics | 57.3 | 1.00× |
+| C, `-O3 -march=native` | AVX-512 intrinsics | 59.4 | 1.04× |
+| Rust, unchecked | AVX-512 intrinsics | 64.1 | 1.12× |
+| Rust, safe | AVX-512 intrinsics | 65.4 | 1.14× |
+| C, `-O3 -mavx2` | AVX2 intrinsics | 67.8 | 1.18× |
+| C#, Native AOT + `IlcInstructionSet=native` | `Vector512<float>` | 68.1 | 1.19× |
+| C++, `-O3 -mavx2` | AVX2 intrinsics | 69.2 | 1.21× |
+| C#, JIT | `Vector512<float>` | 69.6 | 1.21× |
+| Java, C2 only | Vector API, 512-bit | 76.3 | 1.33× |
+| Java, tiered | Vector API, 512-bit | 78.2 | 1.36× |
+| C#, `--simd-portable` | `Vector<float>`, 128-bit | 122.4 | 2.14× |
+| C#, Native AOT, default | `Vector512` unavailable, 128-bit | 122.7 | 2.14× |
 
-**All sixteen rows produce the same grid hash, `0xEEA4EAB3`** — five languages,
-three ways of reaching the vector unit, four widths. SPEC-1 §8.1 is why: the
+**All sixteen runs, across those twelve configurations, produce the same grid
+hash `0xEEA4EAB3`** — five languages, three ways of reaching the vector unit,
+four widths. SPEC-1 §8.1 is why: the
 stencil does no cross-lane work, so each lane performs exactly the scalar
 computation for its own cell in the same order.
 
-**A portable vector type gets within 25–40 % of hand-written intrinsics.** C#
-naming `Vector512<float>` lands at 1.23× of the best AVX-512 C++, and Java's
+**A portable vector type gets within 20–40 % of hand-written intrinsics.** C#
+naming `Vector512<float>` lands at 1.19× of the best AVX-512 C++, and Java's
 Vector API — which names no width at all, only `SPECIES_PREFERRED` — at 1.31×.
 For source that contains no instruction set, that is a small price. Note the
 ordering inside the intrinsics group is not dependable: AVX2 C beats AVX-512 C
@@ -1340,22 +1443,24 @@ binned`.
 Two conditions: no FMA (`4.0f*c + acc` as a single rounded operation would be a
 different number) and a real `_mm*_div_ps`.
 
-### The stencil gets 4.5×, the program 1.25×
+### The stencil gets 4.7×, the program 1.32×
 
-Diffusion drops from ~275 to ~58 ms, but it is only a quarter of the runtime —
+Diffusion drops from 279 to 59 ms, but it is only a quarter of the runtime —
 the agent pass stays scalar and dominates. Amdahl, in one line.
 
-**Doubling the vector width buys little.** AVX2 against AVX-512: 65.8 against
-55.9 ms on gcc (18 %), 66.1 against 60.2 on clang (10 %), 66.5 against 56.3 on
-clang++ (18 %). The 3×3 stencil reads 36 bytes to write 4 — it is
+**Doubling the vector width buys little.** AVX2 against AVX-512, same source
+and same compiler each time: 68.4 → 59.6 ms on gcc (15 %), 67.8 → 59.4 on
+clang (14 %), 70.0 → 57.3 on g++ (22 %), 69.2 → 60.7 on clang++ (14 %). The
+3×3 stencil reads 36 bytes to write 4 — it is
 bandwidth-bound, the execution units are waiting on memory, and double the
 width only helps at the load ports.
 
-**Rust's "safe" wins the biggest factor here, and that is an artefact.** 6.57×
-sounds impressive, but it is only large because the *scalar* comparison value
-is bad: with bounds checks the scalar stencil costs 388 ms instead of 272. The
-SIMD kernel goes through raw pointers either way and lands at 58–59 ms. Report
-factors against your own baseline and you sometimes measure the baseline.
+**Rust's "safe" wins the biggest factor here, and that is an artefact.** 6.1×
+sounds impressive next to unchecked Rust's 4.3×, but it is only large because
+the *scalar* comparison value is bad: with bounds checks the scalar stencil
+costs 398 ms instead of 276. The SIMD kernel goes through raw pointers either
+way and lands at 64–65 ms in both. Report factors against your own baseline
+and you sometimes measure the baseline.
 
 **Read alongside the `-Ofast` finding from §3** the spread becomes absurd. Same
 diffusion pass, same compiler (clang), same preset:
@@ -1450,12 +1555,12 @@ driven from Python. All `deferred` only, 100 ticks.
 
 | Host | tiny | small | medium | large | huge |
 |---|---:|---:|---:|---:|---:|
-| CUDA (ms) | 8 | 16 | **44** | 191 | 1065 |
-| *MCUPS* | 3202 | 6753 | **9433** | 8764 | 6300 |
-| GL 4.3, C host (ms) | 214 | 660 | 2379 | 9246 | 39941 |
-| *MCUPS* | 122 | 159 | 176 | 181 | 168 |
-| GL 4.3, Python host (ms) | 225 | 656 | 2391 | 9321 | 39956 |
-| *MCUPS* | 116 | 160 | 175 | 180 | 168 |
+| cuda | 8 | 16 | 47 | 202 | 1 133 |
+| cuda MCUPS | 3 126 | 6 360 | 9 002 | 8 296 | 5 924 |
+| gl43 C | 292 | 696 | 2 534 | 9 872 | 42 485 |
+| gl43 C MCUPS | 90 | 151 | 166 | 170 | 158 |
+| gl43 Python | 241 | 693 | 2 545 | 9 912 | 42 500 |
+| gl43 Python MCUPS | 109 | 151 | 165 | 169 | 158 |
 
 MCUPS is million cell updates per second — grid cells, not agents, so the
 figure is comparable across presets.
@@ -1540,13 +1645,13 @@ grid → texture → screen is measured). Milliseconds per frame, median.
 ![Rendering](charts/render.svg)
 
 | Language | Binding | SDL2 llvmpipe | SDL2 RTX 5080 | raylib llvmpipe | raylib RTX 5080 |
-|---|---|---:|---:|---:|---:|
-| C | direct | 2.883 | 4.092 | 2.036 | 1.844 |
-| C++ | direct | 2.861 | 4.177 | 2.027 | 1.825 |
-| Haskell | `sdl2` / `foreign import` | **2.682** | 3.995 | **1.927** | 1.821 |
-| Rust | `sdl2` / `raylib` crate | 2.695 | **3.950** | 1.948 | **1.675** |
-| Python | pygame / cffi | 5.238 | 5.297 | 4.325 | 4.263 |
-| Perl | FFI::Platypus | 110.3 | 119.6 | 74.0 | 75.1 |
+|---|---:|---:|---:|---:|---:|
+| C | direct | 2.940 | 4.271 | 2.112 | 1.932 |
+| C++ | direct | 2.905 | 4.502 | 2.120 | 1.957 |
+| Haskell | `sdl2` / `foreign import` | 2.730 | 4.155 | 1.996 | 1.896 |
+| Rust | `sdl2` / `raylib` crate | 3.025 | 4.424 | 2.093 | 1.946 |
+| Python | pygame / cffi | 5.069 | 4.965 | 4.886 | 4.607 |
+| Perl | FFI::Platypus | 116.125 | 117.595 | 77.527 | 77.265 |
 
 The six SDL2 and raylib frontends in C, C++ and Rust now carry a HUD; under
 `--json` it is off, and its drawing time is subtracted from the frame in any
@@ -1611,12 +1716,12 @@ warm-up:
 | runtime | collections | GC time | allocated over the whole run |
 |---|---:|---:|---:|
 | **Java** | **0** | 0 ms | — |
-| Go | 1 | 0.62 ms | 5.2 MiB, 299 mallocs |
+| Go | 1 | 0.57 ms | 5.2 MiB, 300 mallocs |
 | C# | 1 gen0 / 1 gen1 / 1 gen2 | — | 4.7 MiB |
-| Haskell | — | 0.000 s of 0.253 | 7.8 MiB |
-| OCaml | 7 minor, 2 major | — | 12.6 MiB of minor words |
+| Haskell | — | 0.000 s of 0.247 | 7.8 MiB |
+| OCaml | 7 minor, 2 major | — | 12.1 MiB of minor words |
 
-**The JVM never collects.** Go allocates 299 times in two hundred ticks, which
+**The JVM never collects.** Go allocates 300 times in two hundred ticks, which
 is startup and nothing else. The reason is structural: the simulation
 allocates its grids and agent arrays once and writes into them for the rest of
 the run, which is what SPEC-1 asks for and what every port does.
@@ -1628,23 +1733,36 @@ managed runtime and C, and **this benchmark exercises none of them.** That is a
 limitation of the workload, not a property of the languages, and it should be
 read into every row where a collected language appears.
 
-It also explains a result that would otherwise be surprising: Java at 1.35× and
-C# at 1.50× in §2 are managed runtimes performing like compiled ones, on the
+It also explains a result that would otherwise be surprising: Java at 1.29× and
+C# at 1.46× in §2 are managed runtimes performing like compiled ones, on the
 one workload where the managed part is free.
 
 
 
 | Language | Binary KiB (stripped) | RSS MiB |
 |---|---:|---:|
-| C (gcc / clang) | **50** | 18 |
+| TypeScript | — | 80 |
+| Python (numba) | — | 167 |
+| Python (numba-fastmath) | — | 167 |
+| Python (pure) | — | 18 |
+| Python (pure-strict) | — | 18 |
+| Perl (plain) | — | 22 |
+| Perl (strict-f32) | — | 22 |
+| C# (dotnet) | — | 41 |
+| Java (javac) | — | 63 |
+| C (gcc) | 50 | 18 |
+| C (clang) | 50 | 18 |
 | C++ (clang++) | 59 | 18 |
 | C++ (g++) | 62 | 18 |
-| **Swift** | **96** | 32 |
+| Fortran (gfortran) | 74 | 18 |
+| Swift (swift) | 96 | 32 |
 | Rust (unchecked) | 442 | 18 |
 | Rust (safe) | 471 | 18 |
-| **Go** | **1552** | 18 |
-| Haskell | 2779 | 29 |
-| TypeScript / Python / Perl | – (interpreted) | 18–80 |
+| OCaml (strict-f32) | 1 178 | 18 |
+| OCaml (f64) | 1 182 | 18 |
+| Go (go) | 1 564 | 18 |
+| Haskell | 2 779 | 29 |
+| Lean (lake) | 2 851 | 18 |
 
 The spread across the compiled languages is **a factor of 56**, from 50 KiB in
 C to 2779 in Haskell — and all of it is runtime system, not generated code.
@@ -1815,7 +1933,10 @@ was.
 | SIMD ⇒ conformance tier C | Tier A. No cross-lane reduction in the stencil. |
 | GPU ⇒ conformance tier C | CUDA is tier A. For GLSL it depends on the driver. |
 | PGO is the most plausible remaining gain | Gains nothing, hurts clang. |
-| `prefix` is a serial O(T²) bottleneck | 0.000 ms of work. An artefact of my own instrumentation. |
+| `prefix` is a serial O(T²) bottleneck | 0.001 ms of work. An artefact of my own instrumentation. |
+| Fortran's OpenMP port peaks at 1.5×, and two threads are slower than one | Both figures were the same artefact. The port called `omp_set_num_threads` only above one thread, so `--threads 1` — the denominator of every speedup in that table — ran the parallel region 32 threads wide. It reported `"threads": 1` and the matching grid hash throughout, because SPEC-1's deposit adds a constant and the result does not depend on the thread count. The corrected sweep is an ordinary curve peaking at 8.4×. |
+| A run that prints `failures: 0` had no failures | Those counters came from individual phases and never covered the phases `full-run.sh` drives itself. Sixteen class R targets failed in one series — four languages that were simply never built — and the run ended with a row count and a directory listing. There is now one tally over the whole run, covering failures, empty result files, and T=1 rows that used more than one core's worth of CPU; it exits non-zero. |
+| The charts come from the same series as the tables | They did, until the series directory was replaced. `bench/charts.py` had the series name frozen into a constant and `load` returned an empty list for a missing file, so running it with no argument regenerated every chart from nothing and reported success. The argument is required now and a missing or empty input is an error. |
 | wgpu/WGSL as the portable GPU route | Not viable under WSL2: the NVIDIA Vulkan ICDs point at Windows DLLs. |
 | The class R numbers are GPU numbers | They were software rendering (§10). |
 | Idiomatic Haskell costs little | 3.7× against the low-level port (§4). |

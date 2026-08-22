@@ -138,6 +138,19 @@ def sec_crosslang(d: pathlib.Path) -> str:
     return "".join(out)
 
 
+def kib(r: dict) -> str:
+    """A binary's size in KiB, or an em dash when it does not have one.
+
+    Rounding to whole KiB turns anything under 512 bytes into "0", and no
+    binary is 0 KiB -- for the runtimes that ship IL or class files rather
+    than an executable, the honest cell is empty.
+    """
+    sz = r.get("stripped_bytes") or r.get("binary_bytes")
+    if not sz or sz < 1024:
+        return "—"
+    return fnum(sz / 1024, 0)
+
+
 def sec_footprint(d: pathlib.Path) -> str:
     rows = [r for r in load(d, "C-compiler-matrix.jsonl") if r.get("status") == "ok"]
     rows += [r for r in load(d, "A-crosslang-serial.jsonl")
@@ -157,9 +170,8 @@ def sec_footprint(d: pathlib.Path) -> str:
     for name, r in sorted(by.items(),
                           key=lambda kv: kv[1].get("stripped_bytes")
                           or kv[1].get("binary_bytes") or 0):
-        sz = r.get("stripped_bytes") or r.get("binary_bytes")
         body.append([name,
-                     fnum(sz / 1024) if sz else "—",
+                     kib(r),
                      str(round(r["max_rss_kb"] / 1024)) if r.get("max_rss_kb") else "—"])
     return ("### §9 Footprint\n"
             + table(["Language", "Binary KiB (stripped)", "RSS MiB"], body) + "\n")
@@ -174,8 +186,7 @@ def sec_compilers(d: pathlib.Path) -> str:
     body = [[r["lang"], r["cc"], r["profile"], r.get("conformance_class", "?"),
              fnum(r["ms_total_best"]), f"{r['ms_total_best'] / best:.2f}×",
              spread_cell(r),
-             fnum((r.get("stripped_bytes") or r.get("binary_bytes") or 0) / 1024, 0)
-             if (r.get("stripped_bytes") or r.get("binary_bytes")) else "—"]
+             kib(r)]
             for r in rows]
     return ("### §3 compiler matrix, 1024×1024, 300 ticks\n"
             + table(["Language", "Compiler", "Profile", "Tier", "ms", "rel.",
@@ -360,6 +371,12 @@ def sec_gpu(d: pathlib.Path) -> str:
             + table(["Host"] + presets, body) + note + "\n")
 
 
+RLABEL = {
+    "c": "C", "cpp": "C++", "haskell": "Haskell", "rust": "Rust",
+    "python": "Python", "perl": "Perl",
+}
+
+
 def sec_render(d: pathlib.Path) -> str:
     rows = load(d, "Q-render.jsonl")
     if not rows:
@@ -370,17 +387,84 @@ def sec_render(d: pathlib.Path) -> str:
         soft = "llvmpipe" in r.get("renderer", "")
         be = "sdl2" if r["backend"] in ("sdl2", "pygame") else "raylib"
         by[r["impl"]][(be, soft)] = r["ms_render_median"]
+    # How each language reaches the two C libraries is the point of this
+    # table -- the numbers alone do not say whether a row went through a
+    # binding or straight at the header. Static, because it is a fact about
+    # the ports rather than about the run.
+    binding = {
+        "c": "direct", "cpp": "direct",
+        "haskell": "`sdl2` / `foreign import`",
+        "rust": "`sdl2` / `raylib` crate",
+        "python": "pygame / cffi", "perl": "FFI::Platypus",
+    }
     body = []
     for lang in langs:
         d2 = by.get(lang)
         if not d2:
             continue
-        body.append([lang] + [f"{d2[k]:.3f}" if k in d2 else "—"
-                              for k in (("sdl2", True), ("sdl2", False),
-                                        ("raylib", True), ("raylib", False))])
+        body.append([RLABEL.get(lang, lang), binding.get(lang, "—")]
+                    + [f"{d2[k]:.3f}" if k in d2 else "—"
+                       for k in (("sdl2", True), ("sdl2", False),
+                                 ("raylib", True), ("raylib", False))])
     return ("### §8 class R, 1024×1024, `--freeze-sim`\n"
-            + table(["Language", "SDL2 llvmpipe", "SDL2 RTX 5080",
+            + table(["Language", "Binding", "SDL2 llvmpipe", "SDL2 RTX 5080",
                      "raylib llvmpipe", "raylib RTX 5080"], body) + "\n")
+
+
+# How each row reaches the vector unit. Derived where the run records it
+# (`variant` carries the instruction set or the portable width) and named here
+# where it does not -- the difference between "Native AOT told to target this
+# machine" and "Native AOT at its default" is a build flag, not a field.
+VLABEL = {
+    ("c-simd", "o3-native"): ("C, `-O3 -march=native`", "AVX-512 intrinsics"),
+    ("cpp-simd", "o3-native"): ("C++, `-O3 -march=native`", "AVX-512 intrinsics"),
+    ("c-simd", "o3-v3"): ("C, `-O3 -mavx2`", "AVX2 intrinsics"),
+    ("cpp-simd", "o3-v3"): ("C++, `-O3 -mavx2`", "AVX2 intrinsics"),
+    ("rust-simd", "release-native"): ("Rust, safe", "AVX-512 intrinsics"),
+    ("rust-simd", "release-native-unchecked"): ("Rust, unchecked",
+                                                "AVX-512 intrinsics"),
+    ("csharp-simd", "aot-native"): ("C#, Native AOT + `IlcInstructionSet=native`",
+                                    "`Vector512<float>`"),
+    ("csharp-simd", "tier1"): ("C#, JIT", "`Vector512<float>`"),
+    ("csharp-simd", "aot"): ("C#, Native AOT, default",
+                             "`Vector512` unavailable, 128-bit"),
+    ("csharp-simd-portable", "aot"): ("C#, `--simd-portable`",
+                                      "`Vector<float>`, 128-bit"),
+    ("java-simd", "default"): ("Java, tiered", "Vector API, 512-bit"),
+    ("java-simd", "c2"): ("Java, C2 only", "Vector API, 512-bit"),
+}
+
+
+def sec_simd(d: pathlib.Path) -> str:
+    """Class V, ranked on the diffusion pass.
+
+    The agent pass is identical in every one of these builds and dilutes the
+    difference, so the ranking column is ms_diffuse -- which is also why this
+    table quotes no spread: the run records repetitions of the whole tick, not
+    of one phase inside it.
+    """
+    rows = [r for r in load(d, "G-simd.jsonl") if r.get("ms_diffuse")]
+    if not rows:
+        return ""
+    best: dict[tuple, dict] = {}
+    for r in rows:
+        k = (r["target"], r.get("profile"))
+        if k not in best or r["ms_diffuse"] < best[k]["ms_diffuse"]:
+            best[k] = r
+    ranked = sorted(best.items(), key=lambda kv: kv[1]["ms_diffuse"])
+    base = ranked[0][1]["ms_diffuse"]
+    body = []
+    for k, r in ranked:
+        label, vec = VLABEL.get(k, (f"{k[0]} {k[1]}", r.get("variant") or "—"))
+        body.append([label, vec, f"{r['ms_diffuse']:.1f}",
+                     f"{r['ms_diffuse'] / base:.2f}×"])
+    one = {r["grid_hash"] for r in rows}
+    note = (f"\nAll {len(rows)} runs across {len(best)} configurations, one grid "
+            f"hash: `{one.pop()}`\n" if len(one) == 1 else "")
+    w, t = rows[0]["width"], rows[0]["ticks"]
+    return (f"### §6c class V, {w}×{w}, {t} ticks, diffusion pass only\n"
+            + table(["Target", "Vector", "diffuse ms", "vs best"], body)
+            + note + "\n")
 
 
 def main() -> int:
@@ -404,7 +488,7 @@ def main() -> int:
         print("```\n" + env.read_text(encoding="utf-8").rstrip() + "\n```\n")
 
     for fn in (sec_crosslang, sec_compilers, sec_parallel, sec_gil,
-               sec_kernels, sec_gpu, sec_render, sec_footprint):
+               sec_kernels, sec_simd, sec_gpu, sec_render, sec_footprint):
         s = fn(d)
         if s:
             print(s)
