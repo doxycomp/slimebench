@@ -51,9 +51,28 @@ case "$PROFILE" in
   *) echo "unknown profile '$PROFILE'" >&2; exit 2 ;;
 esac
 
-if { [ "$MAIN" = src/MainVector.hs ] || [ "$MAIN" = src/MainSDL2.hs ]; } \
-   && ! ls .ghc.environment.* >/dev/null 2>&1; then
-  echo "error: this profile needs a package outside GHC's global db." >&2
+# Two profiles need a package GHC does not ship. This used to be checked by
+# looking for a local .ghc.environment.* file, which is a proxy for the real
+# question and gets it wrong in both directions: the file can be there and
+# stale, and the packages can be reachable without it -- which is the case in
+# the container, where cabal installs into the global environment. So the
+# check compiles an import and asks GHC.
+has_module() { # module-name
+  local probe
+  probe=$(mktemp -d)
+  printf 'import %s\nmain :: IO ()\nmain = return ()\n' "$1" \
+    > "$probe/Probe.hs"
+  ghc -fno-code -outputdir "$probe" "$probe/Probe.hs" >/dev/null 2>&1
+  local rc=$?
+  rm -rf "$probe"
+  return $rc
+}
+
+NEED=""
+[ "$MAIN" = src/MainVector.hs ] && NEED="Data.Vector.Unboxed"
+[ "$MAIN" = src/MainSDL2.hs ] && NEED="SDL"
+if [ -n "$NEED" ] && ! has_module "$NEED"; then
+  echo "error: this profile needs $NEED, which GHC cannot find." >&2
   echo "       run: cabal install --lib vector sdl2 --package-env ." >&2
   echo "       (from $PWD; or scripts/setup-wsl.sh haskell)" >&2
   exit 3
