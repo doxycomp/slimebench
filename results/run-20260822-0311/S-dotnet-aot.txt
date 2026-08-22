@@ -3,32 +3,32 @@
 
 === A. steady state (256x256/16384, 100 ticks, warmup 50, best of 3)
 target                 grid              ms/tick
-csharp jit             0x89CFFAAC         0.3590
-csharp tier1           0x89CFFAAC         0.2957
-csharp r2r             0x89CFFAAC         0.3066
-csharp aot             0x89CFFAAC         0.3011
-java c2                0x89CFFAAC         0.2649
-c gcc-O3-native        0x89CFFAAC         0.2599
+csharp jit             0x89CFFAAC         0.3416
+csharp tier1           0x89CFFAAC         0.2871
+csharp r2r             0x89CFFAAC         0.2890
+csharp aot             0x89CFFAAC         0.2917
+java c2                0x89CFFAAC         0.2538
+c gcc-O3-native        0x89CFFAAC         0.2498
 
 === B. per-tick milliseconds from cold, no warmup
 ticks              jit     tier1       aot
-1-5              1.000     1.279     0.429
-6-10             0.462     0.544     0.370
-11-25            0.366     0.371     0.314
-26-50            0.352     0.328     0.300
-51-100           0.348     0.300     0.300
-101-200          0.362     0.304     0.306
-201-300          0.342     0.291     0.290
-first tick       3.005     4.100     0.533
-best tick        0.322     0.275     0.276
-first/best        9.3x     14.9x      1.9x
+1-5              0.928     0.856     0.420
+6-10             0.402     0.350     0.357
+11-25            0.364     0.298     0.309
+26-50            0.334     0.285     0.289
+51-100           0.333     0.286     0.287
+101-200          0.353     0.293     0.293
+201-300          0.332     0.279     0.282
+first tick       2.831     2.725     0.488
+best tick        0.318     0.267     0.271
+first/best        8.9x     10.2x      1.8x
 
 === C. published size and process start-up (--ticks 0)
 profile            size     start ms
-jit                156K         27.6
-tier1              156K         35.3
-r2r                 80M         21.0
-aot                3.8M          4.0
+jit                156K         25.0
+tier1              156K         31.6
+r2r                 80M         19.9
+aot                3.8M          3.7
 
 === D. straight-line code against branchy code
    The stencil is nine loads and ten arithmetic operations with no
@@ -42,9 +42,9 @@ aot                3.8M          4.0
      branch_stats total=13107200 straight=76.64% dead-end=1.30% turn-left=10.96% turn-right=11.11%
 
   configuration               agents ms     spread   diffuse ms
-  tier1                          748.55       2.5%       103.51
-  aot                            757.83       0.7%        86.10
-  aot-native                     737.02       1.6%       103.29
+  tier1                          705.69       0.6%        98.36
+  aot                            716.81       0.7%        79.24
+  aot-native                     698.05       0.6%        97.66
 
    If ahead-of-time compilation only kept up on straight-line code, the
    agents column is where it would show. It does not.

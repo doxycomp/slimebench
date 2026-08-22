@@ -198,6 +198,38 @@ else
 fi
 
 echo
+# What the numbers in docs/RESULTS.md were taken with. A benchmark whose
+# toolchain versions are not recorded is a transcript; versions.env records
+# them and this reports where the machine has drifted from it. Drift is not an
+# error -- it is the thing to know before comparing a local run against the
+# published one.
+if [ -f versions.env ]; then
+  # shellcheck disable=SC1091
+  . ./versions.env
+  echo
+  echo "=== pinned versions (versions.env) ==="
+  vcheck() { # label pinned actual
+    if [ -z "$3" ]; then
+      printf '  %-14s ' "$1"; dim "not installed"; printf '  %s
+' "$(dim "pinned $2")"
+    elif [ "$2" = "$3" ]; then
+      printf '  %-14s ' "$1"; green "$3"; echo
+    else
+      printf '  %-14s ' "$1"; red "$3"; printf '  %s
+' "$(dim "pinned $2 -- numbers will not be comparable")"
+    fi
+  }
+  vcheck gcc      "$SB_GCC"     "$(gcc -dumpfullversion 2>/dev/null)"
+  vcheck rustc    "$SB_RUST"    "$(rustc --version 2>/dev/null | awk '{print $2}')"
+  vcheck go       "$SB_GO"      "$(go version 2>/dev/null | awk '{print substr($3,3)}')"
+  vcheck ghc      "$SB_GHC"     "$(ghc --numeric-version 2>/dev/null)"
+  vcheck node     "$SB_NODE"    "$(node --version 2>/dev/null | tr -d v)"
+  vcheck dotnet   "$SB_DOTNET"  "$(dotnet --version 2>/dev/null)"
+  vcheck swift    "$SB_SWIFT"   "$(swift --version 2>&1 | grep -oP 'Swift version \K[0-9.]+' | head -1)"
+  vcheck ocamlopt "$SB_OCAML"   "$(ocamlopt -version 2>/dev/null)"
+  vcheck numba    "$SB_NUMBA"   "$("${SLIMEBENCH_NUMBAPY:-$HOME/opt/numba/bin/python}" -c 'import numba;print(numba.__version__)' 2>/dev/null)"
+fi
+
 echo "=== summary ==="
 printf '  %d present, %d missing\n' "$ok" "$missing"
 if [ "$missing" -eq 0 ]; then

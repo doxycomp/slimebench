@@ -82,6 +82,12 @@ CONFORMANCE_SETS = {
 }
 UPDATE_MODES = ["serial", "deferred"]
 
+# A repetition spread above this is called out in the run log and marked in the
+# generated tables. Not a failure -- some targets are legitimately noisy, and
+# class P at 32 threads is one of them -- but a row the reader should not read
+# to three significant figures.
+NOISY_SPREAD = 0.05
+
 REFERENCE_TARGET = "c"
 REFERENCE_CC = "gcc"
 REFERENCE_PROFILE = "o2"
@@ -413,6 +419,48 @@ def bench_one(t: Target, cc: str, profile: str, a: argparse.Namespace) -> dict:
         print(f"   rep {i+1}/{a.reps}: {payload['ms_total']:.1f} ms  "
               f"{payload['maups']:.1f} MAUPS  rss {r.max_rss_kb/1024:.1f} MiB")
 
+    if a.reps > 1:
+        _ms = [p["ms_total"] for p in reps]
+        _pt = [p["ms_per_tick_median"] for p in reps]
+        _sp = (max(_pt) - min(_pt)) / min(_pt) if min(_pt) > 0 else 0.0
+        if _sp > NOISY_SPREAD:
+            print(f"   per-tick spread {_sp*100:.1f}% -- noisy, "
+                  f"see the statistics rule")
+
+    # THE STATISTICS RULE. One place, one convention, applied everywhere.
+    #
+    # Report the *minimum* of the repetitions, and report the spread beside it.
+    #
+    # The minimum, because interference is one-sided: another process, a
+    # migration, a page fault can only make a run slower, never faster. The
+    # fastest repetition is the best estimate of what the code costs when
+    # nothing else is happening, and the mean of a distribution with a hard
+    # floor and an unbounded tail estimates the machine's mood instead.
+    #
+    # The spread, because a minimum on its own invites exactly the mistake
+    # this rule was written after: two rows differing by less than the
+    # run-to-run variation, read as a ranking. `ms_total_spread` is
+    # (max - min) / min over the repetitions. A difference between two rows
+    # that is smaller than either row's spread is not a difference, and
+    # tables.py marks such rows rather than leaving the reader to notice.
+    #
+    # Median is kept because it is the honest thing to look at when the spread
+    # is large -- if best and median disagree by more than the spread, the
+    # distribution is not what any single number describes.
+    # Two spreads, because there are two ranking columns and they are not
+    # equally noisy. `ms_total` is one wall-clock measurement of the whole
+    # loop, so a single scheduling hiccup lands in it whole. `ms_per_tick_median`
+    # is the middle of a hundred per-tick measurements, which is why the class
+    # S table ranks on it -- and it is an order of magnitude steadier: 0.7 %
+    # against 6.7 % over the same five runs of the same binary. A table must
+    # quote the spread of the column it sorts by, or the warning describes a
+    # number nobody is reading.
+    def _spread(vs: list[float]) -> float:
+        return (max(vs) - min(vs)) / min(vs) if vs and min(vs) > 0 else 0.0
+
+    ms = [p["ms_total"] for p in reps]
+    per_tick = [p["ms_per_tick_median"] for p in reps]
+    spread = _spread(ms)
     best = min(reps, key=lambda p: p["ms_total"])
     hashes = {(p["grid_hash"], p["agent_hash"]) for p in reps}
     return {
@@ -429,9 +477,16 @@ def bench_one(t: Target, cc: str, profile: str, a: argparse.Namespace) -> dict:
         "agents": best["agents"], "ticks": best["ticks"], "update": best["update"],
         "threads": best["threads"],
         "ms_total_best": best["ms_total"],
-        "ms_total_median": statistics.median(p["ms_total"] for p in reps),
+        "ms_total_median": statistics.median(ms),
+        # (max - min) / min across repetitions; see the statistics rule above.
+        "ms_total_spread": round(spread, 4),
+        "ms_total_reps": [round(v, 4) for v in ms],
+        "ms_per_tick_spread": round(_spread(per_tick), 4),
+        "ms_per_tick_reps": [round(v, 6) for v in per_tick],
         "ms_agents": best["ms_agents"], "ms_diffuse": best["ms_diffuse"],
-        "ms_per_tick_median": best["ms_per_tick_median"],
+        # Minimum across repetitions, like every other time here; taking
+        # it from whichever rep won on ms_total would mix two rules.
+        "ms_per_tick_median": min(per_tick),
         "ms_per_tick_p99": best["ms_per_tick_p99"],
         "maups": best["maups"], "mcups": best["mcups"],
         "max_rss_kb": min(p["_max_rss_kb"] for p in reps),
@@ -482,6 +537,27 @@ def runnable(argv: list[str]) -> bool:
     if "/" in exe or "\\" in exe:
         return pathlib.Path(exe).exists()
     return shutil.which(exe) is not None
+
+
+def device_available(argv: list[str], update: str) -> tuple[bool, str]:
+    """Whether a class G target can reach its GPU, asked by trying.
+
+    Returns (False, reason) when a zero-tick run does not succeed. The reason
+    is the last line the target wrote to stderr, so the skip says what was
+    missing rather than only that something was.
+    """
+    try:
+        # The update mode is the target's own, not a default: pygl rejects
+        # `serial` on principle (SPEC-1 5.5) and exits non-zero for it, which
+        # would read as a missing device.
+        r = subprocess.run([*argv, "--ticks", "0", "--update", update, "--json"],
+                           capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return False, f"no device ({type(e).__name__})"
+    if r.returncode == 0:
+        return True, ""
+    tail = [l for l in (r.stderr or "").splitlines() if l.strip()]
+    return False, tail[-1].strip()[:120] if tail else f"exit {r.returncode}"
 
 
 def resolve_exe(x: str) -> str:
@@ -615,18 +691,41 @@ def cmd_conformance(a: argparse.Namespace) -> int:
         if t.build and not shutil.which(cc.split("/")[-1]):
             print(f"-- {t.id}: {cc} not installed, skipping")
             continue
-        probe = [t.subst(x, cc, profile) for x in t.run]
-        probe[0] = resolve_exe(probe[0])
-        if not runnable(probe):
-            print(f"-- {t.id}: {probe[0]} not found, skipping")
-            continue
-
+        # Build first, then check the binary exists. The other order looks
+        # equivalent and is not: it asks whether a target is runnable *before*
+        # anything has built it, so on a machine where nothing is pre-built --
+        # a fresh container, for instance -- every compiled target skips with
+        # "not found" and the gate silently checks the interpreted ones only.
+        # That is how the container job came to assert twelve languages while
+        # exercising five.
         b = do_build(t, cc, profile, a.verbose)
         if not b.ok:
             print(f"-- {t.id}: BUILD FAILED")
             print(indent(b.log[-2000:]))
             failures += 1
             continue
+
+        probe = [t.subst(x, cc, profile) for x in t.run]
+        probe[0] = resolve_exe(probe[0])
+        if not runnable(probe):
+            print(f"-- {t.id}: {probe[0]} not found, skipping")
+            continue
+        # `runnable` answers whether the OS can start argv[0], which is the
+        # right question for a compiled binary and the wrong one for a script:
+        # `python3` always exists, so a GPU target whose device is absent
+        # passed that check, started, and failed every conformance case. In a
+        # container without a GL device that is eleven reported divergences
+        # for a target that never computed anything -- exactly the failure
+        # `runnable` was written to stop, one level further in.
+        #
+        # So class G targets are asked to do nothing at all first. A device
+        # that is not there fails a zero-tick run just as surely as a
+        # thousand-tick one, and costs one process to find out.
+        if t.cls == "G":
+            ok, why = device_available(probe, t.updates[0])
+            if not ok:
+                print(f"-- {t.id}: {why}, skipping")
+                continue
 
         skipped = [m for m in UPDATE_MODES if m not in t.updates]
         note = f"  [tier {t.tier}, {t.conformance_set} set"
@@ -741,8 +840,9 @@ def render_report(rows: list[dict]) -> str:
     fastest = ok[0]["ms_total_best"]
 
     head = ("| # | Language | Backend | Compiler | Profile | Tier | ms total | "
-            "ms/tick | agent % | MAUPS | rel. | RSS MiB | binary KiB | build s |")
-    sep = "|---|---|---|---|---|:-:|---:|---:|---:|---:|---:|---:|---:|---:|"
+            "spread | ms/tick | agent % | MAUPS | rel. | RSS MiB | binary KiB | "
+            "build s |")
+    sep = "|---|---|---|---|---|:-:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
     lines = [head, sep]
     for i, r in enumerate(ok, 1):
         binkb = f"{r['stripped_bytes']/1024:.0f}" if r.get("stripped_bytes") else "–"
@@ -751,14 +851,27 @@ def render_report(rows: list[dict]) -> str:
         backend = r.get("backend", "")
         if r.get("variant"):
             backend = f"{backend}/{r['variant']}"
+        sp = r.get("ms_total_spread")
+        spread = "–" if sp is None else f"{sp*100:.1f}%" + ("!" if sp > NOISY_SPREAD else "")
         lines.append(
             f"| {i} | {r['lang']} | {backend} | {r['cc']} | {r['profile']} | "
             f"{r['conformance_class']} | "
-            f"{r['ms_total_best']:.0f} | {r['ms_per_tick_median']:.3f} | "
+            f"{r['ms_total_best']:.0f} | {spread} | "
+            f"{r['ms_per_tick_median']:.3f} | "
             f"{agent_pct} | "
             f"{r['maups']:.1f} | {r['ms_total_best']/fastest:.2f}x | "
             f"{r['max_rss_kb']/1024:.0f} | {binkb} | {r['build_seconds']:.1f} |"
         )
+
+    noisy = [r for r in ok if (r.get("ms_total_spread") or 0) > NOISY_SPREAD]
+    if noisy:
+        worst = max(r["ms_total_spread"] for r in noisy)
+        lines.append("")
+        lines.append(
+            f"! {len(noisy)} row(s) varied by more than {NOISY_SPREAD*100:.0f}% "
+            f"between repetitions, up to {worst*100:.0f}%. Times are the minimum "
+            f"of {ok[0].get('reps', '?')} runs; a gap smaller than a row's own "
+            f"spread is not a ranking.")
 
     # Hash consensus is only meaningful within a conformance class: class C
     # (fast-math) is *expected* to differ from class A, and lumping them

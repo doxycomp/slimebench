@@ -52,6 +52,24 @@ once the same loops go through numba, which is a finding in itself.
 
 Measurements: [docs/RESULTS.md](docs/RESULTS.md).
 
+**What this measures.** One kernel, run fourteen ways: a flat `float32` grid,
+nine reads per cell, a million agents taking a four-way branch and adding a
+constant. No allocation after start-up, no data structure with a pointer in
+it, no dynamic dispatch, no I/O — and bit-exact `f32`, which most numeric code
+does not ask for. So the class S ranking is a ranking **on flat numeric array
+code**: home ground for C, C++, Fortran and Rust, and the narrowest slice of
+what Java, C#, OCaml, Haskell and Go are for. The strongest results here are
+the ones that hold the program constant and change one thing — JIT against
+AOT, interpreted against compiled, portable vectors against intrinsics — plus
+the conformance result and the proofs, which do not depend on the kernel at
+all. [The full statement](docs/RESULTS.md#what-this-measures-and-what-it-does-not).
+
+**Reproducing it.** `docker build --target core -t slimebench:core .` builds
+eleven of the fourteen languages and `docker run --rm slimebench:core
+bench/run.py conformance` runs the gate inside it; CI does both on every push.
+Every toolchain version is pinned in [versions.env](versions.env), and
+`bench/preflight.sh` reports where a machine has drifted from it.
+
 The same simulation, `medium` (2048², 1 M agents), 100 ticks:
 
 ![Class overview](docs/charts/classes.svg)

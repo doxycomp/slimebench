@@ -25,11 +25,20 @@ OUT = ROOT / "docs" / "charts"
 
 # One run directory, not the accumulated pile: every chart has to come from the
 # same machine state as the tables in docs/RESULTS.md, or a reader comparing a
-# chart against a table is comparing two different afternoons. Override with
+# chart against a table is comparing two different afternoons.
+#
 #   bench/charts.py results/run-YYYYmmdd-HHMM
-RESULTS = ROOT / "results" / "run-20260821-2246"
-if len(sys.argv) > 1:
-    RESULTS = pathlib.Path(sys.argv[1])
+#
+# Required, with no default. There used to be one, and it was a series name
+# frozen into this line -- which meant that after that directory was replaced,
+# running this script with no argument regenerated every chart from nothing
+# (see `load`) and reported success. A stale default is a worse outcome than a
+# usage error, because it is the one the reader cannot see.
+if len(sys.argv) != 2:
+    sys.exit(f"usage: {sys.argv[0]} results/run-YYYYmmdd-HHMM")
+RESULTS = pathlib.Path(sys.argv[1])
+if not RESULTS.is_dir():
+    sys.exit(f"error: {RESULTS} is not a directory")
 
 # Colour-blind-safe, and distinguishable in both themes.
 PALETTE = {
@@ -67,11 +76,25 @@ STYLE = """
 """
 
 
+MISSING: list[str] = []
+
+
 def load(name: str) -> list[dict]:
+    """Rows from one result file, or none -- and a note either way.
+
+    An absent file and an empty one both mean a chart is about to be drawn
+    from nothing. Returning [] silently is how a run that lost a whole phase
+    still produced a full set of charts.
+    """
     p = RESULTS / name
     if not p.exists():
+        MISSING.append(f"{name}: absent")
         return []
-    return [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines() if l.strip()]
+    rows = [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines()
+            if l.strip()]
+    if not rows:
+        MISSING.append(f"{name}: no rows")
+    return rows
 
 
 def esc(s: str) -> str:
@@ -557,6 +580,11 @@ def main() -> int:
     chart_render()
     chart_kernels()
     chart_gil()
+    if MISSING:
+        print("  charts drawn from missing or empty inputs:")
+        for m in sorted(set(MISSING)):
+            print(f"    {m}")
+        return 1
     return 0
 
 

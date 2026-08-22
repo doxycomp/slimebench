@@ -189,6 +189,13 @@ style "haskell idiomatic (vector)"      impl/haskell/build/o2-llvm-vector/slimeb
 # and the shape of its curve is the datapoint, not a cross-language absolute.
 phase "class P, thread sweep"
 : > "$OUT/P-parallel.jsonl"
+# One place where a lost row is recorded, so the end of the run can count
+# them. Everything that gives up on a measurement calls this.
+fail() {
+  echo "  $* FAILED"
+  echo "$*" >> "$OUT/FAILURES.txt"
+}
+
 psweep() { # label preset ticks extra-args... -- cmd...
   local label=$1 preset=$2 ticks=$3; shift 3
   local -a red=()
@@ -197,16 +204,41 @@ psweep() { # label preset ticks extra-args... -- cmd...
   for t in 1 2 4 8 16 32; do
     for r in "${red[@]}"; do
       [ "$t" = 1 ] && [ "$r" != "${red[0]}" ] && continue
-      local -a args=(--preset "$preset" --ticks "$ticks" --update deferred)
-      [ "$t" -gt 1 ] && args+=(--threads "$t")
+      # `--threads` is passed at every T including 1. Leaving it off and
+      # trusting each binary's default is how the Fortran baseline came to be
+      # measured 32 threads wide: OpenMP's default is every core, the port
+      # only called omp_set_num_threads when asked for more than one, and the
+      # JSON still said "threads": 1. The hash matched too -- an atomic add of
+      # a constant does not depend on the thread count -- so the row looked
+      # perfectly well behaved while being 5x too fast.
+      local -a args=(--preset "$preset" --ticks "$ticks" --update deferred
+                     --threads "$t")
       [ "$t" -gt 1 ] && [ -n "$r" ] && args+=(--deposit-reduce "$r")
-      local j
-      j=$(timeout 3600 "$@" "${args[@]}" --json 2>/dev/null | grep -m1 '^{') || continue
-      [ -z "$j" ] && continue
-      echo "$j" | LBL="$label" T="$t" python3 -c "
+      local j cpu=""
+      # The general form of that bug is a row that used more of the machine
+      # than its label claims, and no language reports its effective thread
+      # count. The kernel is compute-bound, so the OS knows: one thread means
+      # about 100 % of one core. Measured on the T=1 rows only, where the
+      # answer is unambiguous and the cost is one process per language.
+      if [ "$t" = 1 ]; then
+        j=$(timeout 3600 /usr/bin/time -f "SB_CPU %P" "$@" "${args[@]}" \
+              --json 2>"$OUT/.cpu" | grep -m1 '^{') || continue
+        cpu=$(sed -n 's/^SB_CPU \([0-9]*\)%$/\1/p' "$OUT/.cpu" | tail -1)
+        if [ -n "$cpu" ] && [ "$cpu" -gt 150 ]; then
+          msg=$(printf '  %-12s T=1 used %s%% CPU -- not one thread' \
+                  "$label" "$cpu")
+          echo "$msg" | tee -a "$OUT/WARNINGS.txt"
+        fi
+      else
+        j=$(timeout 3600 "$@" "${args[@]}" --json 2>/dev/null | grep -m1 '^{') \
+          || { fail "class P  $label T=$t $r"; continue; }
+      fi
+      [ -z "$j" ] && { fail "class P  $label T=$t $r: no json"; continue; }
+      echo "$j" | LBL="$label" T="$t" CPU="$cpu" python3 -c "
 import sys, json, os
 d = json.load(sys.stdin)
 d['lang_label'] = os.environ['LBL']; d['threads'] = int(os.environ['T'])
+if os.environ.get('CPU'): d['cpu_pct'] = int(os.environ['CPU'])
 print(json.dumps(d))" >> "$OUT/P-parallel.jsonl"
       printf "  %-12s T=%-3s %-8s %8.0f ms\n" "$label" "$t" "$r" \
         "$(echo "$j" | python3 -c 'import sys,json; print(json.load(sys.stdin)["ms_total"])')"
@@ -223,6 +255,9 @@ psweep go      medium 100 binned private -- impl/go/build/nobounds/slimebench
 psweep swift   medium 100 binned private -- impl/swift/build/unchecked/slimebench
 psweep java    medium 100 binned private -- impl/java/build/default/slimebench
 psweep csharp  medium 100 binned private -- impl/csharp/build/aot/slimebench
+# Fortran has one strategy, not two: an atomic add, which is bit-exact here
+# because the deposit is a constant. The empty reduction argument is that.
+psweep fortran medium 100 ""              -- impl/fortran/build/openmp/slimebench
 psweep perl    tiny    20 ""              -- perl impl/perl/slimebench.pl
 
 # The free-threading experiment: {GIL, no-GIL} x {threads, processes} x T,
@@ -306,8 +341,8 @@ render() { # lang label cmd...
   local -a hud=()
   case "$lang" in c|cpp|rust) hud=(--no-hud);; esac
   j=$(timeout 900 "$@" --preset small --ticks "$n" --freeze-sim --json "${hud[@]}" 2>/dev/null \
-      | grep -m1 '^{') || { echo "  $label FAILED"; return; }
-  [ -z "$j" ] && { echo "  $label no json"; return; }
+      | grep -m1 '^{') || { fail "class R  $label ($RLABEL)"; return; }
+  [ -z "$j" ] && { fail "class R  $label ($RLABEL): no json"; return; }
   echo "$j" | RL="$RLABEL" python3 -c "
 import sys, json, os
 d = json.load(sys.stdin); d['renderer'] = os.environ['RL']
@@ -355,4 +390,39 @@ fi
 
 echo
 echo "==> done. $(cat "$OUT"/*.jsonl 2>/dev/null | wc -l) rows in $OUT"
+
+# An empty result file is the quietest way for this suite to fail: the phase
+# runs, every target inside it dies, and the only symptom is a table that is
+# shorter than it was last time. Named here, once, at the end.
+empty=0
+for f in "$OUT"/*.jsonl; do
+  [ -e "$f" ] || continue
+  n=$(grep -c '' "$f" 2>/dev/null || true)
+  if [ "${n:-0}" -eq 0 ]; then
+    echo "  EMPTY  $(basename "$f")"
+    empty=$((empty + 1))
+  fi
+done
+
+# Written as `if`, not `[ -f x ] && n=...`: under `set -e` the second form
+# aborts the script when the file is absent, which is the success case.
+nfail=0
+if [ -f "$OUT/FAILURES.txt" ]; then
+  nfail=$(grep -c '' "$OUT/FAILURES.txt" || true)
+fi
+nwarn=0
+if [ -f "$OUT/WARNINGS.txt" ]; then
+  nwarn=$(grep -c '' "$OUT/WARNINGS.txt" || true)
+fi
+
+echo "    failures     $nfail"
+echo "    empty files  $empty"
+echo "    warnings     $nwarn"
+if [ "$nfail" -gt 0 ]; then
+  echo
+  echo "  the failures were:"
+  sed 's/^/    /' "$OUT/FAILURES.txt"
+fi
+echo
 ls -1 "$OUT"
+[ "$nfail" -eq 0 ] && [ "$empty" -eq 0 ]

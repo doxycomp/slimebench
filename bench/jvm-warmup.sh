@@ -67,21 +67,24 @@ echo
 
 # ---- B. the ladder -------------------------------------------------------
 echo "=== B. two interpreters and three compiled paths (same size, warmup 50)"
-printf '%-28s %-12s %12s\n' target grid ms/tick
+# The statistics rule (bench/run.py): minimum of the repetitions, spread
+# beside it. One repetition for pure Python, where a run is ninety seconds and
+# the ratio being measured is 340x.
+printf '%-28s %-12s %12s %8s\n' target grid ms/tick spread
 lad() { # label reps cmd...
   local label=$1 reps=$2; shift 2
-  local best="" gh="" j
   for _ in $(seq "$reps"); do
-    j=$("$@" $SIZE --ticks 100 --warmup 50 --update serial --json 2>/dev/null | grep -m1 '^{') || continue
-    best=$(BEST="$best" python3 -c "
+    "$@" $SIZE --ticks 100 --warmup 50 --update serial --json 2>/dev/null | grep -m1 '^{'
+  done | LBL="$label" python3 -c '
 import json, os, sys
-d = json.loads(sys.argv[1]); b = os.environ['BEST']
-v = d['ms_per_tick_mean']
-print(min(v, float(b)) if b else v)" "$j")
-    gh=$(echo "$j" | python3 -c 'import sys,json; print(json.load(sys.stdin)["grid_hash"])')
-  done
-  [ -z "$best" ] && { printf '%-28s NO OUTPUT\n' "$label"; return; }
-  printf '%-28s %-12s %12.4f\n' "$label" "$gh" "$best"
+rows = [json.loads(l) for l in sys.stdin if l.startswith("{")]
+if not rows:
+    print("%-28s NO OUTPUT" % os.environ["LBL"])
+else:
+    v = sorted(r["ms_per_tick_mean"] for r in rows)
+    sp = "—" if len(v) < 2 else "%.1f%%" % ((v[-1] - v[0]) / v[0] * 100)
+    print("%-28s %-12s %12.4f %8s"
+          % (os.environ["LBL"], rows[0]["grid_hash"], v[0], sp))'
 }
 lad "c gcc -O3 -march=native" 3 impl/c/build/gcc-o3-native/slimebench-headless
 lad "java, C2 only"           3 impl/java/build/c2/slimebench
