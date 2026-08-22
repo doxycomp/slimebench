@@ -159,7 +159,7 @@ def sec_footprint(d: pathlib.Path) -> str:
                           or kv[1].get("binary_bytes") or 0):
         sz = r.get("stripped_bytes") or r.get("binary_bytes")
         body.append([name,
-                     fnum(sz / 1024) if sz else "— (interpretiert)",
+                     fnum(sz / 1024) if sz else "—",
                      str(round(r["max_rss_kb"] / 1024)) if r.get("max_rss_kb") else "—"])
     return ("### §9 Footprint\n"
             + table(["Language", "Binary KiB (stripped)", "RSS MiB"], body) + "\n")
@@ -177,10 +177,17 @@ def sec_compilers(d: pathlib.Path) -> str:
              fnum((r.get("stripped_bytes") or r.get("binary_bytes") or 0) / 1024, 0)
              if (r.get("stripped_bytes") or r.get("binary_bytes")) else "—"]
             for r in rows]
-    return ("### §3 compiler matrix, 1024×1024, 300 Ticks\n"
+    return ("### §3 compiler matrix, 1024×1024, 300 ticks\n"
             + table(["Language", "Compiler", "Profile", "Tier", "ms", "rel.",
                      "spread", "Binary KiB"], body, "llrcrrrr")
             + spread_note(rows) + "\n")
+
+
+PLABEL = {
+    "c": "C", "cpp": "C++", "rust": "Rust", "haskell": "Haskell",
+    "ts": "TypeScript", "python": "Python", "go": "Go", "swift": "Swift",
+    "java": "Java", "csharp": "C#", "fortran": "Fortran", "perl": "Perl",
+}
 
 
 def sec_parallel(d: pathlib.Path) -> str:
@@ -196,16 +203,25 @@ def sec_parallel(d: pathlib.Path) -> str:
             strat = "binned"
         elif "private" in v:
             strat = "private"
+        elif "openmp" in v:
+            # Fortran has one strategy rather than two: an atomic add. It is
+            # bit-exact for any thread count because SPEC-1's deposit is a
+            # constant, so the order in which threads apply it to a cell
+            # cannot change the sum. Neither binned nor private applies.
+            strat = "atomic"
         else:
-            # Perl's reduction is neither: it is replicated across processes,
-            # which is exactly the serial chain. See SPEC-1 5.6 and the header
-            # of impl/perl/slimebench.pl.
+            # Perl's reduction is none of those: it is replicated across
+            # processes, which is exactly the serial chain. See SPEC-1 5.6 and
+            # the header of impl/perl/slimebench.pl.
             strat = "replicated"
         by[r["lang_label"]][(r["threads"], strat)] = r["ms_total"]
 
     threads = [1, 2, 4, 8, 16, 32]
+    # The sweep is a ranking of how well each language scales, so it is sorted
+    # like one. Unsorted, in the order the run happened to emit them, the
+    # column that carries the finding is the one the reader has to sort by eye.
     out = ["### §5 class P, thread sweep (ms)\n"]
-    for strat in ("binned", "private", "replicated"):
+    for strat in ("binned", "private", "atomic", "replicated"):
         body = []
         for lang, d2 in by.items():
             base = d2.get((1, "1"))
@@ -215,7 +231,11 @@ def sec_parallel(d: pathlib.Path) -> str:
             cells = [fnum(base)] + [fnum(d2[(t, strat)]) if (t, strat) in d2 else "—"
                                     for t in threads[1:]]
             bestv = min(v for v in have if v is not None)
-            body.append([lang] + cells + [f"{base / bestv:.1f}×"])
+            body.append([PLABEL.get(lang, lang)] + cells
+                        + [f"{base / bestv:.1f}×", base / bestv])
+        body.sort(key=lambda r: -r[-1])
+        for r in body:
+            r.pop()
         if body:
             out.append(f"\n**{strat}**\n")
             out.append(table(["Language"] + [f"T={t}" for t in threads] + ["Speedup"], body))
@@ -335,7 +355,7 @@ def sec_gpu(d: pathlib.Path) -> str:
     shaders = {r.get("shader_hash") for r in rows if r.get("shader_hash")}
     note = ""
     if len(shaders) == 1:
-        note = f"\nShader-Hash in allen GL-Hosts identisch: `{shaders.pop()}`\n"
+        note = f"\nOne shader hash across every GL host: `{shaders.pop()}`\n"
     return ("### §7 class G, every preset, 100 ticks (ms)\n"
             + table(["Host"] + presets, body) + note + "\n")
 

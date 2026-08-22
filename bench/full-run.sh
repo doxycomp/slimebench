@@ -189,6 +189,13 @@ style "haskell idiomatic (vector)"      impl/haskell/build/o2-llvm-vector/slimeb
 # and the shape of its curve is the datapoint, not a cross-language absolute.
 phase "class P, thread sweep"
 : > "$OUT/P-parallel.jsonl"
+# One place where a lost row is recorded, so the end of the run can count
+# them. Everything that gives up on a measurement calls this.
+fail() {
+  echo "  $* FAILED"
+  echo "$*" >> "$OUT/FAILURES.txt"
+}
+
 psweep() { # label preset ticks extra-args... -- cmd...
   local label=$1 preset=$2 ticks=$3; shift 3
   local -a red=()
@@ -223,9 +230,10 @@ psweep() { # label preset ticks extra-args... -- cmd...
           echo "$msg" | tee -a "$OUT/WARNINGS.txt"
         fi
       else
-        j=$(timeout 3600 "$@" "${args[@]}" --json 2>/dev/null | grep -m1 '^{') || continue
+        j=$(timeout 3600 "$@" "${args[@]}" --json 2>/dev/null | grep -m1 '^{') \
+          || { fail "class P  $label T=$t $r"; continue; }
       fi
-      [ -z "$j" ] && continue
+      [ -z "$j" ] && { fail "class P  $label T=$t $r: no json"; continue; }
       echo "$j" | LBL="$label" T="$t" CPU="$cpu" python3 -c "
 import sys, json, os
 d = json.load(sys.stdin)
@@ -333,8 +341,8 @@ render() { # lang label cmd...
   local -a hud=()
   case "$lang" in c|cpp|rust) hud=(--no-hud);; esac
   j=$(timeout 900 "$@" --preset small --ticks "$n" --freeze-sim --json "${hud[@]}" 2>/dev/null \
-      | grep -m1 '^{') || { echo "  $label FAILED"; return; }
-  [ -z "$j" ] && { echo "  $label no json"; return; }
+      | grep -m1 '^{') || { fail "class R  $label ($RLABEL)"; return; }
+  [ -z "$j" ] && { fail "class R  $label ($RLABEL): no json"; return; }
   echo "$j" | RL="$RLABEL" python3 -c "
 import sys, json, os
 d = json.load(sys.stdin); d['renderer'] = os.environ['RL']
@@ -382,4 +390,39 @@ fi
 
 echo
 echo "==> done. $(cat "$OUT"/*.jsonl 2>/dev/null | wc -l) rows in $OUT"
+
+# An empty result file is the quietest way for this suite to fail: the phase
+# runs, every target inside it dies, and the only symptom is a table that is
+# shorter than it was last time. Named here, once, at the end.
+empty=0
+for f in "$OUT"/*.jsonl; do
+  [ -e "$f" ] || continue
+  n=$(grep -c '' "$f" 2>/dev/null || true)
+  if [ "${n:-0}" -eq 0 ]; then
+    echo "  EMPTY  $(basename "$f")"
+    empty=$((empty + 1))
+  fi
+done
+
+# Written as `if`, not `[ -f x ] && n=...`: under `set -e` the second form
+# aborts the script when the file is absent, which is the success case.
+nfail=0
+if [ -f "$OUT/FAILURES.txt" ]; then
+  nfail=$(grep -c '' "$OUT/FAILURES.txt" || true)
+fi
+nwarn=0
+if [ -f "$OUT/WARNINGS.txt" ]; then
+  nwarn=$(grep -c '' "$OUT/WARNINGS.txt" || true)
+fi
+
+echo "    failures     $nfail"
+echo "    empty files  $empty"
+echo "    warnings     $nwarn"
+if [ "$nfail" -gt 0 ]; then
+  echo
+  echo "  the failures were:"
+  sed 's/^/    /' "$OUT/FAILURES.txt"
+fi
+echo
 ls -1 "$OUT"
+[ "$nfail" -eq 0 ] && [ "$empty" -eq 0 ]
