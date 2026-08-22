@@ -74,7 +74,13 @@ program slimebench
   ! even in principle (SPEC-1 5.5).
   if (cfg%threads > 1 .and. cfg%update /= 'deferred') &
     call fail('--threads > 1 requires --update deferred (SPEC-1 5.5)')
-!$ if (cfg%threads > 1) call omp_set_num_threads(cfg%threads)
+  ! Unconditionally, including for one thread. Guarded with `threads > 1`
+  ! this left the OpenMP default in place -- every core on the machine -- so
+  ! `--threads 1` ran the parallel region 32-wide while reporting
+  ! "threads": 1. Nothing failed and the hash still matched, because the
+  ! deposit is an atomic add of a constant and the result does not depend on
+  ! the thread count. Only the baseline of the whole sweep was wrong.
+!$ call omp_set_num_threads(cfg%threads)
 
   call sim_create(s, cfg, ok, why)
   if (.not. ok) call fail(trim(why))

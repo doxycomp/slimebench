@@ -197,16 +197,40 @@ psweep() { # label preset ticks extra-args... -- cmd...
   for t in 1 2 4 8 16 32; do
     for r in "${red[@]}"; do
       [ "$t" = 1 ] && [ "$r" != "${red[0]}" ] && continue
-      local -a args=(--preset "$preset" --ticks "$ticks" --update deferred)
-      [ "$t" -gt 1 ] && args+=(--threads "$t")
+      # `--threads` is passed at every T including 1. Leaving it off and
+      # trusting each binary's default is how the Fortran baseline came to be
+      # measured 32 threads wide: OpenMP's default is every core, the port
+      # only called omp_set_num_threads when asked for more than one, and the
+      # JSON still said "threads": 1. The hash matched too -- an atomic add of
+      # a constant does not depend on the thread count -- so the row looked
+      # perfectly well behaved while being 5x too fast.
+      local -a args=(--preset "$preset" --ticks "$ticks" --update deferred
+                     --threads "$t")
       [ "$t" -gt 1 ] && [ -n "$r" ] && args+=(--deposit-reduce "$r")
-      local j
-      j=$(timeout 3600 "$@" "${args[@]}" --json 2>/dev/null | grep -m1 '^{') || continue
+      local j cpu=""
+      # The general form of that bug is a row that used more of the machine
+      # than its label claims, and no language reports its effective thread
+      # count. The kernel is compute-bound, so the OS knows: one thread means
+      # about 100 % of one core. Measured on the T=1 rows only, where the
+      # answer is unambiguous and the cost is one process per language.
+      if [ "$t" = 1 ]; then
+        j=$(timeout 3600 /usr/bin/time -f "SB_CPU %P" "$@" "${args[@]}" \
+              --json 2>"$OUT/.cpu" | grep -m1 '^{') || continue
+        cpu=$(sed -n 's/^SB_CPU \([0-9]*\)%$/\1/p' "$OUT/.cpu" | tail -1)
+        if [ -n "$cpu" ] && [ "$cpu" -gt 150 ]; then
+          msg=$(printf '  %-12s T=1 used %s%% CPU -- not one thread' \
+                  "$label" "$cpu")
+          echo "$msg" | tee -a "$OUT/WARNINGS.txt"
+        fi
+      else
+        j=$(timeout 3600 "$@" "${args[@]}" --json 2>/dev/null | grep -m1 '^{') || continue
+      fi
       [ -z "$j" ] && continue
-      echo "$j" | LBL="$label" T="$t" python3 -c "
+      echo "$j" | LBL="$label" T="$t" CPU="$cpu" python3 -c "
 import sys, json, os
 d = json.load(sys.stdin)
 d['lang_label'] = os.environ['LBL']; d['threads'] = int(os.environ['T'])
+if os.environ.get('CPU'): d['cpu_pct'] = int(os.environ['CPU'])
 print(json.dumps(d))" >> "$OUT/P-parallel.jsonl"
       printf "  %-12s T=%-3s %-8s %8.0f ms\n" "$label" "$t" "$r" \
         "$(echo "$j" | python3 -c 'import sys,json; print(json.load(sys.stdin)["ms_total"])')"
