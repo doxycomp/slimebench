@@ -17,5 +17,9 @@ results
 **/*.hi
 **/*.cmi
 **/*.cmx
-**/*.mod
+# gfortran's module files, scoped to Fortran. Unscoped as `**/*.mod`
+# this also matched impl/go/go.mod, so the image had every Go source
+# file and no module definition -- one line of .dockerignore removing
+# a language from the conformance gate.
+impl/fortran/**/*.mod
 docs/charts
