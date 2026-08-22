@@ -52,6 +52,29 @@ headless_capable = false
 # docs/RESULTS.md.
 
 [[target]]
+# The agent pass, vectorised. A separate target from c-simd because it is a
+# separate kernel answering a separate question: c-simd is the diffusion
+# stencil, which is 11 to 22 % of a tick, and this is the other 78 to 89 %.
+#
+# Conformance is NOT skipped here, unlike c-simd. The stencil's bit-exactness
+# follows from SPEC-1 8.1 -- no cross-lane work, so each lane is the scalar
+# computation -- and is verified once. This kernel has a data-dependent
+# four-way branch, a masked direction update and a PRNG that only some lanes
+# may advance, and none of that is an argument, so it is checked.
+id       = "c-simd-agents"
+lang     = "C"
+backend  = "simd"
+class    = "V"
+dir      = "impl/c"
+build    = "make CC={cc} PROFILE={profile} headless"
+binary   = "build/{cc}-{profile}/slimebench-headless"
+run      = ["{binary}"]
+compilers = ["gcc", "clang"]
+profiles  = ["o3-native"]
+extra_args = ["--simd-agents"]
+updates  = ["deferred"]
+
+[[target]]
 id       = "c-simd"
 lang     = "C"
 backend  = "simd"

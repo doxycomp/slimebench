@@ -106,9 +106,13 @@ int sb_sim_init(sb_sim *s, const sb_config *cfg) {
     s->ay   = (float *)malloc((size_t)cfg->agents * sizeof(float));
     s->adir = (uint16_t *)malloc((size_t)cfg->agents * sizeof(uint16_t));
     s->arng = (uint32_t *)malloc((size_t)cfg->agents * 4 * sizeof(uint32_t));
+    s->agent_idx = cfg->simd_agents
+                 ? (uint32_t *)malloc((size_t)cfg->agents * sizeof(uint32_t))
+                 : NULL;
 
     if (!s->grid || !s->scratch || !s->ax || !s->ay || !s->adir || !s->arng ||
-        (cfg->update == SB_UPDATE_DEFERRED && !s->dep)) {
+        (cfg->update == SB_UPDATE_DEFERRED && !s->dep) ||
+        (cfg->simd_agents && !s->agent_idx)) {
         sb_sim_free(s);
         return 2;
     }
@@ -147,6 +151,7 @@ void sb_sim_free(sb_sim *s) {
     free(s->ay);
     free(s->adir);
     free(s->arng);
+    free(s->agent_idx);
     memset(s, 0, sizeof *s);
 }
 
@@ -156,6 +161,21 @@ static void sb_agent_pass(sb_sim *s) {
     const sb_agent_ctx k = sb_agent_ctx_make(s);
     const float deposit = s->cfg.deposit;
     float *target = (s->cfg.update == SB_UPDATE_DEFERRED) ? s->dep : s->grid;
+
+    /* The vectorised step, when this build has one and the caller asked for
+     * it. Only in `deferred` mode: `serial` lets an agent read a deposit its
+     * predecessor made this tick, and no vector of sixteen can express that.
+     * The deposits are applied here, scalar and in ascending agent order --
+     * the same order, and therefore the same floats, as the loop below. */
+    if (s->cfg.simd_agents && s->agent_idx) {
+        const uint32_t n = s->cfg.agents;
+        sb_simd_agents(s, 0, n, s->agent_idx);
+        for (uint32_t i = 0; i < n; i++) {
+            const uint32_t idx = s->agent_idx[i];
+            target[idx] = target[idx] + deposit;
+        }
+        return;
+    }
 
     for (uint32_t i = 0; i < s->cfg.agents; i++) {
         const uint32_t idx = sb_agent_step(&k, s, i);

@@ -32,6 +32,7 @@ typedef struct {
     sb_reduce_mode reduce;
     int simd;                 /* class V: vectorised diffusion pass */
     int use_asm;              /* class V: hand-written assembly kernel */
+    int simd_agents;          /* vectorised agent pass; deferred only */
 
     float sensor_dist;
     float step;
@@ -56,6 +57,10 @@ typedef struct {
     float    *ay;
     uint16_t *adir;
     uint32_t *arng;           /* 4 words per agent */
+    /* One target cell per agent, filled by the vectorised agent pass so
+     * the deposits can be applied afterwards in ascending agent order.
+     * Allocated only when that path is on. */
+    uint32_t *agent_idx;
 
     float cos_tab[SB_NDIR];
     float sin_tab[SB_NDIR];
