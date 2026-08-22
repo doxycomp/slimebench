@@ -74,7 +74,7 @@ printf '%-28s %-12s %12s %8s\n' target grid ms/tick spread
 lad() { # label reps cmd...
   local label=$1 reps=$2; shift 2
   local i
-  for i in $(seq "$reps"); do
+  for _ in $(seq "$reps"); do
     "$@" $SIZE --ticks 100 --warmup 50 --update serial --json 2>/dev/null | grep -m1 '^{'
   done | LBL="$label" python3 -c '
 import json, os, sys
