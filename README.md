@@ -65,7 +65,7 @@ the conformance result and the proofs, which do not depend on the kernel at
 all. [The full statement](docs/RESULTS.md#what-this-measures-and-what-it-does-not).
 
 **Reproducing it.** `docker build --target core -t slimebench:core .` builds
-twelve of the fourteen languages and `docker run --rm slimebench:core
+eleven of the fourteen languages and `docker run --rm slimebench:core
 bench/run.py conformance` runs the gate inside it; CI does both on every push.
 Every toolchain version is pinned in [versions.env](versions.env), and
 `bench/preflight.sh` reports where a machine has drifted from it.

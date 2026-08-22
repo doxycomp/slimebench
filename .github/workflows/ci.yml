@@ -210,7 +210,7 @@ jobs:
       - name: build the core image
         run: docker build --target core -t slimebench:core .
 
-      # The gate, not a smoke test: twelve languages agreeing bit for bit
+      # The gate, not a smoke test: eleven languages agreeing bit for bit
       # inside a machine built from a Dockerfile is the claim the image makes.
       - name: conformance inside the image
         run: docker run --rm slimebench:core bench/run.py conformance

@@ -2,7 +2,7 @@
 #
 # Two targets, because the toolchains are not the same size:
 #
-#   core  twelve of the fourteen languages, about 5 GiB. Built and exercised
+#   core  eleven of the fourteen languages, about 5 GiB. Built and exercised
 #         by CI on every push -- the conformance suite runs inside it, so this
 #         image is verified rather than merely written.
 #
