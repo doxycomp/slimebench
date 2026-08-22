@@ -218,7 +218,8 @@ for pre in tiny small medium large; do
   # combinations to a two-row comparison only adds rows to filter out
   # again.
   python3 bench/run.py bench --preset "$pre" --ticks 100 --warmup 20 \
-    --reps "$SB_REPS" --update deferred \n    --targets c,c-tiled,c-simd-agents,c-simd-agents-tiled \
+    --reps "$SB_REPS" --update deferred \
+    --targets c,c-tiled,c-simd-agents,c-simd-agents-tiled \
     --compilers gcc --profiles o3-native \
     --out "$OUT/G-agents.jsonl" --append || true
 done

@@ -182,15 +182,22 @@ void sb_emit_json(const sb_sim *s, const char *impl, const char *backend,
 
     /* One field describing what actually ran: reduction strategy for class P,
      * and the vector ISA the diffusion pass was compiled for. */
-    char variant[64];
-    snprintf(variant, sizeof variant, "%s%s%s%s",
+    char variant[80];
+    char tiled[24] = "";
+    if (s->cfg.agent_tile)
+        snprintf(tiled, sizeof tiled, "+tile%u", s->cfg.agent_tile);
+    snprintf(variant, sizeof variant, "%s%s%s%s%s",
              parallel ? (s->cfg.reduce == SB_REDUCE_BINNED ? "binned" : "private")
                       : "scalar",
              s->cfg.use_asm ? "+" : (s->cfg.simd ? "+simd-" : ""),
              s->cfg.use_asm ? sb_asm_name() : (s->cfg.simd ? sb_simd_name() : ""),
              /* Named separately from the stencil: they are two kernels
               * answering two questions, and a row has to say which it used. */
-             s->cfg.simd_agents ? "+simd-agents" : "");
+             s->cfg.simd_agents ? "+simd-agents" : "",
+             /* Spatial ordering changes which agent sits where, not what any
+              * of them computes -- but it changes the number in the row, so
+              * the row says so, with the interval it used. */
+             tiled);
     double median = 0.0, p99 = 0.0, mean = 0.0;
     if (n_ticks > 0) {
         double *sorted = (double *)malloc(n_ticks * sizeof(double));
