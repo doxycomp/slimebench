@@ -460,6 +460,8 @@ def bench_one(t: Target, cc: str, profile: str, a: argparse.Namespace) -> dict:
 
     ms = [p["ms_total"] for p in reps]
     per_tick = [p["ms_per_tick_median"] for p in reps]
+    agents_ms = [p["ms_agents"] for p in reps]
+    diffuse_ms = [p["ms_diffuse"] for p in reps]
     spread = _spread(ms)
     best = min(reps, key=lambda p: p["ms_total"])
     hashes = {(p["grid_hash"], p["agent_hash"]) for p in reps}
@@ -483,7 +485,17 @@ def bench_one(t: Target, cc: str, profile: str, a: argparse.Namespace) -> dict:
         "ms_total_reps": [round(v, 4) for v in ms],
         "ms_per_tick_spread": round(_spread(per_tick), 4),
         "ms_per_tick_reps": [round(v, 6) for v in per_tick],
-        "ms_agents": best["ms_agents"], "ms_diffuse": best["ms_diffuse"],
+        # Minimum across repetitions and their own spread, like every other
+        # timing here. These came from `best` -- whichever repetition happened
+        # to win on ms_total -- which is a different rule, and left the class V
+        # table ranking on ms_diffuse with no way to say how firm the ranking
+        # was. 57.3 against 59.4 ms means nothing without it.
+        "ms_agents": min(agents_ms),
+        "ms_agents_spread": round(_spread(agents_ms), 4),
+        "ms_agents_reps": [round(v, 4) for v in agents_ms],
+        "ms_diffuse": min(diffuse_ms),
+        "ms_diffuse_spread": round(_spread(diffuse_ms), 4),
+        "ms_diffuse_reps": [round(v, 4) for v in diffuse_ms],
         # Minimum across repetitions, like every other time here; taking
         # it from whichever rep won on ms_total would mix two rules.
         "ms_per_tick_median": min(per_tick),

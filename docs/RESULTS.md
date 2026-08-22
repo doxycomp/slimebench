@@ -238,6 +238,7 @@ Conformance tier A only: a fast-math profile computes different numbers, so
 letting one win a row would compare two programs. The tier-C profiles are in
 §3.
 
+<!-- sb:table s-serial -->
 | # | Language | Profile | Tier | ms/tick | rel. | spread | RSS MiB |
 |---:|---|---:|:-:|---:|---:|---:|---:|
 | 1 | C (clang) | o3-native-lto | A | 0.196 | 1.00× | 0.5% | 18 |
@@ -261,6 +262,7 @@ letting one win a row would compare two programs. The tier-C profiles are in
 | 19 | Python (pure) | default | B | 38.845 | 198.52× | 3.1% | 18 |
 | 20 | Python (pure-strict) | default | A | 85.198 | 435.41× | 0.3% | 18 |
 | 21 | Perl (strict-f32) | default | A | 120.938 | 618.06× | 0.7% | 22 |
+<!-- /sb:table -->
 
 **Every tier-A run in this mode: `0x89CFFAAC`.**
 
@@ -273,6 +275,7 @@ the cold measurement lives, on purpose.
 
 Here numpy and the idiomatic Haskell version can compete as well.
 
+<!-- sb:table s-deferred -->
 | # | Language | Profile | Tier | ms/tick | rel. | spread | RSS MiB |
 |---:|---|---:|:-:|---:|---:|---:|---:|
 | 1 | C (clang) | o3-native | A | 0.191 | 1.00× | 0.3% | 18 |
@@ -298,6 +301,7 @@ Here numpy and the idiomatic Haskell version can compete as well.
 | 21 | Perl (plain) | default | B | 42.336 | 221.20× | 0.4% | 30 |
 | 22 | Python (pure-strict) | default | A | 88.085 | 460.23× | 1.5% | 18 |
 | 23 | Perl (strict-f32) | default | A | 129.254 | 675.33× | 0.9% | 24 |
+<!-- /sb:table -->
 
 **Every tier-A run in this mode: `0x1DFDF34B`.**
 
@@ -590,6 +594,7 @@ toolchains, each with its own profile axis.
 
 ![Compiler matrix](charts/compilers.svg)
 
+<!-- sb:table compilers -->
 | Language | Compiler | Profile | Tier | ms | rel. | spread | Binary KiB |
 |---|---|---:|:-:|---:|---:|---:|---:|
 | C | clang | o3-native | A | 1 117 | 1.00× | 1.6% | 54 |
@@ -644,6 +649,7 @@ toolchains, each with its own profile axis.
 | OCaml | ocamlopt | default | A | 9 824 | 8.80× | 0.8% | 1 182 |
 | OCaml | ocamlopt | unsafe | A | 9 827 | 8.80× | 1.8% | 1 178 |
 | Java | javac | int | A | 26 518 | 23.74× | 0.3% | — |
+<!-- /sb:table -->
 
 **Every tier-A run agrees.** The four fast-math builds diverge, and they
 diverge *differently per compiler* — which is exactly why fast-math is a
@@ -804,6 +810,7 @@ even in principle.
 
 ### `binned` — bit-identical to the serial run
 
+<!-- sb:table p-binned -->
 | Language | T=1 | T=2 | T=4 | T=8 | T=16 | T=32 | Speedup |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | TypeScript | 11 156 | 3 968 | 2 257 | 1 544 | 1 227 | 1 336 | 9.1× |
@@ -816,6 +823,7 @@ even in principle.
 | C# | 6 371 | 2 591 | 1 659 | 1 217 | 1 196 | 1 886 | 5.3× |
 | Java | 5 306 | 2 146 | 1 365 | 1 070 | 1 076 | 1 391 | 5.0× |
 | Python | 8 013 | 5 887 | 3 185 | 2 212 | 1 830 | 2 206 | 4.4× |
+<!-- /sb:table -->
 
 Two languages are missing from that table because neither implements
 `binned`: Fortran reduces with an atomic and Perl by replication across
@@ -898,9 +906,11 @@ implementations, which is what the phase breakdown below shows directly.
 no scatter, no explicit barrier — the reduction is a locked add and OpenMP
 closes each parallel region itself.
 
+<!-- sb:table p-atomic -->
 | Language | T=1 | T=2 | T=4 | T=8 | T=16 | T=32 | Speedup |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | Fortran | 6 239 | 2 966 | 1 453 | 922 | 739 | 1 034 | 8.4× |
+<!-- /sb:table -->
 
 **And it is tier A for every thread count**, `0xB4AC535B / 0x6A2394F4` from
 T=1 to T=32. That is not a property of the atomic; it is a property of the
@@ -923,6 +933,7 @@ under `/usr/bin/time`; see §14.
 
 ### `private` — reproducible per thread count only
 
+<!-- sb:table p-private -->
 | Language | T=1 | T=2 | T=4 | T=8 | T=16 | T=32 | Speedup |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | Swift | 5 963 | 1 854 | 1 185 | 1 152 | 2 360 | 5 807 | 5.2× |
@@ -935,6 +946,7 @@ under `/usr/bin/time`; see §14.
 | C | 4 227 | 2 437 | 1 552 | 1 244 | 2 562 | 5 924 | 3.4× |
 | Python | 8 013 | 4 991 | 2 876 | 2 359 | 2 373 | 3 272 | 3.4× |
 | C++ | 4 149 | 2 449 | 1 516 | 1 222 | 2 543 | 5 894 | 3.4× |
+<!-- /sb:table -->
 
 **At 32 threads `private` drops below the serial runtime** — in C to 7105 ms
 against 5682. The reduction reads `T` complete grids: at `medium` with 32
@@ -1056,9 +1068,11 @@ without the `binned` sort. The price is that the deposit and merge passes run N
 times instead of once, and that is what caps the speedup: only the agent
 pass is parallel.
 
+<!-- sb:table p-replicated -->
 | Language | T=1 | T=2 | T=4 | T=8 | T=16 | T=32 | Speedup |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | Perl | 4 198 | 2 422 | 1 739 | 1 530 | 1 780 | 2 696 | 2.7× |
+<!-- /sb:table -->
 
 
 ### The bottleneck is the barriers
@@ -1267,21 +1281,25 @@ reduction, the same machine. Exactly two things vary — which interpreter runs
 **`binned`** — milliseconds, with the speedup against the same interpreter at
 one thread in brackets:
 
+<!-- sb:table gil-binned -->
 |  | 3.12 threads | 3.12 processes | 3.14t threads | 3.14t processes |
 |---|---:|---:|---:|---:|
 | T=2 | 1 526 (1.30×) | 1 311 (1.52×) | 1 259 (1.48×) | 1 217 (1.54×) |
 | T=4 | 3 130 (0.64×) | 658 (3.03×) | 609 (3.07×) | 678 (2.76×) |
 | T=8 | 7 073 (0.28×) | 620 (3.21×) | 527 (3.54×) | 645 (2.90×) |
 | T=16 | 14 550 (0.14×) | 833 (2.39×) | 671 (2.78×) | 824 (2.27×) |
+<!-- /sb:table -->
 
 **`private`**, same units:
 
+<!-- sb:table gil-private -->
 |  | 3.12 threads | 3.12 processes | 3.14t threads | 3.14t processes |
 |---|---:|---:|---:|---:|
 | T=2 | 1 287 (1.55×) | 1 052 (1.89×) | 1 012 (1.85×) | 1 005 (1.86×) |
 | T=4 | 2 660 (0.75×) | 485 (4.10×) | 498 (3.75×) | 505 (3.70×) |
 | T=8 | 6 225 (0.32×) | 448 (4.45×) | 438 (4.27×) | 465 (4.01×) |
 | T=16 | 13 013 (0.15×) | 528 (3.77×) | 462 (4.04×) | 531 (3.52×) |
+<!-- /sb:table -->
 
 **All 34 runs produce the same result:** grid `0x65DF83A7`, agents
 `0xE02D7B6A` — across two interpreters, two backends, four thread counts and
@@ -1349,20 +1367,22 @@ set in the source, the width resolved at run time. 1024², 300 ticks after 100
 of warm-up. The diffusion column is the one to read — the agent pass is
 identical in all of them and dilutes the difference.
 
-| Target | Vector | diffuse ms | vs best |
-|---|---:|---:|---:|
-| C++, `-O3 -march=native` | AVX-512 intrinsics | 57.3 | 1.00× |
-| C, `-O3 -march=native` | AVX-512 intrinsics | 59.4 | 1.04× |
-| Rust, unchecked | AVX-512 intrinsics | 64.1 | 1.12× |
-| Rust, safe | AVX-512 intrinsics | 65.4 | 1.14× |
-| C, `-O3 -mavx2` | AVX2 intrinsics | 67.8 | 1.18× |
-| C#, Native AOT + `IlcInstructionSet=native` | `Vector512<float>` | 68.1 | 1.19× |
-| C++, `-O3 -mavx2` | AVX2 intrinsics | 69.2 | 1.21× |
-| C#, JIT | `Vector512<float>` | 69.6 | 1.21× |
-| Java, C2 only | Vector API, 512-bit | 76.3 | 1.33× |
-| Java, tiered | Vector API, 512-bit | 78.2 | 1.36× |
-| C#, `--simd-portable` | `Vector<float>`, 128-bit | 122.4 | 2.14× |
-| C#, Native AOT, default | `Vector512` unavailable, 128-bit | 122.7 | 2.14× |
+<!-- sb:table simd -->
+| Target | Vector | diffuse ms | spread | vs best |
+|---|---:|---:|---:|---:|
+| C++, `-O3 -march=native` | AVX-512 intrinsics | 57.3 | — | 1.00× |
+| C, `-O3 -march=native` | AVX-512 intrinsics | 59.4 | — | 1.04× |
+| Rust, unchecked | AVX-512 intrinsics | 64.1 | — | 1.12× |
+| Rust, safe | AVX-512 intrinsics | 65.4 | — | 1.14× |
+| C, `-O3 -mavx2` | AVX2 intrinsics | 67.8 | — | 1.18× |
+| C#, Native AOT + `IlcInstructionSet=native` | `Vector512<float>` | 68.1 | — | 1.19× |
+| C++, `-O3 -mavx2` | AVX2 intrinsics | 69.2 | — | 1.21× |
+| C#, JIT | `Vector512<float>` | 69.6 | — | 1.21× |
+| Java, C2 only | Vector API, 512-bit | 76.3 | — | 1.33× |
+| Java, tiered | Vector API, 512-bit | 78.2 | — | 1.36× |
+| C#, `--simd-portable` | `Vector<float>`, 128-bit | 122.4 | — | 2.14× |
+| C#, Native AOT, default | `Vector512` unavailable, 128-bit | 122.7 | — | 2.14× |
+<!-- /sb:table -->
 
 **All sixteen runs, across those twelve configurations, produce the same grid
 hash `0xEEA4EAB3`** — five languages, three ways of reaching the vector unit,
@@ -1553,6 +1573,7 @@ called `unsafe`. `std::simd` would be more portable but is still nightly-only.
 Three hosts: CUDA, a GLSL 4.3 compute shader driven from C, and the same shader
 driven from Python. All `deferred` only, 100 ticks.
 
+<!-- sb:table gpu -->
 | Host | tiny | small | medium | large | huge |
 |---|---:|---:|---:|---:|---:|
 | cuda | 8 | 16 | 47 | 202 | 1 133 |
@@ -1561,6 +1582,7 @@ driven from Python. All `deferred` only, 100 ticks.
 | gl43 C MCUPS | 90 | 151 | 166 | 170 | 158 |
 | gl43 Python | 241 | 693 | 2 545 | 9 912 | 42 500 |
 | gl43 Python MCUPS | 109 | 151 | 165 | 169 | 158 |
+<!-- /sb:table -->
 
 MCUPS is million cell updates per second — grid cells, not agents, so the
 figure is comparable across presets.
@@ -1644,6 +1666,7 @@ grid → texture → screen is measured). Milliseconds per frame, median.
 
 ![Rendering](charts/render.svg)
 
+<!-- sb:table render -->
 | Language | Binding | SDL2 llvmpipe | SDL2 RTX 5080 | raylib llvmpipe | raylib RTX 5080 |
 |---|---:|---:|---:|---:|---:|
 | C | direct | 2.940 | 4.271 | 2.112 | 1.932 |
@@ -1652,6 +1675,7 @@ grid → texture → screen is measured). Milliseconds per frame, median.
 | Rust | `sdl2` / `raylib` crate | 3.025 | 4.424 | 2.093 | 1.946 |
 | Python | pygame / cffi | 5.069 | 4.965 | 4.886 | 4.607 |
 | Perl | FFI::Platypus | 116.125 | 117.595 | 77.527 | 77.265 |
+<!-- /sb:table -->
 
 The six SDL2 and raylib frontends in C, C++ and Rust now carry a HUD; under
 `--json` it is off, and its drawing time is subtracted from the frame in any
@@ -1739,6 +1763,7 @@ one workload where the managed part is free.
 
 
 
+<!-- sb:table footprint -->
 | Language | Binary KiB (stripped) | RSS MiB |
 |---|---:|---:|
 | TypeScript | — | 80 |
@@ -1763,6 +1788,7 @@ one workload where the managed part is free.
 | Go (go) | 1 564 | 18 |
 | Haskell | 2 779 | 29 |
 | Lean (lake) | 2 851 | 18 |
+<!-- /sb:table -->
 
 The spread across the compiled languages is **a factor of 56**, from 50 KiB in
 C to 2779 in Haskell — and all of it is runtime system, not generated code.

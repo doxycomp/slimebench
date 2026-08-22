@@ -439,9 +439,10 @@ def sec_simd(d: pathlib.Path) -> str:
     """Class V, ranked on the diffusion pass.
 
     The agent pass is identical in every one of these builds and dilutes the
-    difference, so the ranking column is ms_diffuse -- which is also why this
-    table quotes no spread: the run records repetitions of the whole tick, not
-    of one phase inside it.
+    difference, so the ranking column is ms_diffuse -- and the spread beside it
+    is ms_diffuse's own, across the same repetitions. It used to be absent,
+    because the phase timings were taken from whichever repetition won on
+    ms_total rather than measured across all of them.
     """
     rows = [r for r in load(d, "G-simd.jsonl") if r.get("ms_diffuse")]
     if not rows:
@@ -452,19 +453,116 @@ def sec_simd(d: pathlib.Path) -> str:
         if k not in best or r["ms_diffuse"] < best[k]["ms_diffuse"]:
             best[k] = r
     ranked = sorted(best.items(), key=lambda kv: kv[1]["ms_diffuse"])
+    ranked_rows = [r for _, r in ranked]
     base = ranked[0][1]["ms_diffuse"]
     body = []
     for k, r in ranked:
         label, vec = VLABEL.get(k, (f"{k[0]} {k[1]}", r.get("variant") or "—"))
         body.append([label, vec, f"{r['ms_diffuse']:.1f}",
+                     spread_cell(r, "ms_diffuse_spread"),
                      f"{r['ms_diffuse'] / base:.2f}×"])
     one = {r["grid_hash"] for r in rows}
     note = (f"\nAll {len(rows)} runs across {len(best)} configurations, one grid "
             f"hash: `{one.pop()}`\n" if len(one) == 1 else "")
     w, t = rows[0]["width"], rows[0]["ticks"]
     return (f"### §6c class V, {w}×{w}, {t} ticks, diffusion pass only\n"
-            + table(["Target", "Vector", "diffuse ms", "vs best"], body)
+            + table(["Target", "Vector", "diffuse ms", "spread", "vs best"],
+                    body)
+            + spread_note(ranked_rows, "ms_diffuse_spread")
             + note + "\n")
+
+
+# ---------------------------------------------------------------------------
+# Managed tables
+#
+# Half of docs/RESULTS.md used to be generated and half typed in by hand, and
+# the file said all of it was generated. The hand-kept half drifted every time
+# a series was replaced -- silently, because nothing compared the document to
+# the data.
+#
+# So each generated table is claimed by an id, the document marks where it
+# goes, and `--check` fails when the two disagree. Adding a generator means
+# adding one line here and one marker pair in the document; nothing else has
+# to remember.
+#
+# The ids per section are positional: a section's tables in the order the
+# generator emits them.
+MANAGED: list[tuple[str, list[str]]] = [
+    ("sec_crosslang", ["s-serial", "s-deferred"]),
+    ("sec_compilers", ["compilers"]),
+    ("sec_parallel", ["p-binned", "p-private", "p-atomic", "p-replicated"]),
+    ("sec_gil", ["gil-binned", "gil-private"]),
+    ("sec_simd", ["simd"]),
+    ("sec_gpu", ["gpu"]),
+    ("sec_render", ["render"]),
+    ("sec_footprint", ["footprint"]),
+]
+
+OPEN = "<!-- sb:table {} -->"
+CLOSE = "<!-- /sb:table -->"
+
+
+def split_tables(text: str) -> list[str]:
+    """Every markdown table in a block of generated output, in order."""
+    lines = text.split("\n")
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        if lines[i].startswith("|"):
+            j = i
+            while j < len(lines) and lines[j].startswith("|"):
+                j += 1
+            out.append("\n".join(lines[i:j]))
+            i = j
+        else:
+            i += 1
+    return out
+
+
+def managed_tables(d: pathlib.Path) -> dict[str, str]:
+    found: dict[str, str] = {}
+    for fname, ids in MANAGED:
+        tables = split_tables(globals()[fname](d))
+        for n, tid in enumerate(ids):
+            if n < len(tables):
+                found[tid] = tables[n]
+    return found
+
+
+def apply_to_doc(doc: pathlib.Path, d: pathlib.Path,
+                 write: bool) -> tuple[int, list[str]]:
+    """Replace or verify every marked table. Returns (changed, problems)."""
+    text = doc.read_text(encoding="utf-8")
+    tables = managed_tables(d)
+    problems: list[str] = []
+    changed = 0
+    for tid, new in sorted(tables.items()):
+        start = OPEN.format(tid)
+        i = text.find(start)
+        if i < 0:
+            problems.append(f"{tid}: no marker in {doc}")
+            continue
+        j = text.find(CLOSE, i)
+        if j < 0:
+            problems.append(f"{tid}: marker never closed")
+            continue
+        cur = text[i + len(start):j].strip("\n")
+        if cur == new:
+            continue
+        changed += 1
+        if write:
+            text = text[:i + len(start)] + "\n" + new + "\n" + text[j:]
+        else:
+            problems.append(f"{tid}: table in {doc} differs from the series")
+    # A marker with no generator behind it is the same failure in reverse.
+    for tid in [m.split()[2] for m in
+                [text[k:text.find("-->", k) + 3]
+                 for k in range(len(text)) if text.startswith("<!-- sb:table ", k)]]:
+        if tid not in tables:
+            problems.append(f"{tid}: marked in {doc} but no generator claims it")
+    if write and changed:
+        doc.write_text(text, encoding="utf-8", newline="\n")
+    return changed, problems
 
 
 def main() -> int:
@@ -475,10 +573,35 @@ def main() -> int:
     else:
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
-    if len(sys.argv) != 2:
+    argv = sys.argv[1:]
+    mode = ""
+    if argv and argv[0] in ("--write", "--check"):
+        mode, argv = argv[0], argv[1:]
+    if mode and len(argv) != 2:
+        print(f"usage: tables.py {mode} docs/RESULTS.md results/run-...")
+        return 2
+    if not mode and len(argv) != 1:
         print(__doc__.strip())
         return 2
-    d = pathlib.Path(sys.argv[1])
+    if mode:
+        doc = pathlib.Path(argv[0])
+        d = pathlib.Path(argv[1])
+        if not d.is_dir():
+            print(f"error: {d} is not a directory", file=sys.stderr)
+            return 1
+        changed, problems = apply_to_doc(doc, d, write=(mode == "--write"))
+        for m in problems:
+            print(f"  {m}")
+        if mode == "--write":
+            print(f"{changed} table(s) updated in {doc}")
+            return 1 if problems else 0
+        if changed or problems:
+            print(f"{changed} table(s) in {doc} do not match {d}.")
+            print("run: bench/tables.py --write docs/RESULTS.md " + str(d))
+            return 1
+        print(f"{doc}: every managed table matches {d}")
+        return 0
+    d = pathlib.Path(argv[0])
     if not d.is_dir():
         print(f"error: {d} is not a directory", file=sys.stderr)
         return 1
