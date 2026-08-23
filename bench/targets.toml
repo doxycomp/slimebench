@@ -106,7 +106,11 @@ lang     = "Go"
 backend  = "scalar"
 class    = "V"
 dir      = "impl/go"
-build    = "./build.sh {profile}"
+# `bash build.sh`, not `./build.sh`: impl/go/build.sh is mode 644 in git, and
+# a container copies that faithfully where WSL on a Windows filesystem reports
+# everything as executable. The `go` target has said `bash` for the same
+# reason since it was written.
+build    = "bash build.sh {profile}"
 binary   = "build/{profile}/slimebench"
 run      = ["{binary}"]
 compilers = ["go"]
