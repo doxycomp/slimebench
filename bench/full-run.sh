@@ -424,10 +424,16 @@ phase "class G, every preset"
 : > "$OUT/H-gpu.jsonl"
 gpu() { # label cmd...
   local label=$1; shift
+  # argv[0] before the loop: a host that is not built is one missing row, not
+  # five, and it is worth saying once rather than five times or not at all.
+  if [ ! -x "$1" ] && ! command -v "$1" >/dev/null 2>&1; then
+    fail "class G  $label: $1 not built"
+    return
+  fi
   for p in tiny small medium large huge; do
     local j
     j=$(timeout 3600 "$@" --preset "$p" --ticks 100 --update deferred --json 2>/dev/null \
-        | grep -m1 '^{') || continue
+        | grep -m1 '^{') || { fail "class G  $label/$p"; continue; }
     [ -z "$j" ] && continue
     echo "$j" | LBL="$label" python3 -c "
 import sys, json, os
