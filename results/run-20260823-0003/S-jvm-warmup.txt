@@ -1,0 +1,29 @@
+# host: Linux 6.18.33.2-microsoft-standard-WSL2  cores: 32
+# java: openjdk version "21.0.11" 2026-04-21
+
+=== A. per-tick milliseconds from a cold JVM (256x256/16384, serial, no warmup)
+ticks              tiered    c2-only
+1-5                 3.959      4.331
+6-10                0.583      1.126
+11-25               0.492      0.395
+26-50               0.465      0.286
+51-100              0.288      0.281
+101-200             0.296      0.297
+201-400             0.299      0.281
+first tick          7.396      7.135
+best tick           0.268      0.260
+first / best        27.6x      27.5x
+
+=== B. two interpreters and three compiled paths (same size, warmup 50)
+target                       grid              ms/tick   spread
+c gcc -O3 -march=native      0x89CFFAAC         0.2766     2.4%
+java, C2 only                0x89CFFAAC         0.2838     1.7%
+java, tiered (default)       0x89CFFAAC         0.2833     5.5%
+go, -gcflags=-B              0x89CFFAAC         0.3021     2.3%
+numba                        0x89CFFAAC         0.2730     1.8%
+java, -Xint                  0x89CFFAAC         6.0936     1.7%
+python pure --strict-f32     0x89CFFAAC        95.9554        —
+
+   Every tier-A row above carries the same grid hash. The two interpreter
+   rows are the point: identical algorithm, identical exactness, and the
+   only difference is whose interpreter is running it.

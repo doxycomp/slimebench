@@ -1,17 +1,24 @@
 # Results
 
 Every number in this document comes from **one** run,
-[`results/run-20260822-1720/`](../results/run-20260822-1720/), commit
-`816c59e`, produced by a single invocation of:
+[`results/run-20260823-0003/`](../results/run-20260823-0003/), commit
+`0f47570`, produced by a single invocation of:
 
 ```bash
 bench/full-run.sh --profile thorough
 ```
 
-Five repetitions of every timed row, 571 of them, 75 minutes, and the run
-reported no failures, no empty result files and no thread-count warnings.
-`bench/tables.py --check` holds all twenty-one generated tables in this
-file against that directory, and CI runs it.
+Five repetitions of every timed row, 596 of them, 95 minutes, no failures
+and no empty result files. `bench/tables.py --check` holds all twenty-two
+generated tables in this file against that directory, and CI runs it.
+
+The run raised one thread-count warning, on Go's single-thread class P row:
+160 % CPU where one thread should be about 100. Three clean re-runs of the
+same command gave 100 % each, so it was something else on the machine rather
+than a target using more of it than its label claims — the check reads
+whole-process CPU and cannot tell those apart from one sample. It takes a
+second measurement before warning now. The row itself is the minimum of five
+repetitions spread 4.3 %, and stands.
 
 The one-run rule is the answer to a mistake in earlier versions of this file:
 the numbers had accumulated over a dozen sessions on different days. Inside one
@@ -159,18 +166,18 @@ series are not comparable and this document does not mix them.
 
 | Class | best configuration | `medium`, 100 ticks | vs. 1 CPU core |
 |---|---|---:|---:|
-| S — one thread | C, gcc `-O3 -march=native` | 5808 ms | 1× |
-| P — 32 threads | **Go**, `binned` | 591 ms | **9.8×** |
-| G — GPU | CUDA, RTX 5080 | **51 ms** | **114×** |
-| V — one thread, vectorised and spatially ordered | C, `--simd-agents --agent-tile` | **1874 ms** | **3.1×** |
+| S — one thread | C, gcc `-O3 -march=native` | 5792 ms | 1× |
+| P — 32 threads | **Go**, `binned` | 613 ms | **9.5×** |
+| G — GPU | CUDA, RTX 5080 | **59 ms** | **98×** |
+| V — one thread, vectorised and spatially ordered | C, `--simd-agents --agent-tile` | **1884 ms** | **3.1×** |
 
 Two things that are not in that table and are the most interesting results of
 this series:
 
-**Go wins class P**, not C and not C++ — 591 ms against 693 and 691. §5
-measures why: at 32 threads its barrier costs a third less than C's (2.80
-against 4.36 ms per tick), and the gap is concentrated in the one phase where
-31 workers wait for one.
+**Go wins class P**, not C and not C++ — 613 ms against 696 and 703, and it
+is the only language here that reaches 10×. §5 measures why: at 32 threads its
+barrier costs 43 % less than C's (2.85 against 4.98 ms per tick), and the gap
+is concentrated in the one phase where 31 workers wait for one.
 
 **Hand-written AVX-512 assembly beats the intrinsics by about 11 %**, and not
 with better instructions but with a third of the loads; §8.
@@ -179,9 +186,10 @@ with better instructions but with a third of the loads; §8.
 tick.** Everything class V measured until this series — five languages, plus
 hand-written AVX-512 — addressed the diffusion stencil, which is 11 % of a
 tick at `medium`. Vectorising the agent pass and sorting the agents into
-spatial tiles is **8.2× on that phase and 3.8× on the whole program** at
-`large`, against the 1.31× the stencil returns. And on a grid that fits in
-cache the ordering is a net loss. §8.
+spatial tiles is **8.1× on that phase and 3.8× on the whole program** at
+`large`, against the 1.31× the stencil returns. The ordering alone is worth
+1.8× to 3.1× in four languages, and on a grid that fits in cache it is a net
+loss. §8.
 
 Seven results I would not have predicted:
 
@@ -192,8 +200,8 @@ Seven results I would not have predicted:
   five languages across four vector widths, hand-written assembly, CUDA at
   every preset, and all 34 cells of the CPython matrix. The spec had assumed the opposite for both SIMD and GPU.
 - **A language ranking from one class does not carry to the next.** Go sits at
-  rank 10 of 21 in class S and wins class P. TypeScript is 3.6× slower than C in
-  class S and scales better than Go itself (10.0× against 9.7×). Haskell is at 1.23× in
+  rank 10 of 22 in class S and wins class P. TypeScript is 3.6× slower than C in
+  class S and scales better than Go itself (10.7× against 10.0×). Haskell is at 1.23× in
   class S and matches C in class R. Java is the fastest garbage-collected
   runtime in class S and the slowest to scale in class P.
 - **A Python file is at 1.16×.** `slimebench_numba.py` is the pure-Python port
@@ -251,27 +259,27 @@ letting one win a row would compare two programs. The tier-C profiles are in
 <!-- sb:table s-serial -->
 | # | Language | Profile | Tier | ms/tick | rel. | spread | RSS MiB |
 |---:|---|---:|:-:|---:|---:|---:|---:|
-| 1 | C++ (clang++) | o3-native | A | 0.231 | 1.00× | 2.7% | 19 |
-| 2 | C (clang) | o3-native-lto | A | 0.233 | 1.01× | 52.1% ⚠ | 19 |
-| 3 | C (gcc) | o3 | A | 0.241 | 1.05× | 1.1% | 19 |
-| 4 | C++ (g++) | o3 | A | 0.242 | 1.05× | 1.4% | 19 |
-| 5 | Haskell | o2-llvm | A | 0.254 | 1.10× | 0.7% | 19 |
-| 6 | Swift (swift) | unchecked | A | 0.266 | 1.15× | 2.1% | 19 |
-| 7 | Python (numba) | default | A | 0.267 | 1.16× | 22.3% ⚠ | 166 |
-| 8 | Java (javac) | default | A | 0.273 | 1.18× | 3.2% | 49 |
-| 9 | Rust (unchecked) | release-native-unchecked | A | 0.283 | 1.23× | 2.5% | 19 |
-| 10 | Go (go) | nobounds | A | 0.297 | 1.29× | 0.8% | 19 |
-| 11 | C# (dotnet) | tier1 | A | 0.311 | 1.35× | 1.7% | 30 |
-| 12 | Rust (safe) | release-native | A | 0.316 | 1.37× | 1.8% | 19 |
-| 13 | Fortran (gfortran) | o2 | A | 0.323 | 1.40× | 3.3% | 19 |
-| 14 | OCaml (f64) | default | B | 0.363 | 1.57× | 1.6% | 19 |
-| 15 | TypeScript | default | A | 0.710 | 3.08× | 3.0% | 80 |
-| 16 | OCaml (strict-f32) | cstub | A | 0.997 | 4.32× | 1.6% | 19 |
-| 17 | Lean (lake) | o3-native | A | 1.579 | 6.85× | 3.6% | 19 |
-| 18 | Perl (plain) | default | B | 41.316 | 179.14× | 2.5% | 22 |
-| 19 | Python (pure) | default | B | 41.591 | 180.33× | 1.1% | 19 |
-| 20 | Python (pure-strict) | default | A | 92.462 | 400.90× | 1.8% | 19 |
-| 21 | Perl (strict-f32) | default | A | 132.741 | 575.55× | 2.3% | 22 |
+| 1 | C (clang) | o3-native-lto | A | 0.239 | 1.00× | 1.5% | 18 |
+| 2 | C (gcc) | o3 | A | 0.245 | 1.03× | 3.0% | 18 |
+| 3 | C++ (clang++) | o3-native | A | 0.247 | 1.03× | 1.3% | 18 |
+| 4 | Haskell | o2-llvm | A | 0.254 | 1.06× | 0.4% | 18 |
+| 5 | C++ (g++) | o3 | A | 0.254 | 1.06× | 7.0% ⚠ | 18 |
+| 6 | Python (numba) | default | A | 0.273 | 1.14× | 1.4% | 166 |
+| 7 | Swift (swift) | unchecked | A | 0.275 | 1.15× | 2.8% | 19 |
+| 8 | Java (javac) | default | A | 0.283 | 1.18× | 1.4% | 49 |
+| 9 | Rust (unchecked) | release-native-lto-unchecked | A | 0.286 | 1.20× | 1.9% | 18 |
+| 10 | Go (go) | nobounds | A | 0.296 | 1.24× | 1.2% | 18 |
+| 11 | C# (dotnet) | tier1 | A | 0.320 | 1.34× | 1.3% | 30 |
+| 12 | Rust (safe) | release | A | 0.323 | 1.35× | 2.0% | 18 |
+| 13 | Fortran (gfortran) | o3 | A | 0.331 | 1.38× | 0.9% | 18 |
+| 14 | OCaml (f64) | default | B | 0.370 | 1.55× | 0.9% | 18 |
+| 15 | TypeScript | default | A | 0.715 | 2.99× | 3.2% | 80 |
+| 16 | OCaml (strict-f32) | cstub-unsafe | A | 1.006 | 4.21× | 2.4% | 18 |
+| 17 | Lean (lake) | o3-native | A | 1.618 | 6.77× | 3.9% | 18 |
+| 18 | Perl (plain) | default | B | 41.554 | 173.75× | 4.4% | 22 |
+| 19 | Python (pure) | default | B | 42.834 | 179.10× | 3.2% | 18 |
+| 20 | Python (pure-strict) | default | A | 93.275 | 390.00× | 2.8% | 18 |
+| 21 | Perl (strict-f32) | default | A | 136.261 | 569.74× | 0.7% | 22 |
 <!-- /sb:table -->
 
 **Every tier-A run in this mode: `0x89CFFAAC`.**
@@ -288,29 +296,29 @@ Here numpy and the idiomatic Haskell version can compete as well.
 <!-- sb:table s-deferred -->
 | # | Language | Profile | Tier | ms/tick | rel. | spread | RSS MiB |
 |---:|---|---:|:-:|---:|---:|---:|---:|
-| 1 | C++ (clang++) | o3-native | A | 0.229 | 1.00× | 2.8% | 18 |
-| 2 | C (clang) | o3-native-lto | A | 0.230 | 1.00× | 3.3% | 18 |
-| 3 | C++ (g++) | o3 | A | 0.241 | 1.05× | 0.5% | 18 |
-| 4 | C (gcc) | o3 | A | 0.243 | 1.06× | 1.0% | 18 |
-| 5 | Swift (swift) | unchecked | A | 0.270 | 1.17× | 5.3% ⚠ | 19 |
-| 6 | Haskell | o2-llvm | A | 0.271 | 1.18× | 1.4% | 18 |
-| 7 | Python (numba) | default | A | 0.274 | 1.19× | 3.1% | 166 |
-| 8 | Java (javac) | c2 | A | 0.276 | 1.20× | 2.9% | 49 |
-| 9 | Rust (unchecked) | release-native-unchecked | A | 0.285 | 1.24× | 2.6% | 18 |
-| 10 | Go (go) | nobounds | A | 0.310 | 1.35× | 2.3% | 18 |
-| 11 | Rust (safe) | release | A | 0.316 | 1.38× | 2.5% | 18 |
-| 12 | Fortran (gfortran) | o3 | A | 0.329 | 1.43× | 53.5% ⚠ | 18 |
-| 13 | C# (dotnet) | tier1 | A | 0.334 | 1.45× | 2.7% | 30 |
-| 14 | OCaml (f64) | default | B | 0.413 | 1.80× | 2.9% | 18 |
-| 15 | Haskell (vector) | o2-llvm-vector | A | 0.525 | 2.29× | 3.8% | 23 |
-| 16 | TypeScript | default | A | 0.761 | 3.31× | 12.8% ⚠ | 81 |
-| 17 | OCaml (strict-f32) | cstub-unsafe | A | 1.058 | 4.61× | 1.2% | 18 |
-| 18 | Python (numpy) | default | A | 1.347 | 5.87× | 5.7% ⚠ | 45 |
-| 19 | Lean (lake) | default | A | 2.409 | 10.50× | 1.9% | 18 |
-| 20 | Python (pure) | default | B | 45.339 | 197.58× | 2.1% | 18 |
-| 21 | Perl (plain) | default | B | 49.181 | 214.32× | 1.8% | 29 |
-| 22 | Python (pure-strict) | default | A | 96.303 | 419.67× | 6.6% ⚠ | 18 |
-| 23 | Perl (strict-f32) | default | A | 141.506 | 616.65× | 2.2% | 24 |
+| 1 | C++ (clang++) | o3-native | A | 0.238 | 1.00× | 2.0% | 19 |
+| 2 | C (clang) | o3-native-lto | A | 0.238 | 1.00× | 1.0% | 19 |
+| 3 | C++ (g++) | o3 | A | 0.243 | 1.02× | 0.9% | 19 |
+| 4 | C (gcc) | o3 | A | 0.249 | 1.04× | 2.1% | 19 |
+| 5 | Haskell | o2-llvm | A | 0.271 | 1.14× | 1.1% | 19 |
+| 6 | Java (javac) | c2 | A | 0.274 | 1.15× | 2.2% | 49 |
+| 7 | Swift (swift) | unchecked | A | 0.275 | 1.16× | 2.6% | 19 |
+| 8 | Python (numba) | default | A | 0.278 | 1.17× | 7.5% ⚠ | 167 |
+| 9 | Rust (unchecked) | release-native-unchecked | A | 0.284 | 1.19× | 1.5% | 19 |
+| 10 | Go (go) | nobounds | A | 0.318 | 1.34× | 3.7% | 19 |
+| 11 | Rust (safe) | release | A | 0.328 | 1.38× | 1.7% | 19 |
+| 12 | C# (dotnet) | tier1 | A | 0.339 | 1.42× | 2.9% | 30 |
+| 13 | Fortran (gfortran) | o3 | A | 0.339 | 1.42× | 2.8% | 19 |
+| 14 | OCaml (f64) | default | B | 0.406 | 1.70× | 1.7% | 19 |
+| 15 | Haskell (vector) | o2-llvm-vector | A | 0.545 | 2.29× | 3.2% | 23 |
+| 16 | TypeScript | default | A | 0.861 | 3.61× | 5.8% ⚠ | 80 |
+| 17 | OCaml (strict-f32) | cstub-unsafe | A | 1.053 | 4.42× | 0.9% | 19 |
+| 18 | Python (numpy) | default | A | 1.386 | 5.82× | 2.6% | 39 |
+| 19 | Lean (lake) | default | A | 2.512 | 10.55× | 18.5% ⚠ | 19 |
+| 20 | Python (pure) | default | B | 46.159 | 193.81× | 7.0% ⚠ | 19 |
+| 21 | Perl (plain) | default | B | 49.602 | 208.27× | 3.8% | 30 |
+| 22 | Python (pure-strict) | default | A | 98.135 | 412.05× | 2.2% | 19 |
+| 23 | Perl (strict-f32) | default | A | 143.793 | 603.76× | 3.5% | 24 |
 <!-- /sb:table -->
 
 **Every tier-A run in this mode: `0x1DFDF34B`.**
@@ -607,56 +615,56 @@ toolchains, each with its own profile axis.
 <!-- sb:table compilers -->
 | Language | Compiler | Profile | Tier | ms | rel. | spread | Binary KiB |
 |---|---|---:|:-:|---:|---:|---:|---:|
-| C | gcc | o3 | A | 1 346 | 1.00× | 4.6% | 62 |
-| C++ | g++ | o3 | A | 1 377 | 1.02× | 1.9% | 70 |
-| C++ | clang++ | o3-native | A | 1 397 | 1.04× | 3.5% | 63 |
-| C++ | g++ | o3-native | A | 1 406 | 1.04× | 1.3% | 74 |
-| C | clang | o3-native-lto | A | 1 420 | 1.05× | 2.3% | 62 |
-| C++ | g++ | ofast-native | C | 1 426 | 1.06× | 5.3% ⚠ | 74 |
-| C | clang | o3-native | A | 1 433 | 1.06× | 1.6% | 58 |
-| C++ | clang++ | o3-native-lto | A | 1 483 | 1.10× | 1.9% | 63 |
-| C | gcc | o2 | A | 1 504 | 1.12× | 4.2% | 54 |
-| C | gcc | o3-native | A | 1 513 | 1.12× | 2.9% | 70 |
-| C | gcc | ofast-native | C | 1 515 | 1.13× | 4.4% | 70 |
-| C++ | g++ | o2 | A | 1 542 | 1.15× | 3.7% | 62 |
-| Haskell | ghc | o2-llvm | A | 1 581 | 1.17× | 3.2% | 2 860 |
-| C++ | g++ | o3-native-lto | A | 1 629 | 1.21× | 3.9% | 66 |
-| C | gcc | o3-native-lto | A | 1 637 | 1.22× | 1.4% | 62 |
-| Go | go | nobounds | A | 1 661 | 1.23× | 2.1% | 1 564 |
-| Java | javac | c2 | A | 1 662 | 1.23× | 8.4% ⚠ | — |
-| Java | javac | default | A | 1 662 | 1.23× | 2.5% | — |
-| C++ | clang++ | o3 | A | 1 668 | 1.24× | 3.8% | 59 |
-| C++ | clang++ | o2 | A | 1 684 | 1.25× | 2.0% | 59 |
-| C | clang | o2 | A | 1 700 | 1.26× | 3.2% | 54 |
-| C | clang | o3 | A | 1 716 | 1.27× | 3.0% | 54 |
-| Swift | swift | unchecked | A | 1 724 | 1.28× | 6.5% ⚠ | 96 |
-| Go | go | default | A | 1 729 | 1.28× | 5.0% | 1 604 |
-| Rust | cargo | release-native-unchecked | A | 1 738 | 1.29× | 4.0% | 475 |
-| Rust | cargo | release-native-lto-unchecked | A | 1 754 | 1.30× | 2.0% | 442 |
-| Swift | swift | release | A | 1 783 | 1.32× | 1.9% | 100 |
-| C# | dotnet | tier1 | A | 1 818 | 1.35× | 2.8% | — |
-| Fortran | gfortran | ofast-native | C | 1 823 | 1.35× | 4.4% | 78 |
-| Fortran | gfortran | o3 | A | 1 831 | 1.36× | 3.2% | 78 |
-| C# | dotnet | aot-native | A | 1 845 | 1.37× | 1.6% | — |
-| Fortran | gfortran | o2 | A | 1 851 | 1.38× | 4.0% | 74 |
-| C# | dotnet | aot | A | 1 882 | 1.40× | 4.9% | — |
-| Rust | cargo | release | A | 1 882 | 1.40× | 3.4% | 471 |
-| Rust | cargo | release-unchecked | A | 1 882 | 1.40× | 3.7% | 468 |
-| C# | dotnet | jit | A | 1 883 | 1.40× | 2.2% | — |
-| Fortran | gfortran | o3-native | A | 1 916 | 1.42× | 6.1% ⚠ | 78 |
-| C# | dotnet | r2r | A | 1 932 | 1.44× | 2.5% | — |
-| Rust | cargo | release-native | A | 1 972 | 1.47× | 3.0% | 476 |
-| Haskell | ghc | o2 | A | 2 009 | 1.49× | 3.6% | 2 832 |
-| C++ | clang++ | ofast-native | C | 2 073 | 1.54× | 2.1% | 63 |
-| C | clang | ofast-native | C | 2 076 | 1.54× | 1.2% | 58 |
-| Haskell | ghc | o1 | A | 3 716 | 2.76× | 3.7% | 2 779 |
-| C | clang | o0 | A | 4 377 | 3.25× | 1.5% | 58 |
-| C++ | clang++ | o0 | A | 5 459 | 4.06× | 2.8% | 155 |
-| C | gcc | o0 | A | 5 529 | 4.11× | 1.5% | 130 |
-| C++ | g++ | o0 | A | 5 977 | 4.44× | 2.8% | 166 |
-| OCaml | ocamlopt | default | A | 9 457 | 7.03× | 27.5% ⚠ | 1 182 |
-| OCaml | ocamlopt | unsafe | A | 9 471 | 7.04× | 23.2% ⚠ | 1 178 |
-| Java | javac | int | A | 30 555 | 22.70× | 1.6% | — |
+| C | gcc | o3 | A | 1 338 | 1.00× | 10.5% ⚠ | 62 |
+| C++ | g++ | ofast-native | C | 1 408 | 1.05× | 2.3% | 78 |
+| C++ | g++ | o3 | A | 1 417 | 1.06× | 4.0% | 78 |
+| C++ | g++ | o3-native | A | 1 422 | 1.06× | 7.4% ⚠ | 78 |
+| C | clang | o3-native-lto | A | 1 440 | 1.08× | 4.3% | 62 |
+| C++ | clang++ | o3-native | A | 1 468 | 1.10× | 5.4% ⚠ | 67 |
+| C | clang | o3-native | A | 1 470 | 1.10× | 5.2% ⚠ | 58 |
+| C | gcc | o2 | A | 1 490 | 1.11× | 3.3% | 54 |
+| C++ | g++ | o3-native-lto | A | 1 510 | 1.13× | 3.5% | 70 |
+| C++ | clang++ | o3-native-lto | A | 1 516 | 1.13× | 16.2% ⚠ | 67 |
+| C++ | g++ | o2 | A | 1 551 | 1.16× | 9.4% ⚠ | 66 |
+| C | gcc | o3-native | A | 1 558 | 1.16× | 4.8% | 70 |
+| Haskell | ghc | o2-llvm | A | 1 565 | 1.17× | 1.6% | 2 860 |
+| C | gcc | ofast-native | C | 1 569 | 1.17× | 2.5% | 70 |
+| C | gcc | o3-native-lto | A | 1 666 | 1.25× | 7.7% ⚠ | 62 |
+| Go | go | nobounds | A | 1 685 | 1.26× | 6.3% ⚠ | 1 564 |
+| Java | javac | default | A | 1 693 | 1.27× | 4.9% | — |
+| Java | javac | c2 | A | 1 697 | 1.27× | 5.8% ⚠ | — |
+| C | clang | o2 | A | 1 703 | 1.27× | 3.7% | 54 |
+| Swift | swift | unchecked | A | 1 710 | 1.28× | 4.8% | 96 |
+| C++ | clang++ | o2 | A | 1 727 | 1.29× | 3.7% | 63 |
+| C++ | clang++ | o3 | A | 1 730 | 1.29× | 5.9% ⚠ | 63 |
+| Go | go | default | A | 1 744 | 1.30× | 15.0% ⚠ | 1 612 |
+| C | clang | o3 | A | 1 763 | 1.32× | 9.7% ⚠ | 54 |
+| Rust | cargo | release-native-lto-unchecked | A | 1 796 | 1.34× | 10.1% ⚠ | 448 |
+| Swift | swift | release | A | 1 798 | 1.34× | 21.2% ⚠ | 100 |
+| Fortran | gfortran | ofast-native | C | 1 811 | 1.35× | 7.3% ⚠ | 78 |
+| Fortran | gfortran | o3 | A | 1 848 | 1.38× | 3.5% | 78 |
+| Rust | cargo | release-native-unchecked | A | 1 851 | 1.38× | 2.8% | 481 |
+| Fortran | gfortran | o2 | A | 1 856 | 1.39× | 3.3% | 74 |
+| Fortran | gfortran | o3-native | A | 1 869 | 1.40× | 2.9% | 78 |
+| C# | dotnet | tier1 | A | 1 883 | 1.41× | 11.9% ⚠ | — |
+| C# | dotnet | jit | A | 1 889 | 1.41× | 2.9% | — |
+| C# | dotnet | aot-native | A | 1 894 | 1.42× | 3.6% | — |
+| C# | dotnet | aot | A | 1 928 | 1.44× | 5.0% ⚠ | — |
+| Rust | cargo | release-unchecked | A | 1 959 | 1.46× | 3.4% | 476 |
+| Rust | cargo | release | A | 1 998 | 1.49× | 4.2% | 478 |
+| C# | dotnet | r2r | A | 1 998 | 1.49× | 11.5% ⚠ | — |
+| Rust | cargo | release-native | A | 2 008 | 1.50× | 4.2% | 484 |
+| Haskell | ghc | o2 | A | 2 038 | 1.52× | 4.0% | 2 832 |
+| C++ | clang++ | ofast-native | C | 2 050 | 1.53× | 5.3% ⚠ | 67 |
+| C | clang | ofast-native | C | 2 128 | 1.59× | 1.8% | 58 |
+| Haskell | ghc | o1 | A | 3 741 | 2.80× | 3.7% | 2 779 |
+| C | clang | o0 | A | 4 402 | 3.29× | 3.9% | 58 |
+| C++ | clang++ | o0 | A | 5 009 | 3.74× | 3.9% | 159 |
+| C | gcc | o0 | A | 5 537 | 4.14× | 2.4% | 130 |
+| C++ | g++ | o0 | A | 6 120 | 4.57× | 4.0% | 170 |
+| OCaml | ocamlopt | default | A | 9 030 | 6.75× | 32.2% ⚠ | 1 182 |
+| OCaml | ocamlopt | unsafe | A | 9 086 | 6.79× | 33.0% ⚠ | 1 178 |
+| Java | javac | int | A | 30 962 | 23.14× | 2.3% | — |
 <!-- /sb:table -->
 
 **Every tier-A run agrees.** The four fast-math builds diverge, and they
@@ -821,16 +829,16 @@ even in principle.
 <!-- sb:table p-binned -->
 | Language | T=1 | T=2 | T=4 | T=8 | T=16 | T=32 | Speedup |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| TypeScript | 12 842 | 4 478 | 2 439 | 1 639 | 1 286 | 1 502 | 10.0× |
-| Go | 5 752 | 2 445 | 1 673 | 884 | 628 | 591 | 9.7× |
-| C | 5 808 | 2 738 | 1 399 | 1 062 | 772 | 693 | 8.4× |
-| Swift | 6 718 | 2 647 | 1 612 | 1 003 | 803 | 982 | 8.4× |
-| C++ | 5 764 | 2 698 | 1 473 | 1 023 | 747 | 691 | 8.3× |
-| Rust | 7 888 | 3 286 | 1 973 | 1 197 | 1 001 | 1 155 | 7.9× |
-| Haskell | 5 681 | 2 511 | 1 247 | 852 | 740 | 815 | 7.7× |
-| C# | 7 447 | 2 724 | 1 810 | 1 310 | 1 318 | 2 043 | 5.7× |
-| Java | 5 896 | 2 422 | 1 455 | 1 056 | 1 060 | 1 446 | 5.6× |
-| Python | 8 724 | 6 376 | 3 491 | 2 384 | 2 040 | 2 453 | 4.3× |
+| TypeScript | 14 408 | 4 800 | 2 585 | 1 710 | 1 341 | 1 559 | 10.7× |
+| Go | 6 137 | 2 496 | 1 746 | 923 | 661 | 613 | 10.0× |
+| Swift | 7 714 | 2 973 | 1 896 | 1 072 | 916 | 1 028 | 8.4× |
+| C | 5 792 | 2 726 | 1 409 | 1 125 | 798 | 696 | 8.3× |
+| C++ | 5 720 | 2 896 | 1 465 | 1 091 | 829 | 703 | 8.1× |
+| Haskell | 6 105 | 2 737 | 1 513 | 997 | 795 | 920 | 7.7× |
+| Rust | 7 659 | 3 181 | 1 979 | 1 225 | 1 013 | 1 220 | 7.6× |
+| C# | 8 732 | 3 500 | 1 984 | 1 373 | 1 409 | 2 123 | 6.4× |
+| Java | 6 148 | 2 581 | 1 543 | 1 137 | 1 105 | 1 468 | 5.6× |
+| Python | 9 127 | 6 798 | 3 687 | 2 485 | 2 137 | 2 650 | 4.3× |
 <!-- /sb:table -->
 
 Two languages are missing from that table because neither implements
@@ -917,7 +925,7 @@ closes each parallel region itself.
 <!-- sb:table p-atomic -->
 | Language | T=1 | T=2 | T=4 | T=8 | T=16 | T=32 | Speedup |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| Fortran | 7 089 | 3 282 | 1 645 | 1 037 | 809 | 997 | 8.8× |
+| Fortran | 8 152 | 3 741 | 1 818 | 1 151 | 838 | 1 200 | 9.7× |
 <!-- /sb:table -->
 
 **And it is tier A for every thread count**, `0xB4AC535B / 0x6A2394F4` from
@@ -944,16 +952,16 @@ under `/usr/bin/time`; see §14.
 <!-- sb:table p-private -->
 | Language | T=1 | T=2 | T=4 | T=8 | T=16 | T=32 | Speedup |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| Swift | 6 718 | 2 041 | 1 298 | 1 285 | 2 561 | 6 575 | 5.2× |
-| C# | 7 447 | 2 306 | 1 427 | 1 462 | 2 815 | 6 450 | 5.2× |
-| TypeScript | 12 842 | 7 233 | 4 120 | 2 687 | 3 209 | 6 664 | 4.8× |
-| Rust | 7 888 | 3 652 | 2 093 | 1 660 | 2 958 | 6 394 | 4.8× |
-| Haskell | 5 681 | 1 953 | 1 247 | 1 244 | 2 829 | 7 138 | 4.6× |
-| Go | 5 752 | 2 091 | 1 320 | 1 265 | 2 528 | 6 041 | 4.5× |
-| Java | 5 896 | 2 231 | 1 443 | 1 469 | 2 778 | 6 938 | 4.1× |
-| C++ | 5 764 | 3 094 | 1 848 | 1 527 | 2 938 | 7 329 | 3.8× |
-| C | 5 808 | 3 044 | 1 858 | 1 564 | 3 004 | 7 517 | 3.7× |
-| Python | 8 724 | 5 460 | 3 225 | 2 571 | 2 680 | 3 655 | 3.4× |
+| C# | 8 732 | 2 639 | 1 620 | 1 600 | 3 007 | 7 006 | 5.5× |
+| TypeScript | 14 408 | 7 636 | 4 316 | 2 763 | 3 324 | 7 377 | 5.2× |
+| Swift | 7 714 | 2 551 | 1 592 | 1 522 | 2 721 | 7 687 | 5.1× |
+| Go | 6 137 | 2 203 | 1 349 | 1 347 | 2 643 | 6 673 | 4.6× |
+| Rust | 7 659 | 3 960 | 2 061 | 1 689 | 3 050 | 7 194 | 4.5× |
+| Haskell | 6 105 | 2 423 | 1 547 | 1 377 | 3 071 | 7 605 | 4.4× |
+| Java | 6 148 | 2 323 | 1 474 | 1 460 | 2 983 | 7 524 | 4.2× |
+| C++ | 5 720 | 3 037 | 1 841 | 1 630 | 2 981 | 7 175 | 3.5× |
+| Python | 9 127 | 5 726 | 3 357 | 2 638 | 2 772 | 3 876 | 3.5× |
+| C | 5 792 | 3 077 | 1 937 | 1 730 | 3 106 | 7 765 | 3.3× |
 <!-- /sb:table -->
 
 **At 32 threads `private` drops below the serial runtime** — in C to 7105 ms
@@ -1079,7 +1087,7 @@ pass is parallel.
 <!-- sb:table p-replicated -->
 | Language | T=1 | T=2 | T=4 | T=8 | T=16 | T=32 | Speedup |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| Perl | 4 517 | 2 600 | 1 903 | 1 698 | 1 991 | 3 062 | 2.7× |
+| Perl | 4 942 | 2 837 | 2 013 | 1 719 | 2 136 | 3 243 | 2.9× |
 <!-- /sb:table -->
 
 
@@ -1091,17 +1099,17 @@ pass is parallel.
 <!-- sb:table barrier-phase -->
 | Phase | work | barrier | total |
 |---|---:|---:|---:|
-| agents | 2.160 | 1.397 | 3.557 |
-| prefix | **0.001** | 0.716 | 0.717 |
-| scatter | 0.067 | 0.697 | 0.764 |
-| deposit | 0.324 | 0.761 | 1.085 |
-| merge | 0.211 | 0.859 | 1.070 |
-| diffuse | 0.254 | — | 0.254 |
+| agents | 2.144 | 1.509 | 3.653 |
+| prefix | **0.001** | 0.754 | 0.755 |
+| scatter | 0.069 | 0.766 | 0.835 |
+| deposit | 0.353 | 0.890 | 1.243 |
+| merge | 0.238 | 0.899 | 1.137 |
+| diffuse | 0.286 | — | 0.286 |
 <!-- /sb:table -->
 
-**Barriers are 39 % of the runtime at T=16 and 59 % at T=32.** Past sixteen
+**Barriers are 38 % of the runtime at T=16 and 60 % at T=32.** Past sixteen
 threads C stops getting faster not because the work stops dividing — it keeps
-dividing, 5.50 ms per tick at T=16 against 3.04 at T=32 — but because the
+dividing, 6.61 ms per tick at T=16 against 3.36 at T=32 — but because the
 waiting grows faster than the work shrinks. The prefix sum, previously
 suspected of being a "serial O(T²) section", does 0.001 ms of measurable
 work.
@@ -1137,14 +1145,14 @@ Milliseconds per tick from a cold process, no warm-up, averaged over blocks:
 <!-- sb:table ramp -->
 | ticks | Java tiered | Java C2-only | C# jit | C# tier1 | **C# aot** |
 |---|---:|---:|---:|---:|---:|
-| 1-5 | 3.694 | 4.294 | 1.025 | 0.979 | 0.452 |
-| 6-10 | 0.658 | 1.084 | 0.448 | 0.387 | 0.385 |
-| 11-25 | 0.477 | 0.398 | 0.399 | 0.330 | 0.329 |
-| 26-50 | 0.466 | 0.287 | 0.372 | 0.308 | 0.315 |
-| 51-100 | 0.290 | 0.279 | 0.367 | 0.326 | 0.314 |
-| **first tick** | **6.505** | **6.902** | **3.084** | **3.141** | **0.537** |
-| best tick | 0.255 | 0.257 | 0.343 | 0.287 | 0.293 |
-| **first / best** | **25.5×** | **26.8×** | **9.0×** | **11.0×** | **1.8×** |
+| 1-5 | 3.959 | 4.331 | 1.174 | 1.006 | 0.478 |
+| 6-10 | 0.583 | 1.126 | 0.464 | 0.399 | 0.393 |
+| 11-25 | 0.492 | 0.395 | 0.413 | 0.344 | 0.347 |
+| 26-50 | 0.465 | 0.286 | 0.382 | 0.325 | 0.321 |
+| 51-100 | 0.288 | 0.281 | 0.385 | 0.323 | 0.325 |
+| **first tick** | **7.396** | **7.135** | **3.658** | **3.196** | **0.570** |
+| best tick | 0.268 | 0.260 | 0.359 | 0.300 | 0.303 |
+| **first / best** | **27.6×** | **27.5×** | **10.2×** | **10.6×** | **1.9×** |
 <!-- /sb:table -->
 
 **The JVM's first tick costs 25× its best one.** A benchmark of a hundred ticks
@@ -1215,9 +1223,9 @@ ticks after 100 of warm-up, best of five:
 <!-- sb:table branchy -->
 | configuration | agent pass, ms | spread | stencil, ms |
 |---|---:|---:|---:|
-| JIT, tier-1 | 774.94 | 4.7 % | 109.15 |
-| Native AOT, default | 789.53 | 5.1 % | 88.71 |
-| Native AOT, `IlcInstructionSet=native` | **765.55** | 2.8 % | 108.12 |
+| JIT, tier-1 | 805.93 | 3.1 % | 112.80 |
+| Native AOT, default | 803.10 | 3.5 % | 90.31 |
+| Native AOT, `IlcInstructionSet=native` | **789.74** | 1.4 % | 110.41 |
 <!-- /sb:table -->
 
 **The ahead-of-time build wins the branchy half.** The three differ by 2.7 %
@@ -1240,10 +1248,10 @@ the same reason.
 <!-- sb:table ship -->
 | Configuration | published | start-up |
 |---|---:|---:|
-| C# jit | 156K | 30.1 ms |
-| C# tier1 | 156K | 36.6 ms |
-| C# ReadyToRun | 80M | 22.3 ms |
-| **C# Native AOT** | **3.8M** | **4.2 ms** |
+| C# jit | 156K | 29.4 ms |
+| C# tier1 | 156K | 37.4 ms |
+| C# ReadyToRun | 80M | 22.7 ms |
+| **C# Native AOT** | **3.8M** | **4.4 ms** |
 <!-- /sb:table -->
 
 Start-up is five runs of `--ticks 0`, warm page cache; the first measurement of
@@ -1263,13 +1271,13 @@ no other runtime here has an interpreter you can pin it to.
 <!-- sb:table interpreters -->
 | Runtime | ms/tick | spread | vs C |
 |---|---:|---:|---:|
-| numba | 0.2690 | 3.3% | 0.95× |
-| java, C2 only | 0.2758 | 4.6% | 0.98× |
-| java, tiered (default) | 0.2792 | 2.8% | 0.99× |
-| c gcc -O3 -march=native | 0.2826 | 1.4% | 1.00× |
-| go, -gcflags=-B | 0.2979 | 3.8% | 1.05× |
-| **java, -Xint** | **6.0029** | 1.4% | **21×** |
-| **python pure --strict-f32** | **93.0417** | — | **329×** |
+| numba | 0.2730 | 1.8% | 0.99× |
+| c gcc -O3 -march=native | 0.2766 | 2.4% | 1.00× |
+| java, tiered (default) | 0.2833 | 5.5% | 1.02× |
+| java, C2 only | 0.2838 | 1.7% | 1.03× |
+| go, -gcflags=-B | 0.3021 | 2.3% | 1.09× |
+| **java, -Xint** | **6.0936** | 1.8% | **22×** |
+| **python pure --strict-f32** | **95.9554** | — | **347×** |
 <!-- /sb:table -->
 
 Same algorithm, same exactness, same grid hash on every row: `0x89CFFAAC`. The
@@ -1302,10 +1310,10 @@ one thread in brackets:
 <!-- sb:table gil-binned -->
 |  | 3.12 threads | 3.12 processes | 3.14t threads | 3.14t processes |
 |---|---:|---:|---:|---:|
-| T=2 | 1 599 (1.44×) | 1 496 (1.54×) | 1 434 (1.48×) | 1 387 (1.53×) |
-| T=4 | 3 523 (0.65×) | 753 (3.05×) | 675 (3.14×) | 773 (2.74×) |
-| T=8 | 7 894 (0.29×) | 712 (3.23×) | 582 (3.64×) | 726 (2.92×) |
-| T=16 | 16 439 (0.14×) | 907 (2.53×) | 776 (2.73×) | 917 (2.31×) |
+| T=2 | 1 807 (1.38×) | 1 619 (1.54×) | 1 454 (1.58×) | 1 440 (1.59×) |
+| T=4 | 3 604 (0.69×) | 818 (3.04×) | 697 (3.29×) | 791 (2.90×) |
+| T=8 | 7 978 (0.31×) | 744 (3.35×) | 617 (3.71×) | 735 (3.12×) |
+| T=16 | 16 777 (0.15×) | 947 (2.63×) | 782 (2.93×) | 947 (2.42×) |
 <!-- /sb:table -->
 
 **`private`**, same units:
@@ -1313,10 +1321,10 @@ one thread in brackets:
 <!-- sb:table gil-private -->
 |  | 3.12 threads | 3.12 processes | 3.14t threads | 3.14t processes |
 |---|---:|---:|---:|---:|
-| T=2 | 1 480 (1.55×) | 1 216 (1.89×) | 1 171 (1.81×) | 1 176 (1.80×) |
-| T=4 | 2 933 (0.78×) | 567 (4.05×) | 562 (3.77×) | 570 (3.72×) |
-| T=8 | 6 938 (0.33×) | 497 (4.62×) | 481 (4.41×) | 515 (4.11×) |
-| T=16 | 14 513 (0.16×) | 591 (3.89×) | 542 (3.91×) | 616 (3.44×) |
+| T=2 | 1 542 (1.61×) | 1 302 (1.91×) | 1 243 (1.84×) | 1 170 (1.96×) |
+| T=4 | 3 020 (0.82×) | 614 (4.06×) | 568 (4.04×) | 610 (3.76×) |
+| T=8 | 7 173 (0.35×) | 516 (4.82×) | 492 (4.66×) | 535 (4.29×) |
+| T=16 | 14 966 (0.17×) | 666 (3.74×) | 591 (3.88×) | 605 (3.79×) |
 <!-- /sb:table -->
 
 **All 34 runs produce the same result:** grid `0x65DF83A7`, agents
@@ -1388,18 +1396,18 @@ identical in all of them and dilutes the difference.
 <!-- sb:table simd -->
 | Target | Vector | diffuse ms | spread | vs best |
 |---|---:|---:|---:|---:|
-| C++, `-O3 -march=native` | AVX-512 intrinsics | 75.1 | 5.1% ⚠ | 1.00× |
-| C, `-O3 -march=native` | AVX-512 intrinsics | 79.2 | 7.3% ⚠ | 1.05× |
-| C++, `-O3 -mavx2` | AVX2 intrinsics | 85.8 | 4.0% | 1.14× |
-| C, `-O3 -mavx2` | AVX2 intrinsics | 88.0 | 4.4% | 1.17× |
-| Rust, safe | AVX-512 intrinsics | 92.1 | 6.3% ⚠ | 1.23× |
-| Rust, unchecked | AVX-512 intrinsics | 94.7 | 7.8% ⚠ | 1.26× |
-| C#, JIT | `Vector512<float>` | 97.0 | 10.8% ⚠ | 1.29× |
-| C#, Native AOT + `IlcInstructionSet=native` | `Vector512<float>` | 98.6 | 6.0% ⚠ | 1.31× |
-| Java, tiered | Vector API, 512-bit | 101.0 | 5.4% ⚠ | 1.34× |
-| Java, C2 only | Vector API, 512-bit | 104.8 | 10.8% ⚠ | 1.39× |
-| C#, `--simd-portable` | `Vector<float>`, 128-bit | 144.1 | 3.9% | 1.92× |
-| C#, Native AOT, default | `Vector512` unavailable, 128-bit | 146.1 | 1.3% | 1.94× |
+| C++, `-O3 -march=native` | AVX-512 intrinsics | 78.6 | 27.4% ⚠ | 1.00× |
+| C, `-O3 -march=native` | AVX-512 intrinsics | 78.7 | 13.1% ⚠ | 1.00× |
+| C, `-O3 -mavx2` | AVX2 intrinsics | 89.7 | 7.6% ⚠ | 1.14× |
+| C++, `-O3 -mavx2` | AVX2 intrinsics | 90.1 | 11.4% ⚠ | 1.15× |
+| C#, Native AOT + `IlcInstructionSet=native` | `Vector512<float>` | 95.7 | 9.4% ⚠ | 1.22× |
+| Rust, safe | AVX-512 intrinsics | 97.8 | 9.5% ⚠ | 1.24× |
+| C#, JIT | `Vector512<float>` | 98.1 | 13.9% ⚠ | 1.25× |
+| Rust, unchecked | AVX-512 intrinsics | 100.8 | 6.7% ⚠ | 1.28× |
+| Java, tiered | Vector API, 512-bit | 103.1 | 12.2% ⚠ | 1.31× |
+| Java, C2 only | Vector API, 512-bit | 105.8 | 14.5% ⚠ | 1.35× |
+| C#, Native AOT, default | `Vector512` unavailable, 128-bit | 146.7 | 3.3% | 1.87× |
+| C#, `--simd-portable` | `Vector<float>`, 128-bit | 150.5 | 1.8% | 1.91× |
 <!-- /sb:table -->
 
 **All sixteen runs, across those twelve configurations, produce the same grid
@@ -1531,15 +1539,15 @@ sensor gather land in a few cache lines rather than sixteen unrelated ones.
 <!-- sb:table agent-pass -->
 | preset | grid | scalar | + tiles | + simd | both | best |
 |---|---:|---:|---:|---:|---:|---:|
-| tiny | 1 MiB | 87.3 | 77.4 | 36.5 | **29.3** | 2.98× |
-| small | 4 MiB | 434.5 | 461.3 | 212.2 | **168.2** | 2.58× |
-| medium | 16 MiB | 4696.2 | 2203.9 | 1629.7 | **820.2** | 5.73× |
-| large | 64 MiB | 27213.4 | 9933.2 | 10282.3 | **3326.2** | 8.18× |
+| tiny | 1 MiB | 92.1 | 81.4 | 37.0 | **29.7** | 3.10× |
+| small | 4 MiB | 491.4 | 488.2 | 236.9 | **179.5** | 2.74× |
+| medium | 16 MiB | 4744.9 | 2238.0 | 1639.9 | **820.6** | 5.78× |
+| large | 64 MiB | 27655.5 | 10104.5 | 10523.9 | **3410.9** | 8.11× |
 <!-- /sb:table -->
 
 **Locality is worth more than the vector unit.** At `large` the ordering
-alone beats vectorising alone — 9933 ms against 10282 — and the two together
-are 8.2×, against the 1.31× the diffusion stencil returns on the whole
+alone beats vectorising alone — 10105 ms against 10524 — and the two together
+are 8.1×, against the 1.31× the diffusion stencil returns on the whole
 program.
 
 **The factor grows with the grid**, which is the signature of a memory-bound
@@ -1552,17 +1560,17 @@ Now the same runs, whole program:
 <!-- sb:table agent-total -->
 | preset | grid | scalar | + tiles | + simd | both | best |
 |---|---:|---:|---:|---:|---:|---:|
-| tiny | 1 MiB | 115.7 | 119.2 | **65.0** | 69.6 | 1.78× |
-| small | 4 MiB | 553.9 | 688.3 | **332.7** | 387.0 | 1.66× |
-| medium | 16 MiB | 5253.9 | 3216.8 | 2197.7 | **1874.4** | 2.80× |
-| large | 64 MiB | 29630.2 | 14457.7 | 12673.5 | **7773.0** | 3.81× |
+| tiny | 1 MiB | 121.4 | 125.7 | **65.4** | 70.4 | 1.86× |
+| small | 4 MiB | 618.3 | 722.9 | **358.3** | 408.2 | 1.73× |
+| medium | 16 MiB | 5303.4 | 3284.4 | 2206.6 | **1884.1** | 2.81× |
+| large | 64 MiB | 30106.7 | 14738.2 | 13014.4 | **7996.0** | 3.77× |
 <!-- /sb:table -->
 
 **On a grid that fits in cache the ordering is a net loss**, and at `small`
-it does not even pay for itself inside the phase it is meant to speed up:
-434.5 ms scalar against 461.3 ordered. Vectorising alone is the best whole-
-program configuration at both `tiny` and `small`; adding the sort makes it
-worse, 65.0 → 69.6 and 332.7 → 387.0.
+it barely pays for itself even inside the phase it is meant to speed up:
+491.4 ms scalar against 488.2 ordered, which is nothing. Vectorising alone is
+the best whole-program configuration at both `tiny` and `small`; adding the
+sort makes it worse, 65.4 → 70.4 and 358.3 → 408.2.
 
 The crossover sits between 4 and 16 MiB, which is roughly where the grid stops
 being something the cache can hold. That is why it is a flag with an argument
@@ -1577,6 +1585,12 @@ through staging buffers, C++ swaps `std::vector`s, Rust swaps `Vec`s, Go swaps
 slices the runtime owns.
 
 <!-- sb:table agent-langs -->
+| Language | agents | agents, ordered | phase | total | total, ordered | program |
+|---|---:|---:|---:|---:|---:|---:|
+| C | 4744.9 | 2238.0 | **2.12×** | 5303.4 | 3284.4 | 1.61× |
+| C++ | 4613.1 | 2583.7 | **1.79×** | 5152.8 | 3142.0 | 1.64× |
+| Rust | 7250.2 | 2659.4 | **2.73×** | 7968.1 | 3868.9 | 2.06× |
+| Go | 5789.3 | 1852.7 | **3.12×** | 6747.2 | 3334.3 | 2.02× |
 <!-- /sb:table -->
 
 **Go gains the most and ends up fastest**, which neither its class S rank nor
@@ -1712,12 +1726,12 @@ driven from Python. All `deferred` only, 100 ticks.
 <!-- sb:table gpu -->
 | Host | tiny | small | medium | large | huge |
 |---|---:|---:|---:|---:|---:|
-| cuda | 10 | 18 | 51 | 224 | 1 248 |
-| cuda MCUPS | 2 757 | 5 928 | 8 154 | 7 482 | 5 375 |
-| gl43 C | 299 | 773 | 2 819 | 11 028 | 47 111 |
-| gl43 C MCUPS | 88 | 136 | 149 | 152 | 142 |
-| gl43 Python | 274 | 776 | 2 859 | 11 187 | 47 219 |
-| gl43 Python MCUPS | 96 | 135 | 147 | 150 | 142 |
+| cuda | 11 | 21 | 59 | 247 | 1 409 |
+| cuda MCUPS | 2 361 | 5 032 | 7 083 | 6 781 | 4 763 |
+| gl43 C | 374 | 861 | 3 136 | 12 539 | 58 035 |
+| gl43 C MCUPS | 70 | 122 | 134 | 134 | 116 |
+| gl43 Python | 313 | 919 | 3 573 | 13 690 | 69 337 |
+| gl43 Python MCUPS | 84 | 114 | 117 | 123 | 97 |
 <!-- /sb:table -->
 
 MCUPS is million cell updates per second — grid cells, not agents, so the
@@ -1805,12 +1819,12 @@ grid → texture → screen is measured). Milliseconds per frame, median.
 <!-- sb:table render -->
 | Language | Binding | SDL2 llvmpipe | SDL2 RTX 5080 | raylib llvmpipe | raylib RTX 5080 |
 |---|---:|---:|---:|---:|---:|
-| C | direct | 3.246 | 4.928 | 2.355 | 2.169 |
-| C++ | direct | 3.292 | 4.926 | 2.210 | 2.187 |
-| Haskell | `sdl2` / `foreign import` | 3.003 | 4.396 | 2.196 | 2.060 |
-| Rust | `sdl2` / `raylib` crate | 3.310 | 5.025 | 2.273 | 2.249 |
-| Python | pygame / cffi | 6.360 | 6.310 | 6.009 | 5.153 |
-| Perl | FFI::Platypus | 125.872 | 127.674 | 84.556 | 84.150 |
+| C | direct | 3.452 | 5.659 | 2.591 | 2.471 |
+| C++ | direct | 3.481 | 5.697 | 2.681 | 2.548 |
+| Haskell | `sdl2` / `foreign import` | 3.468 | 5.609 | 2.784 | 2.516 |
+| Rust | `sdl2` / `raylib` crate | 3.715 | 6.023 | 2.720 | 2.603 |
+| Python | pygame / cffi | 7.155 | 6.437 | 6.239 | 5.549 |
+| Perl | FFI::Platypus | 131.671 | 135.486 | 87.560 | 89.621 |
 <!-- /sb:table -->
 
 The six SDL2 and raylib frontends in C, C++ and Rust now carry a HUD; under
@@ -1877,9 +1891,9 @@ warm-up:
 | runtime | collections | GC time | allocated over the whole run |
 |---|---:|---:|---:|
 | **Java** | **0** | 0 ms | — |
-| Go | 1 | 0.60 ms | 5.2 MiB, 305 mallocs |
+| Go | 1 | 0.68 ms | 5.2 MiB, 305 mallocs |
 | C# | 1 gen0 / 1 gen1 / 1 gen2 | — | 4.7 MiB |
-| Haskell | — | 0.000 s of 0.265 | 7.4 MiB |
+| Haskell | — | 0.001 s of 0.284 | 7.4 MiB |
 | OCaml | 7 minor, 2 major | — | 12.0 MiB of minor words |
 <!-- /sb:table -->
 
@@ -1907,25 +1921,25 @@ one workload where the managed part is free.
 | TypeScript | — | 80 |
 | Python (numba) | — | 166 |
 | Python (numba-fastmath) | — | 167 |
-| Python (pure) | — | 19 |
-| Python (pure-strict) | — | 19 |
+| Python (pure) | — | 18 |
+| Python (pure-strict) | — | 18 |
 | Perl (plain) | — | 22 |
 | Perl (strict-f32) | — | 22 |
 | C# (dotnet) | — | 41 |
 | Java (javac) | — | 63 |
-| C (gcc) | 54 | 19 |
-| C (clang) | 54 | 19 |
-| C++ (clang++) | 59 | 19 |
-| C++ (g++) | 62 | 19 |
-| Fortran (gfortran) | 74 | 19 |
+| C (gcc) | 54 | 18 |
+| C (clang) | 54 | 18 |
+| C++ (clang++) | 63 | 18 |
+| C++ (g++) | 66 | 18 |
+| Fortran (gfortran) | 74 | 18 |
 | Swift (swift) | 96 | 32 |
-| Rust (unchecked) | 442 | 19 |
-| Rust (safe) | 471 | 19 |
-| OCaml (strict-f32) | 1 178 | 19 |
-| OCaml (f64) | 1 182 | 19 |
-| Go (go) | 1 564 | 19 |
+| Rust (unchecked) | 448 | 18 |
+| Rust (safe) | 478 | 18 |
+| OCaml (strict-f32) | 1 178 | 18 |
+| OCaml (f64) | 1 182 | 18 |
+| Go (go) | 1 564 | 18 |
 | Haskell | 2 779 | 29 |
-| Lean (lake) | 2 851 | 19 |
+| Lean (lake) | 2 851 | 18 |
 <!-- /sb:table -->
 
 The spread across the compiled languages is **a factor of 56**, from 50 KiB in

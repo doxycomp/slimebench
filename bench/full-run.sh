@@ -311,10 +311,24 @@ psweep() { # label preset ticks extra-args... -- cmd...
           j=$(timeout 3600 /usr/bin/time -f "SB_CPU %P" "$@" "${args[@]}" \
                 --json 2>"$OUT/.cpu" | grep -m1 '^{') || j=""
           cpu=$(sed -n 's/^SB_CPU \([0-9]*\)%$/\1/p' "$OUT/.cpu" | tail -1)
+          # Measured twice before it warns. This reads whole-process CPU, so
+          # anything else busy on the machine inflates it: Go's T=1 row once
+          # came back at 160 % and three clean re-runs of the same command
+          # gave 100 %, which cost twenty minutes to establish. A second
+          # measurement is one process; a false warning is an investigation.
           if [ -n "$cpu" ] && [ "$cpu" -gt 150 ]; then
-            msg=$(printf '  %-12s T=1 used %s%% CPU -- not one thread' \
-                    "$label" "$cpu")
-            echo "$msg" | tee -a "$OUT/WARNINGS.txt"
+            timeout 3600 /usr/bin/time -f "SB_CPU %P" "$@" "${args[@]}" \
+              --json 2>"$OUT/.cpu" >/dev/null || true
+            cpu2=$(sed -n 's/^SB_CPU \([0-9]*\)%$/\1/p' "$OUT/.cpu" | tail -1)
+            if [ -n "$cpu2" ] && [ "$cpu2" -gt 150 ]; then
+              msg=$(printf '  %-12s T=1 used %s%% then %s%% CPU -- not one thread' \
+                      "$label" "$cpu" "$cpu2")
+              echo "$msg" | tee -a "$OUT/WARNINGS.txt"
+            else
+              printf '  %-12s T=1 read %s%% CPU once, %s%% on re-measure -- noise\n' \
+                "$label" "$cpu" "${cpu2:-?}"
+            fi
+            cpu=$cpu2
           fi
         else
           j=$(timeout 3600 "$@" "${args[@]}" --json 2>/dev/null | grep -m1 '^{') \

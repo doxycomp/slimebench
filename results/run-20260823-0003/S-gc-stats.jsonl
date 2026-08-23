@@ -1,5 +1,5 @@
-{"table": "gc", "lang": "go", "collections": 1, "gc_ms": 0.601, "allocated_mib": 5.2, "mallocs": 305, "heap_mib": 5.2, "ticks": 200}
+{"table": "gc", "lang": "go", "collections": 1, "gc_ms": 0.679, "allocated_mib": 5.2, "mallocs": 305, "heap_mib": 5.2, "ticks": 200}
 {"table": "gc", "lang": "java", "collections": 0, "gc_ms": 0, "heap_used_mib": 9.0, "ticks": 200}
 {"table": "gc", "lang": "csharp", "collections": "1/1/1", "allocated_mib": 4.7, "heap_mib": 4.7, "ticks": 200}
 {"table": "gc", "lang": "ocaml", "minor_words": 1579273, "minor_collections": 7, "major_collections": 2, "heap_mib": 14.2, "ticks": 200}
-{"table": "gc", "lang": "haskell", "allocated_bytes": 7787064, "gc_seconds": 0.0, "total_seconds": 0.265}
+{"table": "gc", "lang": "haskell", "allocated_bytes": 7783952, "gc_seconds": 0.001, "total_seconds": 0.284}

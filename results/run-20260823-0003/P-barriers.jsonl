@@ -1,0 +1,44 @@
+{"table": "instr-cost", "lang": "c", "off": 7.318901, "on": 7.778727}
+{"table": "instr-cost", "lang": "go", "off": 6.442585, "on": 7.224001}
+{"table": "instr-cost", "lang": "java", "off": 11.00866, "on": 12.012277}
+{"table": "instr-cost", "lang": "csharp", "off": 23.078863, "on": 22.200735}
+{"table": "barrier-sweep", "lang": "c", "threads": 4, "work": 19.84, "barrier": 1.151, "total": 20.991}
+{"table": "barrier-sweep", "lang": "c", "threads": 8, "work": 10.387, "barrier": 4.166, "total": 14.553}
+{"table": "barrier-sweep", "lang": "c", "threads": 16, "work": 6.607, "barrier": 4.036, "total": 10.644}
+{"table": "barrier-sweep", "lang": "c", "threads": 32, "work": 3.357, "barrier": 4.978, "total": 8.335}
+{"table": "barrier-sweep", "lang": "go", "threads": 4, "work": 17.164, "barrier": 1.211, "total": 18.375}
+{"table": "barrier-sweep", "lang": "go", "threads": 8, "work": 7.342, "barrier": 2.37, "total": 9.713}
+{"table": "barrier-sweep", "lang": "go", "threads": 16, "work": 3.9, "barrier": 2.275, "total": 6.174}
+{"table": "barrier-sweep", "lang": "go", "threads": 32, "work": 2.169, "barrier": 2.852, "total": 5.02}
+{"table": "barrier-sweep", "lang": "java", "threads": 4, "work": 13.96, "barrier": 0.794, "total": 14.755}
+{"table": "barrier-sweep", "lang": "java", "threads": 8, "work": 8.774, "barrier": 2.521, "total": 11.296}
+{"table": "barrier-sweep", "lang": "java", "threads": 16, "work": 8.698, "barrier": 3.513, "total": 12.211}
+{"table": "barrier-sweep", "lang": "java", "threads": 32, "work": 7.161, "barrier": 7.903, "total": 15.063}
+{"table": "barrier-sweep", "lang": "csharp", "threads": 4, "work": 18.362, "barrier": 1.83, "total": 20.191}
+{"table": "barrier-sweep", "lang": "csharp", "threads": 8, "work": 9.317, "barrier": 3.429, "total": 12.746}
+{"table": "barrier-sweep", "lang": "csharp", "threads": 16, "work": 4.399, "barrier": 6.271, "total": 10.67}
+{"table": "barrier-sweep", "lang": "csharp", "threads": 32, "work": 2.726, "barrier": 13.406, "total": 16.132}
+{"table": "barrier-phase", "lang": "c", "phase": "agents", "work": 2.144, "barrier": 1.509}
+{"table": "barrier-phase", "lang": "c", "phase": "prefix", "work": 0.001, "barrier": 0.754}
+{"table": "barrier-phase", "lang": "c", "phase": "scatter", "work": 0.069, "barrier": 0.766}
+{"table": "barrier-phase", "lang": "c", "phase": "deposit", "work": 0.353, "barrier": 0.89}
+{"table": "barrier-phase", "lang": "c", "phase": "merge", "work": 0.238, "barrier": 0.899}
+{"table": "barrier-phase", "lang": "c", "phase": "diffuse", "work": 0.286, "barrier": 0.0}
+{"table": "barrier-phase", "lang": "go", "phase": "agents", "work": 1.307, "barrier": 0.609}
+{"table": "barrier-phase", "lang": "go", "phase": "prefix", "work": 0.001, "barrier": 0.223}
+{"table": "barrier-phase", "lang": "go", "phase": "scatter", "work": 0.064, "barrier": 0.503}
+{"table": "barrier-phase", "lang": "go", "phase": "deposit", "work": 0.231, "barrier": 0.708}
+{"table": "barrier-phase", "lang": "go", "phase": "merge", "work": 0.286, "barrier": 0.826}
+{"table": "barrier-phase", "lang": "go", "phase": "diffuse", "work": 0.363, "barrier": 0.0}
+{"table": "barrier-phase", "lang": "java", "phase": "agents", "work": 7.062, "barrier": 2.56}
+{"table": "barrier-phase", "lang": "java", "phase": "prefix", "work": 0.016, "barrier": 1.128}
+{"table": "barrier-phase", "lang": "java", "phase": "scatter", "work": 0.345, "barrier": 1.338}
+{"table": "barrier-phase", "lang": "java", "phase": "deposit", "work": 0.332, "barrier": 1.373}
+{"table": "barrier-phase", "lang": "java", "phase": "merge", "work": 0.956, "barrier": 1.434}
+{"table": "barrier-phase", "lang": "java", "phase": "diffuse", "work": 0.907, "barrier": 0.0}
+{"table": "barrier-phase", "lang": "csharp", "phase": "agents", "work": 1.793, "barrier": 2.783}
+{"table": "barrier-phase", "lang": "csharp", "phase": "prefix", "work": 0.001, "barrier": 2.63}
+{"table": "barrier-phase", "lang": "csharp", "phase": "scatter", "work": 0.135, "barrier": 2.683}
+{"table": "barrier-phase", "lang": "csharp", "phase": "deposit", "work": 0.242, "barrier": 2.693}
+{"table": "barrier-phase", "lang": "csharp", "phase": "merge", "work": 0.263, "barrier": 2.657}
+{"table": "barrier-phase", "lang": "csharp", "phase": "diffuse", "work": 0.201, "barrier": 0.0}

@@ -3,14 +3,14 @@
 
 === A. the same program, interpreted and compiled (128x128/4096, 100 ticks, serial)
 target                           grid         agents          ms/tick   spread
-python pure (tier B)             0x44625B3D   0xBA19E66B      10.6440       —
-python pure --strict-f32 (A)     0xB1D75130   0xD1E6D1C1      23.5563       —
-numba (tier A)                   0xB1D75130   0xD1E6D1C1       0.0692    1.5%
-numba --fastmath (tier C)        0xF9B2609A   0xD1E6D1C1       0.0687    2.1%
-c gcc-o2 (tier A)                0xB1D75130   0xD1E6D1C1       0.0709    0.9%
+python pure (tier B)             0x44625B3D   0xBA19E66B      11.0246       —
+python pure --strict-f32 (A)     0xB1D75130   0xD1E6D1C1      24.4484       —
+numba (tier A)                   0xB1D75130   0xD1E6D1C1       0.0710    5.4%
+numba --fastmath (tier C)        0xF9B2609A   0xD1E6D1C1       0.0696    2.6%
+c gcc-o2 (tier A)                0xB1D75130   0xD1E6D1C1       0.0719    0.8%
 
 === B. compile time, against the work it is compiled for
-jit_compile_ms 761.5 fastmath=0
+jit_compile_ms 793.4 fastmath=0
    (compiled against a 4x4 grid before the clock starts; see _precompile)
 
 === C. how long the agent hash keeps saying 'conformant' (512x512/65536)
