@@ -1,4 +1,13 @@
 <!doctype html>
+<!-- The browser frontend: page, canvas and controls.
+
+     Markup only. The simulation is impl/ts/src/main-web.ts, bundled into
+     app.js by `npm run build:web`, which is why app.js is not in git. The
+     per-parameter sliders are not here either: main-web.ts builds them
+     into #controls from the SPEC-1 parameter list, so the page cannot
+     fall out of step with the simulation it drives. What is static is the
+     canvas, the speed control and the pause / reset / reseed / checksum
+     buttons. -->
 <html lang="de">
 <head>
 <meta charset="utf-8">

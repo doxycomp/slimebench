@@ -88,10 +88,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Five generators write source that is committed: the trig table into
-      # every language, the GLSL shaders into a C header, and the Rust, Python
-      # and Haskell copies of the bitmap font. Committed generated output drifts from its generator
-      # the first time someone edits the output by hand, and nothing notices.
+      # Six generators write source that is committed: the trig table into
+      # every language, the GLSL shaders into a C header, the Vulkan shader set
+      # from the OpenGL one, and the Rust, Python and Haskell copies of the
+      # bitmap font. Committed generated output drifts from its generator the
+      # first time someone edits the output by hand, and nothing notices.
       # This job notices.
       - name: Re-run the generators
         run: |
@@ -100,12 +101,13 @@ jobs:
           python3 spec/tools/gen_python_font.py
           python3 spec/tools/gen_haskell_font.py
           python3 impl/glcompute/gen_shaders.py
+          python3 impl/vulkan/gen_shaders.py
 
       - name: Working tree must be unchanged
         run: |
           if ! git diff --quiet; then
             echo "::error::A generator produced output differing from the committed files."
-            echo "Run the three generators locally and commit the result."
+            echo "Run the generators locally and commit the result."
             git --no-pager diff --stat
             git --no-pager diff
             exit 1
@@ -131,6 +133,16 @@ jobs:
             exit 1
           fi
           python3 bench/tables.py --check docs/RESULTS.md "$series"
+
+      # And the same rule for the per-implementation documentation. Each
+      # impl/*/README.md carries a generated inventory -- the file map with a
+      # one-line summary lifted from each file's own header comment, and the
+      # targets that build from the directory. This fails when a file is added
+      # without appearing in its map, when a README names a path that is not in
+      # the repository, when a target has no README, or when a source file has
+      # no header comment for the map to quote.
+      - name: Implementation READMEs must match the tree
+        run: python3 bench/implmap.py --check
 
   scripts:
     name: shell scripts

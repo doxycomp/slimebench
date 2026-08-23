@@ -1131,7 +1131,10 @@ lang     = "Lean"
 backend  = "headless"
 class    = "S"
 dir      = "impl/lean"
-build    = "./build.sh {profile}"
+# `bash build.sh` for the same reason as impl/go above: the script is mode 644
+# in git, so `./build.sh` works under WSL on a Windows filesystem and fails in
+# the container. This one was missed when the Go target was fixed.
+build    = "bash build.sh {profile}"
 binary   = "build/{profile}/slimebench"
 run      = ["{binary}"]
 compilers = ["lake"]

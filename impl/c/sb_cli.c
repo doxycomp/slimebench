@@ -1,3 +1,11 @@
+/* The CLI parser and the result printer declared in sb_cli.h.
+ *
+ * Nothing here decides anything: the flag set, the presets and the JSON
+ * field names are SPEC-1 section 10, and the header carries the argument
+ * for why they are shared across every C frontend rather than repeated.
+ * This file is the parsing itself, which is dull on purpose -- a CLI that
+ * accepted a slightly different spelling per frontend would produce two
+ * measurements that look comparable and are not. */
 #include "sb_cli.h"
 
 #include <stdio.h>

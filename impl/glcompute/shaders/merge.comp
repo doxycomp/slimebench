@@ -1,3 +1,11 @@
+// The deposit merge: integer hit counts into the grid, once per tick.
+//
+// This is the pass that makes the GPU agent kernel deterministic. A cell
+// hit `c` times gets one multiplication and one addition in a fixed
+// order, instead of `c` float atomics in whatever order the scheduler
+// produced. It carries the same limitation as the CPU `private`
+// strategy: it works because SPEC-1's deposit is a constant, and stops
+// working the moment the deposit depends on the agent.
 layout(local_size_x = 64) in;
 void main() {
   uint i = gl_GlobalInvocationID.x

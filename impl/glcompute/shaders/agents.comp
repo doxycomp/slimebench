@@ -1,3 +1,11 @@
+// The agent pass, SPEC-1 section 5.3, one invocation per agent.
+//
+// `deferred` only, and structurally so: the deposit goes into an integer
+// hit counter per cell (`atomicAdd(depcount[idx], 1u)`) rather than into
+// the grid, because atomicAdd on a float is not deterministic -- the
+// arrival order of invocations would decide the rounding. Integer
+// addition is exact and order-independent, and merge.comp turns the
+// counts into deposits once per tick.
 layout(local_size_x = 64) in;
 uint rotl32(uint x, int k) { return (x << k) | (x >> (32 - k)); }
 float wrapf(float v, float m) {

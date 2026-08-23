@@ -693,6 +693,7 @@ def cmd_conformance(a: argparse.Namespace) -> int:
     cases = ref["cases"]
 
     failures = 0
+    checked: list[str] = []
     for t in pick_targets(targets, a.targets):
         if not t.headless_capable or t.skip_conformance:
             continue
@@ -750,6 +751,7 @@ def cmd_conformance(a: argparse.Namespace) -> int:
         note = f"  [tier {t.tier}, {t.conformance_set} set"
         note += f", no {'/'.join(skipped)}]" if skipped else "]"
         print(f"-- {t.id} ({cc}/{profile}){note}")
+        checked.append(t.id)
 
         first_bad: str | None = None
         ran_any = False
@@ -818,7 +820,17 @@ def cmd_conformance(a: argparse.Namespace) -> int:
             print(f"   -> first divergence at {first_bad}. "
                   f"Re-run that case with --hash-every 1 to find the exact tick.")
 
-    print("\nCONFORMANCE OK" if failures == 0 else f"\n{failures} FAILURE(S)")
+    # "OK" after checking nothing is the worst output this program can
+    # produce: `--targets glcompute` selects a target that carries
+    # skip_conformance, every loop body is skipped, and a pass is reported for
+    # a claim that was never tested. Say what was checked, and refuse to call
+    # an empty selection a pass.
+    if not checked:
+        print("\nNothing was checked. The selected target(s) are all "
+              "skip_conformance, not headless, or unbuildable here.")
+        return 2
+    print(f"\nchecked {len(checked)}: {', '.join(checked)}")
+    print("CONFORMANCE OK" if failures == 0 else f"{failures} FAILURE(S)")
     return 0 if failures == 0 else 1
 
 

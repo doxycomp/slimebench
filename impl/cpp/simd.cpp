@@ -1,3 +1,9 @@
+// The vectorised diffusion kernel declared in simd.hpp (class V).
+//
+// One kernel body, not two. `Vec` and the one-line `vload`/`vadd`/`vmul`
+// helpers below are bound to __m512 or __m256 by #if at compile time, so
+// the AVX2 and AVX-512 measurements in docs/RESULTS.md section 8 are the
+// same source text at two widths rather than two hand-written kernels.
 #include "simd.hpp"
 
 #if defined(__AVX512F__) || defined(__AVX2__)

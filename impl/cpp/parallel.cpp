@@ -1,3 +1,10 @@
+// The threaded tick declared in parallel.hpp (class P).
+//
+// Both reduction strategies, six barriers per tick, and the same phase
+// order as the C reference -- so `binned` is bit-identical to the
+// single-threaded run at any thread count. The agent rule and the stencil
+// are not reimplemented here: this calls into agent.hpp and simd.hpp, the
+// same code the serial path uses, which is what stops the two drifting.
 #include "parallel.hpp"
 
 #include <barrier>

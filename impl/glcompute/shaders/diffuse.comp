@@ -1,3 +1,12 @@
+// The diffusion and decay pass, SPEC-1 section 5.4, one cell per
+// invocation.
+//
+// The accumulator is `precise`, which is what stops a driver
+// reassociating the nine additions or contracting the 4.0*centre term
+// into an FMA. It is not sufficient on its own: `precise` says nothing
+// about the rounding of the division, which is why two of the three GPU
+// backends still deviate from the CPU reference. docs/RESULTS.md section
+// 9 has which ones and why.
 layout(local_size_x = 64) in;
 void main() {
   uint i = gl_GlobalInvocationID.x
