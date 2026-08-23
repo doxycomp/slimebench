@@ -1,0 +1,82 @@
+#version 430
+layout(std430, binding = 0) buffer BGrid    { float grid[]; };
+layout(std430, binding = 1) buffer BScratch { float scratch[]; };
+layout(std430, binding = 2) buffer BDep     { uint  depcount[]; };
+layout(std430, binding = 3) buffer BAx      { float ax[]; };
+layout(std430, binding = 4) buffer BAy      { float ay[]; };
+layout(std430, binding = 5) buffer BAdir    { uint  adir[]; };
+layout(std430, binding = 6) buffer BRng     { uint  arng[]; };
+layout(std430, binding = 7) buffer BCos     { float costab[]; };
+layout(std430, binding = 8) buffer BSin     { float sintab[]; };
+
+layout(push_constant) uniform PC {
+  uint  width, height, log2w, xmask, ymask, agents, cells;
+  int   ss, rs, ndir;
+  float sensorDist, step, deposit, decay;
+} pc;
+
+// The names the shared bodies use. Vulkan has no default uniform block, so
+// this is the whole difference between the two shader trees.
+#define uWidth pc.width
+#define uHeight pc.height
+#define uLog2w pc.log2w
+#define uXmask pc.xmask
+#define uYmask pc.ymask
+#define uAgents pc.agents
+#define uCells pc.cells
+#define uSs pc.ss
+#define uRs pc.rs
+#define uNdir pc.ndir
+#define uSensorDist pc.sensorDist
+#define uStep pc.step
+#define uDeposit pc.deposit
+#define uDecay pc.decay
+
+layout(local_size_x = 64) in;
+uint rotl32(uint x, int k) { return (x << k) | (x >> (32 - k)); }
+float wrapf(float v, float m) {
+  if (v < 0.0) v = v + m;
+  if (v >= m)  v = v - m;
+  return v;
+}
+float senseAt(float x, float y, int d) {
+  precise float sx = wrapf(x + costab[d] * uSensorDist, float(uWidth));
+  precise float sy = wrapf(y + sintab[d] * uSensorDist, float(uHeight));
+  return grid[((uint(sy) & uYmask) << uLog2w) | (uint(sx) & uXmask)];
+}
+void main() {
+  uint i = gl_GlobalInvocationID.x
+        + gl_GlobalInvocationID.y * gl_NumWorkGroups.x * gl_WorkGroupSize.x;
+  if (i >= uAgents) return;
+  int d = int(adir[i]);
+  float x = ax[i];
+  float y = ay[i];
+  int dl = (d - uSs + uNdir) % uNdir;
+  int dr = (d + uSs) % uNdir;
+  float fl = senseAt(x, y, dl);
+  float fc = senseAt(x, y, d);
+  float fr = senseAt(x, y, dr);
+  if (fc >= fl && fc >= fr) {
+  } else if (fc < fl && fc < fr) {
+    uint o = i * 4u;
+    uint s0 = arng[o], s1 = arng[o+1u], s2 = arng[o+2u], s3 = arng[o+3u];
+    uint res = rotl32(s0 + s3, 7) + s0;
+    uint t = s1 << 9;
+    s2 ^= s0; s3 ^= s1; s1 ^= s2; s0 ^= s3; s2 ^= t; s3 = rotl32(s3, 11);
+    arng[o] = s0; arng[o+1u] = s1; arng[o+2u] = s2; arng[o+3u] = s3;
+    d = ((res & 1u) != 0u) ? (d + uRs) % uNdir : (d - uRs + uNdir) % uNdir;
+  } else if (fl > fr) {
+    d = (d - uRs + uNdir) % uNdir;
+  } else {
+    d = (d + uRs) % uNdir;
+  }
+  precise float nx = wrapf(x + costab[d] * uStep, float(uWidth));
+  precise float ny = wrapf(y + sintab[d] * uStep, float(uHeight));
+  x = nx;
+  y = ny;
+  uint idx = ((uint(y) & uYmask) << uLog2w) | (uint(x) & uXmask);
+  atomicAdd(depcount[idx], 1u);
+  adir[i] = uint(d);
+  ax[i] = x;
+  ay[i] = y;
+}

@@ -6,6 +6,11 @@
 #include "sb_core.h"
 
 typedef struct {
+    /* Machine verification, not measurement: see impl/c/sb_verify.h.
+     * --emit-chain records what a healthy machine produces; --verify checks
+     * this one against such a record. */
+    const char *emit_chain;
+    const char *verify_chain;
     int want_render;      /* --render */
     int want_json;        /* --json   */
     /* Render benchmarks only: keep re-uploading the same grid so the

@@ -3,7 +3,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <string.h>
+
 #include "sb_cli.h"
+#include "sb_verify.h"
 #include "sb_parallel.h"
 
 int main(int argc, char **argv) {
@@ -31,6 +34,60 @@ int main(int argc, char **argv) {
     sim.ns_agents = 0;
     sim.ns_diffuse = 0;
 
+    /* Verification, if either flag is present. Opened after the warm-up so a
+     * chain starts at tick 1 of the measured run in both modes. */
+    FILE *chain_out = NULL, *chain_in = NULL;
+    int verify_bad = 0;
+    if (opt.emit_chain) {
+        chain_out = fopen(opt.emit_chain, "w");
+        if (!chain_out) {
+            fprintf(stderr, "error: cannot write %s\n", opt.emit_chain);
+            sb_sim_free(&sim);
+            return 3;
+        }
+        char hdr[256];
+        sb_chain_header(&cfg, hdr, sizeof hdr);
+        fprintf(chain_out, "# slimebench verify chain v1\n"
+                           "# config %s\n"
+                           "# blocks %d  every %u\n",
+                hdr, SB_VERIFY_BLOCKS, cfg.hash_every ? cfg.hash_every : 1u);
+    }
+    if (opt.verify_chain) {
+        chain_in = fopen(opt.verify_chain, "r");
+        if (!chain_in) {
+            fprintf(stderr, "error: cannot read %s\n", opt.verify_chain);
+            if (chain_out) fclose(chain_out);
+            sb_sim_free(&sim);
+            return 3;
+        }
+        /* The header names the configuration the chain was recorded from.
+         * Verifying against a different one produces a mismatch that says
+         * nothing about the machine, so it is refused rather than reported. */
+        char want[256], have[256], line[512];
+        sb_chain_header(&cfg, have, sizeof have);
+        want[0] = '\0';
+        const char *tag = "# config ";
+        const size_t taglen = strlen(tag);
+        while (fgets(line, sizeof line, chain_in)) {
+            if (line[0] != '#') { fseek(chain_in, -(long)strlen(line), SEEK_CUR); break; }
+            if (strncmp(line, tag, taglen) == 0) {
+                size_t n = strlen(line + taglen);
+                while (n && (line[taglen + n - 1] == '\n' ||
+                             line[taglen + n - 1] == '\r')) n--;
+                if (n < sizeof want) { memcpy(want, line + taglen, n); want[n] = '\0'; }
+            }
+        }
+        if (want[0] && strcmp(want, have) != 0) {
+            fprintf(stderr, "error: this chain was recorded from a different "
+                            "configuration\n  chain: %s\n  here : %s\n",
+                    want, have);
+            fclose(chain_in);
+            if (chain_out) fclose(chain_out);
+            sb_sim_free(&sim);
+            return 3;
+        }
+    }
+
     double *tick_ms = (double *)malloc((size_t)(cfg.ticks ? cfg.ticks : 1) * sizeof(double));
     if (!tick_ms) { sb_sim_free(&sim); return 1; }
 
@@ -44,6 +101,48 @@ int main(int argc, char **argv) {
         if (cfg.hash_every && ((t + 1) % cfg.hash_every == 0)) {
             fprintf(stderr, "tick %u grid=0x%08X agents=0x%08X\n",
                     t + 1, sb_hash_grid(&sim), sb_hash_agents(&sim));
+        }
+
+        /* Verification runs on its own schedule, every tick unless told
+         * otherwise: a fault that lasts one tick is exactly the kind worth
+         * catching, and checking every hundredth tick would miss it. */
+        if (chain_out || chain_in) {
+            const uint32_t every = cfg.hash_every ? cfg.hash_every : 1u;
+            if ((t + 1) % every == 0) {
+                sb_checkpoint got;
+                sb_checkpoint_take(&sim, t + 1, &got);
+                if (chain_out) sb_checkpoint_write(chain_out, &got);
+                if (chain_in) {
+                    sb_checkpoint want;
+                    const int r = sb_checkpoint_read(chain_in, &want);
+                    if (r == 0) {
+                        fprintf(stderr, "verify: chain ended at tick %u; "
+                                        "run fewer ticks or record a longer "
+                                        "one\n", t + 1);
+                        verify_bad++;
+                        break;
+                    }
+                    if (r < 0) {
+                        fprintf(stderr, "verify: malformed chain file\n");
+                        verify_bad++;
+                        break;
+                    }
+                    if (want.tick != got.tick) {
+                        fprintf(stderr, "verify: chain is at tick %u, we are "
+                                        "at %u -- --hash-every must match the "
+                                        "recording\n", want.tick, got.tick);
+                        verify_bad++;
+                        break;
+                    }
+                    if (sb_checkpoint_diff(&sim, &want, &got, stderr) >= 0) {
+                        verify_bad++;
+                        /* One report, not one per tick: after the first
+                         * divergence every later tick is wrong too, and
+                         * printing all of them buries the one that matters. */
+                        break;
+                    }
+                }
+            }
         }
     }
     const double ms_total = (double)(sb_now_ns() - t_start) / 1e6;
@@ -81,9 +180,23 @@ int main(int argc, char **argv) {
 #undef SB_TICK
     free(tick_ms);
     sb_pool_destroy(pool);
+    if (chain_out) {
+        fclose(chain_out);
+        fprintf(stderr, "recorded %u checkpoints to %s\n",
+                cfg.ticks / (cfg.hash_every ? cfg.hash_every : 1u),
+                opt.emit_chain);
+    }
+    if (chain_in) {
+        fclose(chain_in);
+        if (verify_bad == 0)
+            fprintf(stderr, "verify: OK -- every checkpoint matched\n");
+    }
+
     sb_sim_free(&sim);
 #if defined(SB_BRANCH_STATS) && SB_BRANCH_STATS
     sb_branch_report();
 #endif
-    return 0;
+    /* A machine that computed the wrong thing must not exit 0, whatever the
+     * timings say. */
+    return verify_bad ? 4 : 0;
 }

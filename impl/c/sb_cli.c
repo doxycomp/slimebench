@@ -16,13 +16,15 @@ void sb_print_usage(FILE *f, const char *argv0) {
         "  --update MODE        serial|deferred\n"
         "  --threads N          class P, requires --update deferred\n"
         "  --simd-agents        vectorised agent pass, deferred only\n"
-        "  --agent-tile N       re-sort agents into 32x32 tiles every N ticks\n"
+        "  --agent-tile N       re-sort agents into 8x8 tiles every N ticks\n"
         "  --deposit-reduce M   private|binned  (SPEC-1 5.6)\n"
         "  --sensor-dist F  --sensor-steps N  --rot-steps N\n"
         "  --step F  --deposit F  --decay F\n"
         "  --hud  | --no-hud    on-screen overlay (default on, off with --json)\n"
         "  --headless  --render  --freeze-sim\n"
         "  --json  --hash-every N  --dump-grid PATH  --display-max F\n"
+        "  --emit-chain PATH    record a verification chain (see sb_verify.h)\n"
+        "  --verify PATH        check this machine against one\n"
         "  -h, --help\n",
         argv0);
 }
@@ -81,6 +83,8 @@ int sb_parse_args(int argc, char **argv, sb_config *cfg, sb_cli_opts *opt) {
         else if (!strcmp(a, "--seed"))           { NEED_VALUE(a); cfg->seed   = (uint32_t)strtoul(argv[++i], NULL, 10); }
         else if (!strcmp(a, "--threads"))        { NEED_VALUE(a); cfg->threads = (uint32_t)strtoul(argv[++i], NULL, 10); }
         else if (!strcmp(a, "--hash-every"))     { NEED_VALUE(a); cfg->hash_every = (uint32_t)strtoul(argv[++i], NULL, 10); }
+        else if (!strcmp(a, "--emit-chain"))     { NEED_VALUE(a); opt->emit_chain = argv[++i]; }
+        else if (!strcmp(a, "--verify"))         { NEED_VALUE(a); opt->verify_chain = argv[++i]; }
         else if (!strcmp(a, "--sensor-steps"))   { NEED_VALUE(a); cfg->sensor_steps = (uint32_t)strtoul(argv[++i], NULL, 10); }
         else if (!strcmp(a, "--rot-steps"))      { NEED_VALUE(a); cfg->rot_steps = (uint32_t)strtoul(argv[++i], NULL, 10); }
         else if (!strcmp(a, "--sensor-dist"))    { NEED_VALUE(a); cfg->sensor_dist = strtof(argv[++i], NULL); }

@@ -1,0 +1,4 @@
+{"schema":1,"impl":"haskell","class":"S","preset":"small","ticks":300,"update":"deferred","variant":"C reference (clang -O3 -native)","ms_total":1474.12,"grid_hash":"0x7A67A29B"}
+{"schema":1,"impl":"haskell","class":"S","preset":"small","ticks":300,"update":"deferred","variant":"haskell lowlevel, (!) lookups","ms_total":2479.71,"grid_hash":"0x7A67A29B"}
+{"schema":1,"impl":"haskell","class":"S","preset":"small","ticks":300,"update":"deferred","variant":"haskell lowlevel, unsafeAt","ms_total":1625.50,"grid_hash":"0x7A67A29B"}
+{"schema":1,"impl":"haskell","class":"S","preset":"small","ticks":300,"update":"deferred","variant":"haskell idiomatic (vector)","ms_total":5845.83,"grid_hash":"0x7A67A29B"}

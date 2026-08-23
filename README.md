@@ -1,9 +1,14 @@
 # slimebench
 
-A Physarum (slime mould) simulation in ten languages — with a verification
-mechanism that proves the same simulation really is running everywhere, and a
-harness for performance and footprint comparisons across languages, rendering
-backends and compilers.
+A Physarum (slime mould) simulation in **fourteen languages** — with a
+verification mechanism that proves the same simulation really is running
+everywhere, a harness for performance and footprint comparisons across
+languages, rendering backends and compilers, and a machine mode that turns the
+same property into a hardware check.
+
+Every implementation produces **the same bits**: the same grid checksum after
+the same number of ticks, on any CPU, on any GPU, in any of the fourteen. That
+is the whole design, and everything else here follows from it.
 
 [![CI](https://github.com/doxycomp/slimebench/actions/workflows/ci.yml/badge.svg)](https://github.com/doxycomp/slimebench/actions/workflows/ci.yml)
 
@@ -76,14 +81,44 @@ The same simulation, `medium` (2048², 1 M agents), 100 ticks:
 
 | Class | best configuration | ms | vs. 1 CPU core |
 |---|---|---:|---:|
-| S — one thread | C, gcc `-O3 -march=native` | 4391 | 1× |
-| P — 32 threads | **Go**, `binned` | 516 | **8.5×** |
-| G — GPU | CUDA, RTX 5080 | **44** | **100×** |
+| S — one thread | C, gcc `-O3 -march=native` | 4846 | 1× |
+| V — one thread, vectorised and spatially ordered | C, `--simd-agents --agent-tile` | 1884 | **2.6×** |
+| P — 32 threads | **Go**, `binned` | 568 | **8.5×** |
+| G — GPU | CUDA, RTX 5080 | **52** | **93×** |
 
-Class P exists in nine of the ten languages, every one of them bit-identical
-to the serial run — and it is won by neither C nor C++, but by Go:
+Class P exists in twelve of the fourteen languages, every one of them
+bit-identical to the serial run — and it is won by neither C nor C++, but by
+Go:
 
 ![Scaling across languages](docs/charts/scaling-langs.svg)
+
+**The agent pass is four fifths of a tick, and nothing used to touch it.**
+Every vectorisation effort here — class V in five languages, a hand-written
+AVX-512 stencil, Java's Vector API, C#'s `Vector512` — went at the diffusion
+stencil, which is 11 % of a tick. `--simd-agents` vectorises the other four
+fifths and `--agent-tile` sorts the agents into 8×8 tiles of the grid so a
+gather touches a few cache lines instead of sixteen unrelated ones. Together
+they are **8.1× on that phase and 3.8× on the whole program** at a 64 MiB
+grid, against the 1.31× the stencil returns — and on a grid that fits in cache
+the ordering is a net loss, which the tables say as plainly as the win. The
+ordering is implemented in eight languages; the JIT ones gain more than C
+does.
+
+**And the same property makes it a hardware check.** SPEC-1 fixes the result,
+so a chain of checksums recorded once on a healthy machine is a reference for
+every machine. `bench/machine.sh` measures one core, all cores, a
+memory-bound configuration and the GPU, then verifies every result against
+that chain — serial and under full load. A mismatch is not a slow machine, it
+is a wrong one: unstable memory, an overclock past its limit, a part that is
+failing. Unlike a memory tester it also covers the arithmetic, because every
+float that enters the grid goes through a multiply, an add and a division on
+its way to the checksum. [impl/c/sb_verify.h](impl/c/sb_verify.h) says what
+that does and does not distinguish.
+
+```bash
+bench/machine.sh --record   # once, on a machine you trust
+bench/machine.sh            # everywhere else
+```
 
 Every number comes from **one** run over the whole matrix. First check what
 the machine can actually measure:
@@ -270,8 +305,8 @@ bench/dotnet-aot.sh results/S-dotnet-aot.txt
   bit flips a comparison. A gate that hashed only the agents would have
   certified a fast-math build. [docs/RESULTS.md §2](docs/RESULTS.md#2-language-comparison-class-s).
 - **Two of the spec's claims are proved, not just tested.** `binned` is
-  bit-identical to the serial run — §5 checks that by running eight thread
-  counts in ten languages; [impl/lean/Proofs/](impl/lean/Proofs) proves it for
+  bit-identical to the serial run — §5 checks that by running six thread
+  counts in twelve languages; [impl/lean/Proofs/](impl/lean/Proofs) proves it for
   *every* thread count and every partition. And the bit-masked torus index is
   the modulo index, always inside the grid, and injective. Neither proof
   mentions floating point: Lean has no axioms about `Float32` at all, so the

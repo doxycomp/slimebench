@@ -96,7 +96,7 @@ endif
 HEADLESS := $(BUILDDIR)/slimebench-headless
 SDL2BIN  := $(BUILDDIR)/slimebench-sdl2
 RAYBIN   := $(BUILDDIR)/slimebench-raylib
-HEADERS  := dirtable.h sb_core.h sb_cli.h sb_render.h sb_agent.h sb_parallel.h sb_simd.h sb_asm.h sb_barrier.h sb_font.h sb_hud.h sb_hud_c.h
+HEADERS  := dirtable.h sb_verify.h sb_core.h sb_cli.h sb_render.h sb_agent.h sb_parallel.h sb_simd.h sb_asm.h sb_barrier.h sb_font.h sb_hud.h sb_hud_c.h
 
 SDL2_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null)
 SDL2_LIBS   := $(shell pkg-config --libs   sdl2 2>/dev/null)
