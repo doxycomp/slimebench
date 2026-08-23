@@ -440,6 +440,12 @@ print(json.dumps(d))" >> "$OUT/H-gpu.jsonl"
 }
 gpu_env_on
 gpu "cuda"        impl/cuda/build/default/slimebench-cuda
+# Vulkan, once per device kind. Three rows on this machine -- NVIDIA, the
+# integrated AMD part and the software rasteriser -- which is the whole
+# reason for a third GPU API: one shader, one interface, three vendors.
+gpu "vulkan-discrete"   impl/vulkan/build/default/slimebench-vk --device discrete
+gpu "vulkan-integrated" impl/vulkan/build/default/slimebench-vk --device integrated
+gpu "vulkan-cpu"        impl/vulkan/build/default/slimebench-vk --device cpu
 if [ "$HAVE_DISPLAY" = 1 ]; then
   gpu "gl43 C"      impl/glcompute/build/default/slimebench-gl
   gpu "gl43 Python" python3 impl/pygl/slimebench_pygl.py

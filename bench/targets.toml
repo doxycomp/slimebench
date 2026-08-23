@@ -1221,6 +1221,52 @@ profiles  = ["default"]
 updates  = ["deferred"]
 
 [[target]]
+# The same GLSL compute shaders through Vulkan. impl/vulkan/gen_shaders.py
+# moves the default-block uniforms into push constants and asserts every other
+# line is byte-identical to the OpenGL source, so a difference between the two
+# rows is a difference between drivers rather than between programs.
+#
+# The point of a third GPU API is vendor coverage: CUDA is one vendor and
+# OpenGL under WSL2 is Mesa translating to D3D12, while Vulkan reaches an
+# NVIDIA, an AMD and a software device through one interface. Measured here,
+# all three agree with each other bit for bit.
+id       = "vulkan"
+lang     = "GLSL"
+backend  = "vulkan"
+class    = "G"
+dir      = "impl/vulkan"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench-vk"
+run      = ["{binary}"]
+compilers = ["glslc"]
+profiles  = ["default"]
+extra_args = ["--device", "discrete"]
+updates  = ["deferred"]
+tier     = "B"
+# Same position as glcompute, confirmed independently: bit-exact on Mesa's
+# software rasteriser, and off by a little on the D3D12 path -- NVIDIA and AMD
+# diverge *identically*, which places it in the translation rather than in
+# either driver. See vulkan-cpu for the tier A half.
+skip_conformance = true
+
+[[target]]
+# The software device, which is where the exactness claim is checkable. Tier A
+# and not skipped: the shaders are the OpenGL ones, so this also re-checks that
+# the push-constant transformation changed nothing.
+id       = "vulkan-cpu"
+lang     = "GLSL"
+backend  = "vulkan"
+class    = "G"
+dir      = "impl/vulkan"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench-vk"
+run      = ["{binary}"]
+compilers = ["glslc"]
+profiles  = ["default"]
+extra_args = ["--device", "cpu"]
+updates  = ["deferred"]
+
+[[target]]
 id       = "glcompute"
 lang     = "GLSL"
 backend  = "gl43"

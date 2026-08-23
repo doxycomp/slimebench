@@ -119,6 +119,20 @@ if [ -x "$GL" ]; then
 else
   emit "  gl 4.3 compute          not built"
 fi
+# Vulkan by device kind rather than by index, and every kind the machine has:
+# this is the row that makes the report about the computer rather than about
+# one vendor's GPU.
+VK=impl/vulkan/build/default/slimebench-vk
+if [ -x "$VK" ]; then
+  C_SAVE=$C; C=$VK
+  for kind in discrete integrated cpu; do
+    run "vulkan $kind" --preset medium --ticks 100 --update deferred \
+                       --device "$kind"
+  done
+  C=$C_SAVE
+else
+  emit "  vulkan                  not built"
+fi
 emit ""
 
 if [ "$VERIFY" = 1 ]; then
