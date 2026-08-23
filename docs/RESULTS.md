@@ -72,9 +72,10 @@ Then:
 10. [Rendering (class R)](#10-rendering-class-r)
 11. [Footprint](#11-footprint)
 12. [What did not work](#12-what-did-not-work)
-13. [Proved, not measured](#13-proved-not-measured)
-14. [Where I was wrong](#14-where-i-was-wrong)
-15. [Open questions](#15-open-questions)
+13. [The machine, and whether it is telling the truth](#13-the-machine-and-whether-it-is-telling-the-truth)
+14. [Proved, not measured](#14-proved-not-measured)
+15. [Where I was wrong](#15-where-i-was-wrong)
+16. [Open questions](#16-open-questions)
 
 ---
 
@@ -130,7 +131,7 @@ program.
 | branching | one distribution, measured: 76.6 % / 11.0 % / 11.1 % / 1.3 %. A workload whose branches are unpredictable would ask a different question of every JIT here. |
 | I/O and syscalls | none inside the measured region. |
 | numeric variety | `f32`, and *bit-exact* `f32`. Most numeric code does not demand that and lets the compiler reassociate; §8's fast-math rows are the only place this document lets it. |
-| the machine | one CPU, one OS, one memory configuration. §15 has the list. |
+| the machine | one CPU, one OS, one memory configuration. §16 has the list. |
 
 **So the cross-language ranking in §2 is a ranking on flat numeric array
 code.** For C, C++, Fortran and Rust that is home ground. For Java, C#, OCaml,
@@ -143,7 +144,7 @@ hold the program constant and change one thing about how it runs:
 
 - the conformance result — fourteen languages producing identical bits, which
   is a property of the spec and the ports rather than of the kernel;
-- the two machine-checked proofs (§13), which quantify over all thread counts
+- the two machine-checked proofs (§14), which quantify over all thread counts
   and all inputs;
 - JIT against ahead-of-time compilation (§6), interpreted against compiled
   (§6), boxed against unboxed (§2), portable vectors against intrinsics (§8),
@@ -554,7 +555,7 @@ about 0.7 s. That is not in any number above, because
 [`_precompile()`](../impl/python/slimebench_numba.py) compiles them against a
 4×4 grid before the clock starts. Leaving it to `--warmup` would work too, and
 would silently turn `ms_per_tick_p99` into a compiler benchmark whenever
-someone omitted the flag — the failure shape §14 is a list of.
+someone omitted the flag — the failure shape §15 is a list of.
 
 ### `--fastmath`: the grid hash catches it, the agent hash does not
 
@@ -902,7 +903,7 @@ Why is not measured. The candidates are the machine's two core complexes and
 whatever thread placement the JVM does across them, or a spin-then-park
 barrier whose parking is being counted as work when a thread is descheduled
 mid-phase. Distinguishing those needs wakeup counts rather than wall clock,
-and §14 says so rather than this section guessing again.
+and §15 says so rather than this section guessing again.
 
 The instrumentation itself costs 0.99–1.04× of the tick it measures in this
 series, which the script reports alongside — a breakdown that changed the
@@ -945,7 +946,7 @@ three directives measured 9.6× and sat in the same place.
 
 The measured T=1 baseline here is the reason [`bench/full-run.sh`](../bench/full-run.sh)
 now passes `--threads` explicitly at every thread count and times the T=1 rows
-under `/usr/bin/time`; see §14.
+under `/usr/bin/time`; see §15.
 
 ### `private` — reproducible per thread count only
 
@@ -2009,7 +2010,88 @@ make an unbalanced phase shorter.
 
 ---
 
-## 13. Proved, not measured
+## 13. The machine, and whether it is telling the truth
+
+Every section above varies the language or the compiler and holds the machine
+fixed. This one does the opposite, and it exists because of a property none of
+the others use directly.
+
+SPEC-1 makes the result **machine-independent**. The same configuration
+produces the same checksum on any conforming implementation, on any CPU, on
+any GPU — that is the whole design, and §2 is fourteen languages demonstrating
+it. Turn it around and it says something else: a chain of checksums recorded
+once, on a machine believed to be healthy, is a reference for **every**
+machine, forever. A machine that disagrees with it is wrong.
+
+```bash
+bench/machine.sh --record   # once, somewhere you trust
+bench/machine.sh            # everywhere else
+```
+
+### What it measures
+
+| | |
+|---|---|
+| one core | the serial kernel, with nothing hidden behind parallelism |
+| all cores | the same work across every hardware thread |
+| memory bound | a grid four times the last level cache, where the answer is the memory system rather than the core |
+| GPU | the identical computation in VRAM, once per API and per device |
+| correctness | every result checked against the chain, serially and under full load |
+
+The figures are MCUPS — million cell updates per second — because that
+survives a change of grid size and is comparable between machines, which a
+millisecond total is not.
+
+### Why the last row is not a benchmark
+
+memtest86 writes a pattern and checks that it comes back. It knows what it
+wrote, so it can find a bit that flipped in storage; it cannot tell you
+whether the arithmetic between the write and the read was right, because it
+never does any. This does: every float that enters the grid has been through a
+multiply, an add, a division by twelve and a gather, and all of it lands in
+the checksum.
+
+What the workload happens to exercise, without having been designed to:
+
+- 16 to 256 MiB of grid, read nine times and written once per cell per tick —
+  streaming bandwidth in both directions;
+- three scattered reads per agent per tick over that whole footprint, which is
+  the access pattern that finds an unstable memory controller where a
+  sequential sweep does not;
+- `--threads 32`, which puts every core on it at once;
+- `--agent-tile`, which adds a full permutation of 26 bytes per agent every
+  other tick — a different kind of traffic again;
+- class G, which runs the identical computation in VRAM.
+
+### Localising a fault
+
+A grid hash alone says "wrong" and nothing else, so the chain carries
+sixty-four block hashes beside it. A mismatch names the tick, the block, the
+cell and row range, and the byte offset within the allocation:
+
+```
+MISMATCH at tick 1
+  grid   expected 0xDEADBEEF, got 0x83F13018
+  block  7  cells 114688..131071  rows 112..127  grid+458752..524284 bytes
+```
+
+The tick matters as much as the address. A divergence at tick 3 is
+reproducible and probably logic; one at tick 900 is heat or drift.
+
+### What it cannot do
+
+It cannot separate RAM from cache from the floating-point unit — it says the
+result is wrong, not which part was. It cannot see a fault in memory the
+simulation never touches. And a deterministic fault present on the recording
+machine would be baked into the chain, which is why
+[`spec/testvectors/machine.chain`](../spec/testvectors/machine.chain) is
+recorded on a machine that passes the conformance gate against fourteen
+independent implementations first. [`impl/c/sb_verify.h`](../impl/c/sb_verify.h)
+states all of this next to the code.
+
+---
+
+## 14. Proved, not measured
 
 Everything above is evidence: a configuration was run, a hash was compared, and
 the hashes agreed. That is worth a lot and it has a hard limit — it covers the
@@ -2101,7 +2183,7 @@ depends on having run the right thread count.
 
 ---
 
-## 14. Where I was wrong
+## 15. Where I was wrong
 
 The spec and the build plan have been contradicted by measurement repeatedly.
 That belongs in the record, or the project reads as more error-free than it
@@ -2171,7 +2253,7 @@ instead of "divergence" ten times. A tool that reports *wrong* where it means
 
 ---
 
-## 15. Open questions
+## 16. Open questions
 
 - **A native Linux GL driver.** The GL numbers include Mesa's D3D12
   translation; the constant throughput of ~170 MCUPS across four orders of

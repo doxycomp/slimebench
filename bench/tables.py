@@ -16,6 +16,7 @@ from __future__ import annotations
 import io
 import json
 import pathlib
+import re
 import sys
 from collections import defaultdict
 
@@ -833,6 +834,12 @@ def managed_tables(d: pathlib.Path) -> dict[str, str]:
     return found
 
 
+def named_series(text: str) -> str | None:
+    """The series directory the document's header claims every number is from."""
+    m = re.search(r"\(\.\./(results/run-[0-9-]+)/\)", text)
+    return m.group(1) if m else None
+
+
 def apply_to_doc(doc: pathlib.Path, d: pathlib.Path,
                  write: bool) -> tuple[int, list[str]]:
     """Replace or verify every marked table. Returns (changed, problems)."""
@@ -840,6 +847,16 @@ def apply_to_doc(doc: pathlib.Path, d: pathlib.Path,
     tables = managed_tables(d)
     problems: list[str] = []
     changed = 0
+
+    # Tables from one series under a header naming another is the exact
+    # failure the one-run rule exists to stop, and checking against an
+    # explicitly named directory cannot see it -- CI derives the name from the
+    # document, but a local run does not. So the two are compared here.
+    named = named_series(text)
+    want = d.as_posix().rstrip("/")
+    if named and not want.endswith(named):
+        problems.append(f"the document's header names {named}, "
+                        f"but these tables are from {want}")
     for tid, new in sorted(tables.items()):
         start = OPEN.format(tid)
         i = text.find(start)
