@@ -29,6 +29,7 @@ int main(int argc, char **argv) {
     }
 
     SetTraceLogLevel(LOG_WARNING);
+    if (opt.fullscreen) SetConfigFlags(FLAG_FULLSCREEN_MODE);
     InitWindow((int)cfg.width, (int)cfg.height, "slimebench -- C / raylib");
     /* raylib closes the window on Escape by default; the HUD wants to see the
      * key so that quitting goes through the same path in both frontends. */

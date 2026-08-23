@@ -156,6 +156,20 @@ The same thing in TypeScript, with an identical result:
 node --experimental-strip-types impl/ts/src/main-node.ts --preset small --ticks 600
 ```
 
+Or, once something is built, from a page instead of from memory:
+
+```bash
+python3 bench/gui.py
+```
+
+That serves a launcher on `localhost:8777` — every target from
+`bench/targets.toml` grouped by class, the benchmark and conformance runs, the
+machine report, the windowed builds with a grid size and a fullscreen box, and
+named profiles kept in `bench/gui-profiles.json`. It shows the exact command
+line before it runs it and keeps it at the top of the log, so nothing done
+there is something that could not have been typed. Run it inside WSL and open
+the page from Windows; the commands then execute where the toolchains are.
+
 Check that every implementation agrees:
 
 ```bash

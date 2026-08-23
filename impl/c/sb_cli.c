@@ -21,6 +21,7 @@ void sb_print_usage(FILE *f, const char *argv0) {
         "  --sensor-dist F  --sensor-steps N  --rot-steps N\n"
         "  --step F  --deposit F  --decay F\n"
         "  --hud  | --no-hud    on-screen overlay (default on, off with --json)\n"
+        "  --fullscreen         windowed frontends: desktop fullscreen\n"
         "  --headless  --render  --freeze-sim\n"
         "  --json  --hash-every N  --dump-grid PATH  --display-max F\n"
         "  --emit-chain PATH    record a verification chain (see sb_verify.h)\n"
@@ -124,6 +125,7 @@ int sb_parse_args(int argc, char **argv, sb_config *cfg, sb_cli_opts *opt) {
         else if (!strcmp(a, "--no-simd"))    { cfg->simd = 0; }
         else if (!strcmp(a, "--hud"))        { opt->want_hud = 1; }
         else if (!strcmp(a, "--no-hud"))     { opt->want_hud = 0; }
+        else if (!strcmp(a, "--fullscreen")) { opt->fullscreen = 1; }
         else if (!strcmp(a, "--asm"))        { cfg->use_asm = 1; }
         else if (!strcmp(a, "--no-asm"))     { cfg->use_asm = 0; }
         else {
