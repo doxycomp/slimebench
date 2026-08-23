@@ -178,6 +178,75 @@ def sec_footprint(d: pathlib.Path) -> str:
             + table(["Language", "Binary KiB (stripped)", "RSS MiB"], body) + "\n")
 
 
+def _cmatrix(d: pathlib.Path) -> dict:
+    """The compiler matrix keyed the way the two comparison tables ask for it."""
+    return {(r["lang"], r["cc"], r["profile"]): r
+            for r in load(d, "C-compiler-matrix.jsonl") if r.get("status") == "ok"}
+
+
+OFAST_PAIRS = [("C, clang", "C", "clang"), ("C++, clang++", "C++", "clang++"),
+               ("C, gcc", "C", "gcc"), ("C++, g++", "C++", "g++")]
+
+
+def sec_ofast(d: pathlib.Path) -> str:
+    """What `-Ofast` costs, per compiler.
+
+    A percentage per row rather than one in the prose: the sign differs
+    between the two compilers, and a summary sentence that survives a change
+    of sign is a sentence that was never checking anything.
+    """
+    m = _cmatrix(d)
+    body = []
+    for name, lang, cc in OFAST_PAIRS:
+        a, b = m.get((lang, cc, "o3-native")), m.get((lang, cc, "ofast-native"))
+        if not (a and b):
+            continue
+        pct = (b["ms_total_best"] / a["ms_total_best"] - 1) * 100
+        cell = f"{pct:+.0f} %".replace("-", "−")
+        body.append([name, fnum(a["ms_total_best"]) + " ms",
+                     fnum(b["ms_total_best"]) + " ms",
+                     f"**{cell}**" if abs(pct) >= 10 else cell])
+    if not body:
+        return ""
+    return ("### §3 `-Ofast` against `-O3`, same machine flags\n"
+            + table(["", "`-O3 -march=native`", "`-Ofast -march=native`", "Δ"],
+                    body, "lrrr") + "\n")
+
+
+# Each language's own way of turning off the check, and the profile that
+# leaves it on. Not a flag table: what is being compared is the language's
+# default safety against its own escape hatch.
+BOUNDS_TRIPLES = [
+    ("Rust", "Rust", "cargo", "release-native", "release-native-unchecked",
+     "`release-native`", "`-unchecked`"),
+    ("Swift", "Swift", "swift", "release", "unchecked",
+     "`release`", "`-Ounchecked`"),
+    ("Go", "Go", "go", "default", "nobounds",
+     "default", "`-gcflags=all=-B`"),
+]
+
+
+def sec_bounds(d: pathlib.Path) -> str:
+    """What the bounds check costs, where the language lets you remove it."""
+    m = _cmatrix(d)
+    body = []
+    for name, lang, cc, on, off, lon, loff in BOUNDS_TRIPLES:
+        a, b = m.get((lang, cc, on)), m.get((lang, cc, off))
+        if not (a and b):
+            continue
+        pct = (a["ms_total_best"] / b["ms_total_best"] - 1) * 100
+        cost = f"{pct:.0f} %".replace("-", "−")
+        body.append([name, f"{fnum(a['ms_total_best'])} ms ({lon})",
+                     f"{fnum(b['ms_total_best'])} ms ({loff})",
+                     f"**{cost}**" if pct >= 10 else cost])
+    if not body:
+        return ""
+    body.sort(key=lambda r: -float(r[3].strip("*% ").replace("−", "-")))
+    return ("### §3 what the bounds check costs\n"
+            + table(["Language", "with checks", "without", "cost"], body,
+                    "lrrr") + "\n")
+
+
 def sec_compilers(d: pathlib.Path) -> str:
     rows = [r for r in load(d, "C-compiler-matrix.jsonl") if r.get("status") == "ok"]
     if not rows:
@@ -254,6 +323,67 @@ def sec_parallel(d: pathlib.Path) -> str:
     return "".join(out) + "\n"
 
 
+# The scalar build each vectorised row is a speedup *against*. AVX2 rows are
+# compiled -march=x86-64-v3 but compared to the same -march=native scalar
+# build, because the question is what writing the intrinsics bought, not what
+# lowering the baseline would have.
+SIMD_SCALAR = {
+    ("c-simd", "gcc"): ("C", "gcc", "o3-native"),
+    ("c-simd", "clang"): ("C", "clang", "o3-native"),
+    ("cpp-simd", "g++"): ("C++", "g++", "o3-native"),
+    ("cpp-simd", "clang++"): ("C++", "clang++", "o3-native"),
+    ("rust-simd", "cargo"): ("Rust", "cargo", None),  # profile from the row
+}
+SIMD_NAMES = {"c-simd": ("C", "clang"), "cpp-simd": ("C++", "g++"),
+              "rust-simd": ("Rust", "cargo")}
+
+
+def sec_simd_kernels(d: pathlib.Path) -> str:
+    """Explicit intrinsics against the scalar loop, per language and ISA.
+
+    Joined across two files of the same series rather than typed: the
+    vectorised half comes from the class V phase and the scalar comparison
+    from the compiler matrix, and both run `small` for 300 ticks. Typed by
+    hand this table outlived three series, still quoting a scalar baseline
+    nothing in the directory contained.
+    """
+    simd = [r for r in load(d, "G-simd.jsonl")
+            if r.get("target") in SIMD_NAMES and "simd-" in (r.get("variant") or "")]
+    if not simd:
+        return ""
+    mat = _cmatrix(d)
+    body = []
+    for r in simd:
+        key = SIMD_SCALAR.get((r["target"], r["cc"]))
+        if not key:
+            continue
+        lang, cc, prof = key
+        scalar = mat.get((lang, cc, prof or r["profile"]))
+        if not scalar:
+            continue
+        isa = "AVX-512" if "avx512" in r["variant"] else "AVX2"
+        if r["target"] == "rust-simd":
+            isa += " (unchecked)" if "unchecked" in r["variant"] else " (safe)"
+        sd = scalar["ms_diffuse"]
+        body.append([lang, r["cc"], isa, r["ms_total_best"],
+                     f"{r['ms_diffuse']:.1f}", f"{sd:.1f}",
+                     f"{sd / r['ms_diffuse']:.2f}×"])
+    if not body:
+        return ""
+    body.sort(key=lambda x: x[3])
+    fastest = min(float(x[4]) for x in body)
+    out = []
+    for x in body:
+        tot = fnum(x[3])
+        out.append([x[0], x[1], x[2],
+                    f"**{tot}**" if x[3] == body[0][3] else tot,
+                    f"**{x[4]}**" if float(x[4]) == fastest else x[4],
+                    x[5], x[6]])
+    return ("### §8 explicit intrinsics, `small`/300, diffusion pass\n"
+            + table(["Language", "Compiler", "ISA", "total ms", "diffusion ms",
+                     "scalar diffusion ms ¹", "factor"], out, "lllrrrr") + "\n")
+
+
 def sec_kernels(d: pathlib.Path) -> str:
     """The four-way diffusion-kernel comparison.
 
@@ -286,6 +416,16 @@ def sec_kernels(d: pathlib.Path) -> str:
             rel.append(f"{base['ms_diffuse'] / cur['ms_diffuse']:.2f}×"
                        if base and cur else "—")
         body.append([names[k]] + cells + rel)
+
+    # The row the section is actually about. Kept in the table rather than in
+    # the prose because it is the one number that has moved between every
+    # series, and prose does not get regenerated.
+    lead = []
+    for cc in ccs:
+        a, b = by.get((cc, "simd")), by.get((cc, "asm"))
+        lead.append(f"**{(a['ms_diffuse'] / b['ms_diffuse'] - 1) * 100:.0f} %**"
+                    if a and b else "—")
+    body.append(["**lead over intrinsics**"] + lead + ["—"] * len(ccs))
 
     hashes = {r["grid_hash"] for r in rows}
     note = ""
@@ -525,6 +665,94 @@ def sec_gc(d: pathlib.Path) -> str:
     return ("### §11 garbage collection, `tiny`, 200 ticks\n"
             + table(["runtime", "collections", "GC time",
                      "allocated over the whole run"], body, "lrrr") + "\n")
+
+
+PHASE_ORDER = ["agents", "prefix", "scatter", "deposit", "merge", "diffuse"]
+SWEEP_LANGS = [("c", "C"), ("go", "Go"), ("java", "Java"), ("csharp", "C#")]
+
+
+def sec_barrier_sweep(d: pathlib.Path) -> str:
+    """The work and barrier halves of the tick, four languages by thread count.
+
+    Two tables rather than one: the finding in this section is that the two
+    halves move in opposite directions, and a single table interleaving them
+    makes the reader do the separation by eye. Both were typed by hand until
+    this series, which is how the C# barrier figure came to be quoted from a
+    sweep two series old.
+    """
+    rows = rows_of(d, "P-barriers.jsonl", "barrier-sweep")
+    if not rows:
+        return ""
+    by: dict = defaultdict(dict)
+    for r in rows:
+        by[r["lang"]][r["threads"]] = r
+    threads = sorted({r["threads"] for r in rows})
+    langs = [(k, n) for k, n in SWEEP_LANGS if k in by]
+    out = []
+    for half, title in (("work", "work"), ("barrier", "barrier")):
+        body = []
+        for t in threads:
+            body.append([str(t)] + [f"{by[k][t][half]:.2f}" if t in by[k]
+                                    else "—" for k, _ in langs])
+        if half == "work":
+            # The point of the work table is how far each language gets from
+            # its own four-thread figure, which is a division the reader
+            # should not have to do.
+            lo, hi = threads[0], threads[-1]
+            body.append([f"**T={lo} → T={hi}**"]
+                        + [f"{by[k][lo][half] / by[k][hi][half]:.1f}×"
+                           if lo in by[k] and hi in by[k] else "—"
+                           for k, _ in langs])
+        out.append(f"**{title}, ms per tick**\n\n"
+                   + table(["T"] + [n for _, n in langs], body) + "\n")
+    return ("### §5 work and barrier by thread count, `medium`\n"
+            + "".join(out))
+
+
+def sec_barriers_csharp(d: pathlib.Path) -> str:
+    """The same per-phase breakdown as the C table, for C#.
+
+    Kept separate because the two say different things: C's barrier cost
+    varies by phase and C#'s does not, and that flatness is the finding.
+    """
+    rows = [r for r in rows_of(d, "P-barriers.jsonl", "barrier-phase")
+            if r.get("lang") == "csharp" and r.get("phase") != "diffuse"]
+    if not rows:
+        return ""
+    rows.sort(key=lambda r: PHASE_ORDER.index(r["phase"])
+              if r["phase"] in PHASE_ORDER else 99)
+    body = [[r["phase"], f"{r['work']:.3f}", f"{r['barrier']:.3f}"]
+            for r in rows]
+    return ("### §5 work and barrier per phase, C#, `medium`, T=32\n"
+            + table(["phase", "C# work", "C# barrier"], body, "lrr") + "\n")
+
+
+def sec_barriers_cgo(d: pathlib.Path) -> str:
+    """Where C's barrier and Go's differ, phase by phase.
+
+    Only the phases that end in a barrier, and ordered by the size of the gap
+    rather than by the tick, because the question this table answers is which
+    wait the difference lives in.
+    """
+    rows = [r for r in rows_of(d, "P-barriers.jsonl", "barrier-phase")
+            if r.get("lang") in ("c", "go") and r.get("phase") != "diffuse"]
+    if not rows:
+        return ""
+    by: dict = defaultdict(dict)
+    for r in rows:
+        by[r["phase"]][r["lang"]] = r["barrier"]
+    have = [p for p in PHASE_ORDER if {"c", "go"} <= set(by.get(p, {}))]
+    if not have:
+        return ""
+    have.sort(key=lambda p: -(by[p]["c"] / by[p]["go"]) if by[p]["go"] else 0)
+    body = []
+    for p in have:
+        c, g = by[p]["c"], by[p]["go"]
+        lo = "**%.3f**" % g if g < c else "%.3f" % g
+        body.append([p, f"{c:.3f}", lo, f"{c / g:.1f}×" if g else "—"])
+    return ("### §5 barrier wait per phase, C against Go, `medium`, T=32\n"
+            + table(["Phase", "C barrier", "Go barrier", "C / Go"], body,
+                    "lrrr") + "\n")
 
 
 def sec_barriers(d: pathlib.Path) -> str:
@@ -768,6 +996,62 @@ def sec_agents_langs(d: pathlib.Path) -> str:
             + "\n")
 
 
+def sec_overview(d: pathlib.Path) -> str:
+    """One row per class, all at `medium` and 100 ticks.
+
+    This table used to be typed by hand, and it was the last thing in the
+    document still keeping its own numbers -- so it was also the first thing
+    to go stale when a series was replaced, which is exactly the failure the
+    rest of this file exists to prevent.
+
+    Every row is the best tier-A configuration of its class at one preset, and
+    the speedup column divides rather than being quoted, so the four rows
+    cannot drift apart from each other.
+    """
+    ag = [r for r in load(d, "G-agents.jsonl")
+          if r.get("status", "ok") == "ok" and r.get("preset") == "medium"
+          and r.get("conformance_class") == "A"]
+    par = [r for r in load(d, "P-parallel.jsonl") if r.get("preset") == "medium"]
+    gpu = [r for r in load(d, "H-gpu.jsonl") if r.get("preset") == "medium"]
+    if not (ag and par and gpu):
+        return ""
+
+    def best(rows, key="ms_total_best", **eq):
+        sel = [r for r in rows if all(r.get(k) == v for k, v in eq.items())]
+        return min(sel, key=lambda r: r[key]) if sel else None
+
+    s_row = best(ag, target="c")
+    v_row = best(ag, target="c-simd-agents-tiled")
+    threads = max(r["threads"] for r in par)
+    p_rows = [r for r in par if r["threads"] == threads]
+    p_row = min(p_rows, key=lambda r: r["ms_total"]) if p_rows else None
+    g_row = min(gpu, key=lambda r: r["ms_total"])
+    if not (s_row and v_row and p_row):
+        return ""
+
+    base = s_row["ms_total_best"]
+
+    def row(cls, conf, ms):
+        return [cls, conf, fnum(ms) + " ms",
+                "1×" if ms == base else f"**{base / ms:.1f}×**"]
+
+    body = [
+        row("S — one thread",
+            f"C, {s_row['cc']} `{s_row['profile']}`", base),
+        row(f"P — {threads} threads",
+            f"**{PLABEL.get(p_row['lang_label'], p_row['lang_label'])}**, "
+            f"`{p_row['variant']}`",
+            p_row["ms_total"]),
+        row("G — GPU", f"{g_row['lang_label']}, {g_row['variant']}",
+            g_row["ms_total"]),
+        row("V — one thread, vectorised and spatially ordered",
+            "C, `--simd-agents --agent-tile`", v_row["ms_total_best"]),
+    ]
+    return ("### §1 class overview, `medium`, 100 ticks\n"
+            + table(["Class", "best configuration", "`medium`, 100 ticks",
+                     "vs. 1 CPU core"], body, "llrr") + "\n")
+
+
 # ---------------------------------------------------------------------------
 # Managed tables
 #
@@ -784,10 +1068,15 @@ def sec_agents_langs(d: pathlib.Path) -> str:
 # The ids per section are positional: a section's tables in the order the
 # generator emits them.
 MANAGED: list[tuple[str, list[str]]] = [
+    ("sec_overview", ["overview"]),
     ("sec_crosslang", ["s-serial", "s-deferred"]),
     ("sec_compilers", ["compilers"]),
+    ("sec_ofast", ["ofast"]),
+    ("sec_bounds", ["bounds"]),
     ("sec_parallel", ["p-binned", "p-private", "p-atomic", "p-replicated"]),
     ("sec_gil", ["gil-binned", "gil-private"]),
+    ("sec_simd_kernels", ["simd-kernels"]),
+    ("sec_kernels", ["asm-kernels"]),
     ("sec_simd", ["simd"]),
     ("sec_agents", ["agent-pass"]),
     ("sec_agents_total", ["agent-total"]),
@@ -796,7 +1085,10 @@ MANAGED: list[tuple[str, list[str]]] = [
     ("sec_render", ["render"]),
     ("sec_footprint", ["footprint"]),
     ("sec_gc", ["gc"]),
+    ("sec_barrier_sweep", ["barrier-work", "barrier-wait"]),
+    ("sec_barriers_cgo", ["barrier-cgo"]),
     ("sec_barriers", ["barrier-phase"]),
+    ("sec_barriers_csharp", ["barrier-phase-csharp"]),
     ("sec_ramp", ["ramp"]),
     ("sec_interpreters", ["interpreters"]),
     ("sec_ship", ["ship"]),

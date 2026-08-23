@@ -40,8 +40,10 @@ is the whole design, and everything else here follows from it.
 | Python / pure | ✅ | — | — | — | — | tier B, A with `--strict-f32` |
 | Perl | ✅ | ✅ | ✅ | ✅ | — | tier B, A with `--strict-f32` |
 
-Plus two GPU hosts that are not languages of their own: CUDA and GLSL compute
-(the latter driven from C and from Python, out of the same shader source).
+Plus three GPU hosts that are not languages of their own: CUDA, Vulkan compute
+and GLSL compute — the last driven from C and from Python out of the same
+shader source, and Vulkan run against the discrete GPU, the integrated one and
+the CPU from one SPIR-V module.
 
 Every number in [docs/RESULTS.md](docs/RESULTS.md) comes from one series on one
 machine in one sitting. Numbers from two series are not comparable, and the
@@ -81,10 +83,14 @@ The same simulation, `medium` (2048², 1 M agents), 100 ticks:
 
 | Class | best configuration | ms | vs. 1 CPU core |
 |---|---|---:|---:|
-| S — one thread | C, gcc `-O3 -march=native` | 4846 | 1× |
-| V — one thread, vectorised and spatially ordered | C, `--simd-agents --agent-tile` | 1884 | **2.6×** |
-| P — 32 threads | **Go**, `binned` | 568 | **8.5×** |
-| G — GPU | CUDA, RTX 5080 | **52** | **93×** |
+| S — one thread | C, gcc `-O3 -march=native` | 3970 | 1× |
+| V — one thread, vectorised and spatially ordered | C, `--simd-agents --agent-tile` | 1649 | **2.4×** |
+| P — 32 threads | **Go**, `binned` | 532 | **7.5×** |
+| G — GPU | CUDA, RTX 5080 | **47** | **84×** |
+
+That table is generated from the result directory along with everything else
+in [docs/RESULTS.md](docs/RESULTS.md); it is reproduced here rather than
+maintained here.
 
 Class P exists in twelve of the fourteen languages, every one of them
 bit-identical to the serial run — and it is won by neither C nor C++, but by
@@ -92,17 +98,16 @@ Go:
 
 ![Scaling across languages](docs/charts/scaling-langs.svg)
 
-**The agent pass is four fifths of a tick, and nothing used to touch it.**
+**The agent pass is seven eighths of a tick, and nothing used to touch it.**
 Every vectorisation effort here — class V in five languages, a hand-written
 AVX-512 stencil, Java's Vector API, C#'s `Vector512` — went at the diffusion
-stencil, which is 11 % of a tick. `--simd-agents` vectorises the other four
-fifths and `--agent-tile` sorts the agents into 8×8 tiles of the grid so a
-gather touches a few cache lines instead of sixteen unrelated ones. Together
-they are **8.1× on that phase and 3.8× on the whole program** at a 64 MiB
-grid, against the 1.31× the stencil returns — and on a grid that fits in cache
-the ordering is a net loss, which the tables say as plainly as the win. The
-ordering is implemented in eight languages; the JIT ones gain more than C
-does.
+stencil, which is 12 % of a tick. `--simd-agents` vectorises the rest and
+`--agent-tile` sorts the agents into 8×8 tiles of the grid so a gather touches
+a few cache lines instead of sixteen unrelated ones. Together they are
+**7.6× on that phase and 3.6× on the whole program** at a 64 MiB grid, against
+the 1.3× the stencil returns — and on a grid that fits in cache the ordering is
+a net loss, which the tables say as plainly as the win. The ordering is
+implemented in eight languages; the JIT ones gain more than C does.
 
 **And the same property makes it a hardware check.** SPEC-1 fixes the result,
 so a chain of checksums recorded once on a healthy machine is a reference for

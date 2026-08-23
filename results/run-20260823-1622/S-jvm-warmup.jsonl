@@ -1,0 +1,17 @@
+{"table": "ramp", "block": "1-5", "java_tiered": 3.349, "java_c2": 3.751}
+{"table": "ramp", "block": "6-10", "java_tiered": 0.499, "java_c2": 1.017}
+{"table": "ramp", "block": "11-25", "java_tiered": 0.427, "java_c2": 0.365}
+{"table": "ramp", "block": "26-50", "java_tiered": 0.408, "java_c2": 0.254}
+{"table": "ramp", "block": "51-100", "java_tiered": 0.25, "java_c2": 0.26}
+{"table": "ramp", "block": "101-200", "java_tiered": 0.264, "java_c2": 0.265}
+{"table": "ramp", "block": "201-400", "java_tiered": 0.264, "java_c2": 0.251}
+{"table": "ramp", "block": "first tick", "java_tiered": 6.079, "java_c2": 6.022}
+{"table": "ramp", "block": "best tick", "java_tiered": 0.234, "java_c2": 0.233}
+{"table": "ramp", "block": "first / best", "java_tiered": 26.0, "java_c2": 25.9}
+{"table": "interpreters", "runtime": "c gcc -O3 -march=native", "grid_hash": "0x89CFFAAC", "ms_per_tick": 0.2504, "spread": 0.0096, "reps": 3}
+{"table": "interpreters", "runtime": "java, C2 only", "grid_hash": "0x89CFFAAC", "ms_per_tick": 0.2583, "spread": 0.0541, "reps": 3}
+{"table": "interpreters", "runtime": "java, tiered (default)", "grid_hash": "0x89CFFAAC", "ms_per_tick": 0.2536, "spread": 0.0278, "reps": 3}
+{"table": "interpreters", "runtime": "go, -gcflags=-B", "grid_hash": "0x89CFFAAC", "ms_per_tick": 0.2729, "spread": 0.0144, "reps": 3}
+{"table": "interpreters", "runtime": "numba", "grid_hash": "0x89CFFAAC", "ms_per_tick": 0.2446, "spread": 0.0377, "reps": 3}
+{"table": "interpreters", "runtime": "java, -Xint", "grid_hash": "0x89CFFAAC", "ms_per_tick": 5.5409, "spread": 0.008, "reps": 3}
+{"table": "interpreters", "runtime": "python pure --strict-f32", "grid_hash": "0x89CFFAAC", "ms_per_tick": 85.8407, "spread": null, "reps": 1}
