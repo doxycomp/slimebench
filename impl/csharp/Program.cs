@@ -99,6 +99,9 @@ internal static class Program
                 case "--warmup": c.Warmup = I(); break;
                 case "--seed":   c.Seed = (uint)I(); break;
                 case "--threads": c.Threads = I(); break;
+                // Spatial ordering of the agent arrays; the argument is
+                // how many ticks between re-sorts. 0 keeps creation order.
+                case "--agent-tile": c.AgentTile = I(); break;
                 case "--hash-every":   c.HashEvery = I(); break;
                 case "--sensor-steps": c.SensorSteps = I(); break;
                 case "--rot-steps":    c.RotSteps = I(); break;

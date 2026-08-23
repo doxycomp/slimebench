@@ -230,7 +230,7 @@ done
 # answer, not four.
 python3 bench/run.py bench --preset medium --ticks 100 --warmup 20 \
   --reps "$SB_REPS" --update deferred \
-  --targets cpp,cpp-tiled,rust,rust-tiled,go,go-tiled \
+  --targets cpp,cpp-tiled,rust,rust-tiled,go,go-tiled,java,java-tiled,csharp,csharp-tiled,swift,swift-tiled,haskell,haskell-tiled \
   --out "$OUT/G-agents.jsonl" --append || true
 
 # The four-way kernel comparison, reported as ms_diffuse: the agent pass is

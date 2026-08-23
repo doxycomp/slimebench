@@ -68,6 +68,13 @@ public final class Slimebench {
                 case "--headless" -> { continue; }
                 case "--no-simd" -> { c.simd = false; continue; }
                 case "--simd" -> { c.simd = true; continue; }
+                // Spatial ordering of the agent arrays; the argument is
+                // how many ticks between re-sorts. 0 keeps creation order.
+                case "--agent-tile" -> {
+                    if (i + 1 >= argv.length) fail(a + " requires a value");
+                    c.agentTile = Integer.parseInt(argv[++i]);
+                    continue;
+                }
                 default -> {
                     if (a.startsWith("--")) {
                         if (i + 1 >= argv.length) fail(a + " requires a value");

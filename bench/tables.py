@@ -732,6 +732,10 @@ AGENT_LANGS = [
     ("C++", "cpp", "cpp-tiled"),
     ("Rust", "rust", "rust-tiled"),
     ("Go", "go", "go-tiled"),
+    ("Java", "java", "java-tiled"),
+    ("C#", "csharp", "csharp-tiled"),
+    ("Swift", "swift", "swift-tiled"),
+    ("Haskell", "haskell", "haskell-tiled"),
 ]
 
 

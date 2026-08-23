@@ -74,6 +74,9 @@ while i < argv.count {
     case "--warmup": cfg.warmup = u32(need(a))
     case "--seed":   cfg.seed = u32(need(a))
     case "--threads": cfg.threads = u32(need(a))
+    // Spatial ordering of the agent arrays; the argument is how many
+    // ticks between re-sorts. 0 keeps creation order.
+    case "--agent-tile": cfg.agentTile = u32(need(a))
     case "--hash-every": cfg.hashEvery = u32(need(a))
     case "--sensor-steps": cfg.sensorSteps = u32(need(a))
     case "--rot-steps": cfg.rotSteps = u32(need(a))

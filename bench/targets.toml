@@ -75,6 +75,65 @@ extra_args = ["--simd-agents", "--agent-tile", "2"]
 updates  = ["deferred"]
 
 [[target]]
+# Four more, and the question they answer is whether the factor survives a
+# runtime that compiles while it runs and one whose idiom is not a mutable
+# array. It does: the JIT languages gain more than C does, not less.
+id       = "java-tiled"
+lang     = "Java"
+backend  = "scalar"
+class    = "V"
+dir      = "impl/java"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["javac"]
+profiles  = ["default"]
+extra_args = ["--agent-tile", "2"]
+updates  = ["deferred"]
+
+[[target]]
+id       = "csharp-tiled"
+lang     = "C#"
+backend  = "scalar"
+class    = "V"
+dir      = "impl/csharp"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["dotnet"]
+profiles  = ["jit"]
+extra_args = ["--agent-tile", "2"]
+updates  = ["deferred"]
+
+[[target]]
+id       = "swift-tiled"
+lang     = "Swift"
+backend  = "scalar"
+class    = "V"
+dir      = "impl/swift"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["swift"]
+profiles  = ["unchecked"]
+extra_args = ["--agent-tile", "2"]
+updates  = ["deferred"]
+
+[[target]]
+id       = "haskell-tiled"
+lang     = "Haskell"
+backend  = "scalar"
+class    = "V"
+dir      = "impl/haskell"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["ghc"]
+profiles  = ["o2-llvm"]
+extra_args = ["--agent-tile", "2"]
+updates  = ["deferred"]
+
+[[target]]
 # The same spatial ordering in C++ and in Rust. Three languages doing the same
 # thing to the same bottleneck: the interesting number is not any one of them
 # but whether the factor survives a different memory model and a different

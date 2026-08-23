@@ -47,6 +47,10 @@ public struct Config {
     public var warmup: UInt32 = 0
     public var seed: UInt32 = 12345
     public var threads: UInt32 = 1
+    /// Ticks between spatial re-sorts of the agent arrays; 0 = never.
+    /// See `agentSort` -- it changes which agent sits where, not what
+    /// any of them computes.
+    public var agentTile: UInt32 = 0
     public var update: Update = .serial
     public var reduce: Reduce = .binned
     public var sensorDist: Float = 9.0
@@ -121,6 +125,19 @@ public final class Sim {
     public var adir: [UInt16]
     public var arng: [UInt32]
 
+    /// Spatial ordering (`Config.agentTile`). `aid[j]` is the original index
+    /// of the agent now in slot j and `slot[a]` is its inverse; everything
+    /// that has to speak in agent indices rather than slots -- the deposit,
+    /// the agent hash -- goes through one of them. Empty when ordering is off.
+    public var aid: [UInt32] = []
+    public var slot: [UInt32] = []
+    var agentIdx: [Int32] = []
+    var sortKey: [UInt32] = []
+    var sortF32: [Float] = []
+    var sortU32: [UInt32] = []
+    var sortU16: [UInt16] = []
+    var ticksDone: UInt32 = 0
+
     let cosT: [Float]
     let sinT: [Float]
 
@@ -149,6 +166,15 @@ public final class Sim {
         ay = [Float](repeating: 0, count: n)
         adir = [UInt16](repeating: 0, count: n)
         arng = [UInt32](repeating: 0, count: n * 4)
+        if cfg.agentTile > 0 {
+            aid = (0..<UInt32(n)).map { $0 }
+            slot = aid
+            agentIdx = [Int32](repeating: 0, count: n)
+            sortKey = [UInt32](repeating: 0, count: n)
+            sortF32 = [Float](repeating: 0, count: n)
+            sortU32 = [UInt32](repeating: 0, count: n * 4)
+            sortU16 = [UInt16](repeating: 0, count: n)
+        }
         cosT = COS_BITS.map { Float(bitPattern: $0) }
         sinT = SIN_BITS.map { Float(bitPattern: $0) }
 
@@ -181,9 +207,71 @@ public final class Sim {
     }
 
     /// SPEC-1 section 5.2.
+    /// A counting sort of the agent arrays into 8x8 tiles of the grid, so
+    /// that three sensor reads of neighbouring agents land in neighbouring
+    /// cache lines. impl/c/sb_core.c carries the measurement behind the tile
+    /// size; this is the same algorithm.
+    func agentSort() {
+        let tileShift: UInt32 = 3          // 8x8 cells
+        let n = Int(cfg.agents)
+        let tw = (cfg.width + (1 << tileShift) - 1) >> tileShift
+        let th = (cfg.height + (1 << tileShift) - 1) >> tileShift
+
+        var count = [UInt32](repeating: 0, count: Int(tw) * Int(th) + 1)
+        for j in 0..<n {
+            let x = UInt32(ax[j]) & xmask
+            let y = UInt32(ay[j]) & ymask
+            let k = (y >> tileShift) * tw + (x >> tileShift)
+            sortKey[j] = k
+            count[Int(k) + 1] += 1
+        }
+        for t in 1..<count.count { count[t] += count[t - 1] }
+
+        // Stable: walking the agents in their current order keeps a re-sort
+        // cheap when almost nothing has moved.
+        for j in 0..<n {
+            let k = Int(sortKey[j])
+            let dst = Int(count[k])
+            count[k] += 1
+            sortF32[dst] = ax[j]
+            sortU16[dst] = adir[j]
+            for w in 0..<4 { sortU32[dst * 4 + w] = arng[j * 4 + w] }
+            sortKey[j] = UInt32(dst)       // reused as the permutation
+        }
+        swap(&ax, &sortF32)
+        swap(&adir, &sortU16)
+        swap(&arng, &sortU32)
+        for j in 0..<n { sortF32[Int(sortKey[j])] = ay[j] }
+        swap(&ay, &sortF32)
+        for j in 0..<n { sortU32[Int(sortKey[j])] = aid[j] }
+        for j in 0..<n { aid[j] = sortU32[j] }
+        for j in 0..<n { slot[Int(aid[j])] = UInt32(j) }
+    }
+
     public func tick() {
+        // Re-sort inside the timed region, not beside it: the ordering is only
+        // worth having if it pays for itself.
+        if cfg.agentTile > 0 && ticksDone % cfg.agentTile == 0 { agentSort() }
+        ticksDone += 1
+
         let t0 = DispatchTime.now().uptimeNanoseconds
-        agentRange(0, Int(cfg.agents), nil)
+        if !aid.isEmpty {
+            // With spatial ordering the step order is no longer the agent
+            // order, so the deposits are buffered and applied afterwards in
+            // ascending *agent* index -- the same order, and therefore the
+            // same floats, as the direct loop.
+            let n = Int(cfg.agents)
+            agentIdx.withUnsafeMutableBufferPointer { buf in
+                agentRange(0, n, buf.baseAddress)
+            }
+            let d = cfg.deposit
+            for a in 0..<n {
+                let idx = Int(agentIdx[Int(slot[a])])
+                if hasDep { dep[idx] = dep[idx] + d } else { grid[idx] = grid[idx] + d }
+            }
+        } else {
+            agentRange(0, Int(cfg.agents), nil)
+        }
         let t1 = DispatchTime.now().uptimeNanoseconds
 
         if hasDep { mergeRows(0, Int(cfg.height)) }
@@ -333,7 +421,11 @@ public final class Sim {
 
     public func hashAgents() -> UInt32 {
         var h = FNV_OFFSET
-        for i in 0..<Int(cfg.agents) {
+        // In agent order, which is slot order only when the arrays have not
+        // been spatially re-sorted. A checksum that changed with a performance
+        // flag would defeat the point of having one.
+        for a in 0..<Int(cfg.agents) {
+            let i = slot.isEmpty ? a : Int(slot[a])
             h = (h ^ ax[i].bitPattern) &* FNV_PRIME
             h = (h ^ ay[i].bitPattern) &* FNV_PRIME
             h = (h ^ UInt32(adir[i])) &* FNV_PRIME

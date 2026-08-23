@@ -52,10 +52,10 @@ module Sim
   , specVersion
   ) where
 
-import Control.Monad (forM_)
+import Control.Monad (forM_, when)
 import Data.Array.Base (unsafeAt, unsafeRead, unsafeWrite)
 import Data.Array.Unboxed (UArray, (!))
-import Data.Array.IO (IOUArray, getElems, newArray)
+import Data.Array.IO (IOUArray, getElems, newArray, newListArray)
 import Data.Bits (shiftL, shiftR, xor, (.&.), (.|.))
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Word (Word32, Word64, Word8)
@@ -83,6 +83,10 @@ data Config = Config
   , cfgWarmup      :: !Int
   , cfgSeed        :: !Word32
   , cfgThreads     :: !Int
+  -- | Ticks between spatial re-sorts of the agent arrays; 0 = never.
+  -- See 'agentSort' -- it changes which agent sits where, not what any
+  -- of them computes.
+  , cfgAgentTile   :: !Int
   , cfgUpdate      :: !Update
   , cfgSensorDist  :: !Float
   , cfgStep        :: !Float
@@ -98,6 +102,7 @@ defaultConfig :: Config
 defaultConfig = Config
   { cfgWidth = 1024, cfgHeight = 1024, cfgAgents = 262144
   , cfgTicks = 1000, cfgWarmup = 0, cfgSeed = 12345, cfgThreads = 1
+  , cfgAgentTile = 0
   , cfgUpdate = Serial
   , cfgSensorDist = 9.0, cfgStep = 1.0, cfgDeposit = 10.0, cfgDecay = 0.94
   , cfgSensorSteps = 144, cfgRotSteps = 144
@@ -116,8 +121,26 @@ data Sim = Sim
   , simAy      :: !(IOUArray Int Float)
   , simAdir    :: !(IOUArray Int Int)
   , simArng    :: !(IOUArray Int Word32)
+  -- | Spatial ordering ('cfgAgentTile'). 'Nothing' when it is off.
+  , simOrder   :: !(Maybe Order)
+  , simTicks   :: !(IORef Int)
   , simNsAgent :: !(IORef Word64)
   , simNsDiff  :: !(IORef Word64)
+  }
+
+-- | The arrays spatial ordering needs. @ordAid[j]@ is the original index of
+-- the agent now in slot j and @ordSlot[a]@ is its inverse; everything that has
+-- to speak in agent indices rather than slots -- the deposit, the agent hash
+-- -- goes through one of them. The rest is staging for the counting sort,
+-- allocated once so a re-sort costs no allocation at all.
+data Order = Order
+  { ordAid  :: !(IOUArray Int Word32)
+  , ordSlot :: !(IOUArray Int Word32)
+  , ordIdx  :: !(IOUArray Int Int)
+  , ordKey  :: !(IOUArray Int Int)
+  , ordF32  :: !(IOUArray Int Float)
+  , ordU32  :: !(IOUArray Int Word32)
+  , ordDir  :: !(IOUArray Int Int)
   }
 
 -- ---- PRNG (SPEC-1 section 3.1) -------------------------------------------
@@ -241,12 +264,23 @@ newSim cfg@Config{..} = do
 
   gridRef <- newIORef grid
   scratchRef <- newIORef scratch
+  ticksRef <- newIORef 0
+  order <- if cfgAgentTile <= 0 then pure Nothing else do
+    aidA  <- newListArray (0, cfgAgents - 1) [0 .. fromIntegral cfgAgents - 1]
+    slotA <- newListArray (0, cfgAgents - 1) [0 .. fromIntegral cfgAgents - 1]
+    idxA  <- newArray (0, cfgAgents - 1) 0
+    keyA  <- newArray (0, cfgAgents - 1) 0
+    f32A  <- newArray (0, cfgAgents - 1) 0
+    u32A  <- newArray (0, cfgAgents * 4 - 1) 0
+    dirA  <- newArray (0, cfgAgents - 1) 0
+    pure (Just (Order aidA slotA idxA keyA f32A u32A dirA))
   nsA <- newIORef 0
   nsD <- newIORef 0
   pure Sim
     { simCfg = cfg, simLog2w = log2w, simXmask = xmask, simYmask = ymask
     , simGrid = gridRef, simScratch = scratchRef, simDep = dep
     , simAx = ax, simAy = ay, simAdir = adir, simArng = arng
+    , simOrder = order, simTicks = ticksRef
     , simNsAgent = nsA, simNsDiff = nsD
     }
 
@@ -255,10 +289,133 @@ countLog2 v = go 0 where go !n = if (1 `shiftL` n) >= v then n else go (n + 1)
 
 -- ---- tick -----------------------------------------------------------------
 
+-- | A counting sort of the agent arrays into 8x8 tiles of the grid, so that
+-- three sensor reads of neighbouring agents land in neighbouring cache lines.
+-- impl/c/sb_core.c carries the measurement behind the tile size; this is the
+-- same algorithm, on mutable unboxed arrays that are copied back rather than
+-- swapped, because the record fields are strict and shared.
+agentSort :: Sim -> Order -> IO ()
+agentSort Sim{..} Order{..} = do
+  let !n = cfgAgents simCfg
+      !tileShift = 3 :: Int
+      !tw = (cfgWidth simCfg + (1 `shiftL` tileShift) - 1) `shiftR` tileShift
+      !th = (cfgHeight simCfg + (1 `shiftL` tileShift) - 1) `shiftR` tileShift
+  count <- newArray (0, tw * th) 0 :: IO (IOUArray Int Int)
+  let keys !j
+        | j >= n = pure ()
+        | otherwise = do
+            !x <- unsafeRead simAx j
+            !y <- unsafeRead simAy j
+            let !xi = truncate x .&. simXmask
+                !yi = truncate y .&. simYmask
+                !k = (yi `shiftR` tileShift) * tw + (xi `shiftR` tileShift)
+            unsafeWrite ordKey j k
+            !c <- unsafeRead count k
+            unsafeWrite count k (c + 1)
+            keys (j + 1)
+  keys 0
+  -- Exclusive prefix sum, in place: count[k] becomes the first output slot of
+  -- tile k.
+  let scan !k !acc
+        | k > tw * th - 1 = pure ()
+        | otherwise = do
+            !c <- unsafeRead count k
+            unsafeWrite count k acc
+            scan (k + 1) (acc + c)
+  scan 0 0
+  -- Stable: walking the agents in their current order keeps a re-sort cheap
+  -- when almost nothing has moved.
+  let place !j
+        | j >= n = pure ()
+        | otherwise = do
+            !k <- unsafeRead ordKey j
+            !dst <- unsafeRead count k
+            unsafeWrite count k (dst + 1)
+            unsafeRead simAx j >>= unsafeWrite ordF32 dst
+            unsafeRead simAdir j >>= unsafeWrite ordDir dst
+            let cp !w | w >= 4 = pure ()
+                      | otherwise = do
+                          !v <- unsafeRead simArng (j * 4 + w)
+                          unsafeWrite ordU32 (dst * 4 + w) v
+                          cp (w + 1)
+            cp 0
+            unsafeWrite ordKey j dst      -- reused as the permutation
+            place (j + 1)
+  place 0
+  let copyBack !j
+        | j >= n = pure ()
+        | otherwise = do
+            unsafeRead ordF32 j >>= unsafeWrite simAx j
+            unsafeRead ordDir j >>= unsafeWrite simAdir j
+            let cp !w | w >= 4 = pure ()
+                      | otherwise = do
+                          !v <- unsafeRead ordU32 (j * 4 + w)
+                          unsafeWrite simArng (j * 4 + w) v
+                          cp (w + 1)
+            cp 0
+            copyBack (j + 1)
+  copyBack 0
+  let permY !j
+        | j >= n = pure ()
+        | otherwise = do
+            !d <- unsafeRead ordKey j
+            unsafeRead simAy j >>= unsafeWrite ordF32 d
+            permY (j + 1)
+  permY 0
+  let backY !j
+        | j >= n = pure ()
+        | otherwise = unsafeRead ordF32 j >>= unsafeWrite simAy j >> backY (j + 1)
+  backY 0
+  let permId !j
+        | j >= n = pure ()
+        | otherwise = do
+            !d <- unsafeRead ordKey j
+            unsafeRead ordAid j >>= unsafeWrite ordU32 d
+            permId (j + 1)
+  permId 0
+  let backId !j
+        | j >= n = pure ()
+        | otherwise = do
+            !v <- unsafeRead ordU32 j
+            unsafeWrite ordAid j v
+            unsafeWrite ordSlot (fromIntegral v) (fromIntegral j)
+            backId (j + 1)
+  backId 0
+
 tick :: Sim -> IO ()
 tick sim@Sim{..} = do
+  -- Re-sort inside the timed region, not beside it: the ordering is only
+  -- worth having if it pays for itself.
+  case simOrder of
+    Nothing -> pure ()
+    Just o -> do
+      !t <- readIORef simTicks
+      when (t `mod` cfgAgentTile simCfg == 0) (agentSort sim o)
+      writeIORef simTicks (t + 1)
+
   !t0 <- nowNs
-  agentPass sim
+  case simOrder of
+    Nothing -> agentPass sim
+    Just o -> do
+      -- With spatial ordering the step order is no longer the agent order, so
+      -- the deposits are buffered and applied afterwards in ascending *agent*
+      -- index -- the same order, and therefore the same floats, as the direct
+      -- loop.
+      let !n = cfgAgents simCfg
+          !d = cfgDeposit simCfg
+      agentRange sim 0 n (Just (ordIdx o))
+      target <- case simDep of
+                  Just dep -> pure dep
+                  Nothing  -> readIORef simGrid
+      let dep !a
+            | a >= n = pure ()
+            | otherwise = do
+                !sl <- unsafeRead (ordSlot o) a
+                !idx <- unsafeRead (ordIdx o) (fromIntegral sl)
+                !cur <- unsafeRead target idx
+                unsafeWrite target idx (cur + d)
+                dep (a + 1)
+      dep 0
   !t1 <- nowNs
 
   case simDep of
@@ -458,19 +615,31 @@ hashGrid Sim{..} = do
             go (i + 1) ((h `xor` castFloatToWord32 v) * fnvPrime)
   go 0 fnvOffset
 
+-- | In agent order, which is slot order only when the arrays have not been
+-- spatially re-sorted. A checksum that changed with a performance flag would
+-- defeat the point of having one.
 hashAgents :: Sim -> IO Word32
 hashAgents Sim{..} = do
   let !n = cfgAgents simCfg
-      go !i !h
-        | i >= n = pure h
+      go !a !h
+        | a >= n = pure h
         | otherwise = do
+            !i <- case simOrder of
+                    Nothing -> pure a
+                    Just o  -> fromIntegral <$> unsafeRead (ordSlot o) a
             !x <- unsafeRead simAx i
             !y <- unsafeRead simAy i
             !d <- unsafeRead simAdir i
             let !h1 = (h `xor` castFloatToWord32 x) * fnvPrime
                 !h2 = (h1 `xor` castFloatToWord32 y) * fnvPrime
                 !h3 = (h2 `xor` fromIntegral d) * fnvPrime
-            go (i + 1) h3
+            -- `a + 1`, not `i + 1`: the loop walks agents, and `i` is the
+            -- slot that agent currently sits in. Recursing on the slot walked
+            -- a permutation of the agents instead of the agents, which the
+            -- separate agent hash caught immediately -- the grid hash was
+            -- right, so the deposits were right, so it could only be the
+            -- checksum itself. SPEC-1 6.3 keeps the two apart for this.
+            go (a + 1) h3
   go 0 fnvOffset
 
 dirtableHashRuntime :: Word32
