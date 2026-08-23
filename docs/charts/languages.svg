@@ -20,87 +20,87 @@
 
 <text x="16" y="22" class="ttl">Class S: one thread, one core</text>
 <text x="16" y="39" class="sub">256x256, 16 384 agents, serial update. Log scale -- the range is 500x.</text>
-<line x1="210.1" y1="44" x2="210.1" y2="686" class="grid"/>
-<text x="210.1" y="700" class="lbl-s" text-anchor="middle">0.2</text>
-<line x1="273.3" y1="44" x2="273.3" y2="686" class="grid"/>
-<text x="273.3" y="700" class="lbl-s" text-anchor="middle">0.5</text>
-<line x1="321.2" y1="44" x2="321.2" y2="686" class="grid"/>
-<text x="321.2" y="700" class="lbl-s" text-anchor="middle">1</text>
-<line x1="369.0" y1="44" x2="369.0" y2="686" class="grid"/>
-<text x="369.0" y="700" class="lbl-s" text-anchor="middle">2</text>
-<line x1="432.2" y1="44" x2="432.2" y2="686" class="grid"/>
-<text x="432.2" y="700" class="lbl-s" text-anchor="middle">5</text>
-<line x1="480.1" y1="44" x2="480.1" y2="686" class="grid"/>
-<text x="480.1" y="700" class="lbl-s" text-anchor="middle">10</text>
-<line x1="527.9" y1="44" x2="527.9" y2="686" class="grid"/>
-<text x="527.9" y="700" class="lbl-s" text-anchor="middle">20</text>
-<line x1="591.2" y1="44" x2="591.2" y2="686" class="grid"/>
-<text x="591.2" y="700" class="lbl-s" text-anchor="middle">50</text>
-<line x1="639.0" y1="44" x2="639.0" y2="686" class="grid"/>
-<text x="639.0" y="700" class="lbl-s" text-anchor="middle">100</text>
+<line x1="216.2" y1="44" x2="216.2" y2="686" class="grid"/>
+<text x="216.2" y="700" class="lbl-s" text-anchor="middle">0.2</text>
+<line x1="279.5" y1="44" x2="279.5" y2="686" class="grid"/>
+<text x="279.5" y="700" class="lbl-s" text-anchor="middle">0.5</text>
+<line x1="327.3" y1="44" x2="327.3" y2="686" class="grid"/>
+<text x="327.3" y="700" class="lbl-s" text-anchor="middle">1</text>
+<line x1="375.2" y1="44" x2="375.2" y2="686" class="grid"/>
+<text x="375.2" y="700" class="lbl-s" text-anchor="middle">2</text>
+<line x1="438.4" y1="44" x2="438.4" y2="686" class="grid"/>
+<text x="438.4" y="700" class="lbl-s" text-anchor="middle">5</text>
+<line x1="486.2" y1="44" x2="486.2" y2="686" class="grid"/>
+<text x="486.2" y="700" class="lbl-s" text-anchor="middle">10</text>
+<line x1="534.1" y1="44" x2="534.1" y2="686" class="grid"/>
+<text x="534.1" y="700" class="lbl-s" text-anchor="middle">20</text>
+<line x1="597.3" y1="44" x2="597.3" y2="686" class="grid"/>
+<text x="597.3" y="700" class="lbl-s" text-anchor="middle">50</text>
+<line x1="645.2" y1="44" x2="645.2" y2="686" class="grid"/>
+<text x="645.2" y="700" class="lbl-s" text-anchor="middle">100</text>
 <text x="430" y="712" class="lbl-s" text-anchor="middle">ms per tick (log)</text>
 <text x="180" y="69" class="lbl" text-anchor="end">C clang</text>
 <rect x="190" y="52" width="32.4" height="24" rx="2" fill="#4c78a8"/>
-<text x="230.4" y="69" class="lbl-s">0.24  tier A</text>
-<text x="180" y="99" class="lbl" text-anchor="end">C gcc</text>
-<rect x="190" y="82" width="34.2" height="24" rx="2" fill="#4c78a8"/>
-<text x="232.2" y="99" class="lbl-s">0.25  tier A</text>
-<text x="180" y="129" class="lbl" text-anchor="end">C++ clang++</text>
-<rect x="190" y="112" width="34.8" height="24" rx="2" fill="#f58518"/>
-<text x="232.8" y="129" class="lbl-s">0.25  tier A</text>
-<text x="180" y="159" class="lbl" text-anchor="end">Haskell</text>
-<rect x="190" y="142" width="36.5" height="24" rx="2" fill="#b279a2"/>
-<text x="234.5" y="159" class="lbl-s">0.25  tier A</text>
-<text x="180" y="189" class="lbl" text-anchor="end">C++ g++</text>
-<rect x="190" y="172" width="36.6" height="24" rx="2" fill="#f58518"/>
-<text x="234.6" y="189" class="lbl-s">0.25  tier A</text>
-<text x="180" y="219" class="lbl" text-anchor="end">Python numba</text>
-<rect x="190" y="202" width="41.5" height="24" rx="2" fill="#72b7b2"/>
-<text x="239.5" y="219" class="lbl-s">0.27  tier A</text>
-<text x="180" y="249" class="lbl" text-anchor="end">Swift</text>
-<rect x="190" y="232" width="42.0" height="24" rx="2" fill="#4c78a8"/>
-<text x="240.0" y="249" class="lbl-s">0.27  tier A</text>
+<text x="230.4" y="69" class="lbl-s">0.22  tier A</text>
+<text x="180" y="99" class="lbl" text-anchor="end">C++ clang++</text>
+<rect x="190" y="82" width="33.1" height="24" rx="2" fill="#f58518"/>
+<text x="231.1" y="99" class="lbl-s">0.22  tier A</text>
+<text x="180" y="129" class="lbl" text-anchor="end">C gcc</text>
+<rect x="190" y="112" width="35.1" height="24" rx="2" fill="#4c78a8"/>
+<text x="233.1" y="129" class="lbl-s">0.23  tier A</text>
+<text x="180" y="159" class="lbl" text-anchor="end">C++ g++</text>
+<rect x="190" y="142" width="35.1" height="24" rx="2" fill="#f58518"/>
+<text x="233.1" y="159" class="lbl-s">0.23  tier A</text>
+<text x="180" y="189" class="lbl" text-anchor="end">Haskell</text>
+<rect x="190" y="172" width="38.0" height="24" rx="2" fill="#b279a2"/>
+<text x="236.0" y="189" class="lbl-s">0.24  tier A</text>
+<text x="180" y="219" class="lbl" text-anchor="end">Swift</text>
+<rect x="190" y="202" width="40.9" height="24" rx="2" fill="#4c78a8"/>
+<text x="238.9" y="219" class="lbl-s">0.25  tier A</text>
+<text x="180" y="249" class="lbl" text-anchor="end">Python numba</text>
+<rect x="190" y="232" width="42.4" height="24" rx="2" fill="#72b7b2"/>
+<text x="240.4" y="249" class="lbl-s">0.25  tier A</text>
 <text x="180" y="279" class="lbl" text-anchor="end">Java</text>
-<rect x="190" y="262" width="44.0" height="24" rx="2" fill="#4c78a8"/>
-<text x="242.0" y="279" class="lbl-s">0.28  tier A</text>
+<rect x="190" y="262" width="43.4" height="24" rx="2" fill="#4c78a8"/>
+<text x="241.4" y="279" class="lbl-s">0.26  tier A</text>
 <text x="180" y="309" class="lbl" text-anchor="end">Rust unchecked</text>
-<rect x="190" y="292" width="44.8" height="24" rx="2" fill="#54a24b"/>
-<text x="242.8" y="309" class="lbl-s">0.29  tier A</text>
+<rect x="190" y="292" width="45.7" height="24" rx="2" fill="#54a24b"/>
+<text x="243.7" y="309" class="lbl-s">0.27  tier A</text>
 <text x="180" y="339" class="lbl" text-anchor="end">Go</text>
-<rect x="190" y="322" width="47.2" height="24" rx="2" fill="#4c78a8"/>
-<text x="245.2" y="339" class="lbl-s">0.30  tier A</text>
+<rect x="190" y="322" width="48.7" height="24" rx="2" fill="#4c78a8"/>
+<text x="246.7" y="339" class="lbl-s">0.28  tier A</text>
 <text x="180" y="369" class="lbl" text-anchor="end">C#</text>
-<rect x="190" y="352" width="52.5" height="24" rx="2" fill="#4c78a8"/>
-<text x="250.5" y="369" class="lbl-s">0.32  tier A</text>
+<rect x="190" y="352" width="52.4" height="24" rx="2" fill="#4c78a8"/>
+<text x="250.4" y="369" class="lbl-s">0.29  tier A</text>
 <text x="180" y="399" class="lbl" text-anchor="end">Rust safe</text>
-<rect x="190" y="382" width="53.1" height="24" rx="2" fill="#54a24b"/>
-<text x="251.1" y="399" class="lbl-s">0.32  tier A</text>
+<rect x="190" y="382" width="53.4" height="24" rx="2" fill="#54a24b"/>
+<text x="251.4" y="399" class="lbl-s">0.30  tier A</text>
 <text x="180" y="429" class="lbl" text-anchor="end">Fortran</text>
-<rect x="190" y="412" width="54.8" height="24" rx="2" fill="#4c78a8"/>
-<text x="252.8" y="429" class="lbl-s">0.33  tier A</text>
+<rect x="190" y="412" width="54.5" height="24" rx="2" fill="#4c78a8"/>
+<text x="252.5" y="429" class="lbl-s">0.30  tier A</text>
 <text x="180" y="459" class="lbl" text-anchor="end">OCaml f64</text>
-<rect x="190" y="442" width="62.5" height="24" rx="2" fill="#4c78a8"/>
-<text x="260.5" y="459" class="lbl-s">0.37  tier B</text>
+<rect x="190" y="442" width="62.2" height="24" rx="2" fill="#4c78a8"/>
+<text x="260.2" y="459" class="lbl-s">0.34  tier B</text>
 <text x="180" y="489" class="lbl" text-anchor="end">TypeScript</text>
-<rect x="190" y="472" width="108.0" height="24" rx="2" fill="#e45756"/>
-<text x="306.0" y="489" class="lbl-s">0.71  tier A</text>
+<rect x="190" y="472" width="107.9" height="24" rx="2" fill="#e45756"/>
+<text x="305.9" y="489" class="lbl-s">0.65  tier A</text>
 <text x="180" y="519" class="lbl" text-anchor="end">OCaml strict-f32</text>
-<rect x="190" y="502" width="131.6" height="24" rx="2" fill="#4c78a8"/>
-<text x="329.6" y="519" class="lbl-s">1.01  tier A</text>
+<rect x="190" y="502" width="132.3" height="24" rx="2" fill="#4c78a8"/>
+<text x="330.3" y="519" class="lbl-s">0.93  tier A</text>
 <text x="180" y="549" class="lbl" text-anchor="end">Lean</text>
-<rect x="190" y="532" width="164.4" height="24" rx="2" fill="#4c78a8"/>
-<text x="362.4" y="549" class="lbl-s">1.62  tier A</text>
+<rect x="190" y="532" width="163.8" height="24" rx="2" fill="#4c78a8"/>
+<text x="361.8" y="549" class="lbl-s">1.47  tier A</text>
 <text x="180" y="579" class="lbl" text-anchor="end">Perl plain</text>
-<rect x="190" y="562" width="388.4" height="24" rx="2" fill="#eeca3b"/>
-<text x="586.4" y="579" class="lbl-s">42  tier B</text>
+<rect x="190" y="562" width="388.7" height="24" rx="2" fill="#eeca3b"/>
+<text x="586.7" y="579" class="lbl-s">38  tier B</text>
 <text x="180" y="609" class="lbl" text-anchor="end">Python pure</text>
-<rect x="190" y="592" width="390.5" height="24" rx="2" fill="#72b7b2"/>
-<text x="588.5" y="609" class="lbl-s">43  tier B</text>
+<rect x="190" y="592" width="388.8" height="24" rx="2" fill="#72b7b2"/>
+<text x="586.8" y="609" class="lbl-s">38  tier B</text>
 <text x="180" y="639" class="lbl" text-anchor="end">Python pure-strict</text>
-<rect x="190" y="622" width="444.2" height="24" rx="2" fill="#72b7b2"/>
-<text x="642.2" y="639" class="lbl-s">93  tier A</text>
+<rect x="190" y="622" width="445.4" height="24" rx="2" fill="#72b7b2"/>
+<text x="643.4" y="639" class="lbl-s">87  tier A</text>
 <text x="180" y="669" class="lbl" text-anchor="end">Perl strict-f32</text>
 <rect x="190" y="652" width="470.4" height="24" rx="2" fill="#eeca3b"/>
-<text x="668.4" y="669" class="lbl-s">136  tier A</text>
+<text x="668.4" y="669" class="lbl-s">125  tier A</text>
 <line x1="190" y1="44" x2="190" y2="686" class="axis"/>
 </svg>

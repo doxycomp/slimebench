@@ -88,6 +88,9 @@ parseArgs = go (Opts defaultConfig False Nothing Binned)
       "--warmup"       -> upd rest o (\c -> c { cfgWarmup = readI v })
       "--seed"         -> upd rest o (\c -> c { cfgSeed = fromIntegral (readI v) })
       "--threads"      -> upd rest o (\c -> c { cfgThreads = readI v })
+      -- Spatial ordering of the agent arrays; the argument is how many
+      -- ticks between re-sorts. 0 keeps creation order.
+      "--agent-tile"   -> upd rest o (\c -> c { cfgAgentTile = readI v })
       "--hash-every"   -> upd rest o (\c -> c { cfgHashEvery = readI v })
       "--sensor-steps" -> upd rest o (\c -> c { cfgSensorSteps = readI v })
       "--rot-steps"    -> upd rest o (\c -> c { cfgRotSteps = readI v })

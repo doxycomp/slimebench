@@ -1,0 +1,17 @@
+{"table": "ramp-dotnet", "block": "1-5", "csharp_jit": 1.01, "csharp_tier1": 0.944, "csharp_aot": 0.446}
+{"table": "ramp-dotnet", "block": "6-10", "csharp_jit": 0.426, "csharp_tier1": 0.359, "csharp_aot": 0.369}
+{"table": "ramp-dotnet", "block": "11-25", "csharp_jit": 0.367, "csharp_tier1": 0.309, "csharp_aot": 0.313}
+{"table": "ramp-dotnet", "block": "26-50", "csharp_jit": 0.35, "csharp_tier1": 0.302, "csharp_aot": 0.302}
+{"table": "ramp-dotnet", "block": "51-100", "csharp_jit": 0.36, "csharp_tier1": 0.292, "csharp_aot": 0.303}
+{"table": "ramp-dotnet", "block": "101-200", "csharp_jit": 0.357, "csharp_tier1": 0.299, "csharp_aot": 0.311}
+{"table": "ramp-dotnet", "block": "201-300", "csharp_jit": 0.342, "csharp_tier1": 0.288, "csharp_aot": 0.297}
+{"table": "ramp-dotnet", "block": "first tick", "csharp_jit": 3.136, "csharp_tier1": 3.025, "csharp_aot": 0.527}
+{"table": "ramp-dotnet", "block": "best tick", "csharp_jit": 0.329, "csharp_tier1": 0.272, "csharp_aot": 0.281}
+{"table": "ramp-dotnet", "block": "first/best", "csharp_jit": 9.5, "csharp_tier1": 11.1, "csharp_aot": 1.9}
+{"table": "ship", "profile": "jit", "size": "156K", "start_ms": 30.8}
+{"table": "ship", "profile": "tier1", "size": "156K", "start_ms": 34.6}
+{"table": "ship", "profile": "r2r", "size": "80M", "start_ms": 21.2}
+{"table": "ship", "profile": "aot", "size": "3.8M", "start_ms": 3.9}
+{"table": "branchy", "profile": "tier1", "ms_agents": 739.45, "spread": 0.0096, "ms_diffuse": 102.85, "reps": 5}
+{"table": "branchy", "profile": "aot", "ms_agents": 756.32, "spread": 0.0247, "ms_diffuse": 84.53, "reps": 5}
+{"table": "branchy", "profile": "aot-native", "ms_agents": 740.52, "spread": 0.0249, "ms_diffuse": 82.79, "reps": 5}

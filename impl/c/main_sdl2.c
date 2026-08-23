@@ -44,7 +44,9 @@ int main(int argc, char **argv) {
 
     SDL_Window *win = SDL_CreateWindow(
         "slimebench -- C / SDL2", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        (int)cfg.width, (int)cfg.height, SDL_WINDOW_SHOWN);
+        (int)cfg.width, (int)cfg.height,
+        SDL_WINDOW_SHOWN | (opt.fullscreen
+                            ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0u));
     SDL_Renderer *ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED);
     SDL_Texture *tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ARGB8888,
                                          SDL_TEXTUREACCESS_STREAMING,

@@ -6,6 +6,11 @@
 #include "sb_core.h"
 
 typedef struct {
+    /* Machine verification, not measurement: see impl/c/sb_verify.h.
+     * --emit-chain records what a healthy machine produces; --verify checks
+     * this one against such a record. */
+    const char *emit_chain;
+    const char *verify_chain;
     int want_render;      /* --render */
     int want_json;        /* --json   */
     /* Render benchmarks only: keep re-uploading the same grid so the
@@ -17,6 +22,11 @@ typedef struct {
      * under --json, because drawing it is work the class R number should
      * not include. -1 means 'not asked for either way'. */
     int want_hud;
+    /* Windowed frontends only. Desktop fullscreen rather than a mode
+     * change: the grid size is the simulation's, not the monitor's, and
+     * changing the display mode to match it would be a different
+     * program. */
+    int fullscreen;
 } sb_cli_opts;
 
 /* Returns 0 on success, 2 on a usage error (message already on stderr). */

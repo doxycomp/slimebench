@@ -1,0 +1,50 @@
+# host: Linux 6.18.33.2-microsoft-standard-WSL2  cores: 32
+# dotnet: 10.0.111
+
+=== A. steady state (256x256/16384, 100 ticks, warmup 50, best of 3)
+target                 grid              ms/tick
+csharp jit             0x89CFFAAC         0.3538
+csharp tier1           0x89CFFAAC         0.2945
+csharp r2r             0x89CFFAAC         0.2988
+csharp aot             0x89CFFAAC         0.3008
+java c2                0x89CFFAAC         0.2573
+c gcc-O3-native        0x89CFFAAC         0.2573
+
+=== B. per-tick milliseconds from cold, no warmup
+ticks              jit     tier1       aot
+1-5              1.010     0.944     0.446
+6-10             0.426     0.359     0.369
+11-25            0.367     0.309     0.313
+26-50            0.350     0.302     0.302
+51-100           0.360     0.292     0.303
+101-200          0.357     0.299     0.311
+201-300          0.342     0.288     0.297
+first tick       3.136     3.025     0.527
+best tick        0.329     0.272     0.281
+first/best        9.5x     11.1x      1.9x
+
+=== C. published size and process start-up (--ticks 0)
+profile            size     start ms
+jit                156K         30.8
+tier1              156K         34.6
+r2r                 80M         21.2
+aot                3.8M          3.9
+
+=== D. straight-line code against branchy code
+   The stencil is nine loads and ten arithmetic operations with no
+   branch in it. The agent pass makes a data-dependent four-way turn
+   decision per agent per tick, which is where profile-guided
+   optimisation should have something to work with. The two are timed
+   separately by every port, so the question needs no new workload.
+
+   how the turn decision actually splits (the reference; every port is
+   bit-identical, so this is a property of the simulation):
+     branch_stats total=13107200 straight=76.64% dead-end=1.30% turn-left=10.96% turn-right=11.11%
+
+  configuration               agents ms     spread   diffuse ms
+  tier1                          739.45       1.0%       102.85
+  aot                            756.32       2.5%        84.53
+  aot-native                     740.52       2.5%        82.79
+
+   If ahead-of-time compilation only kept up on straight-line code, the
+   agents column is where it would show. It does not.

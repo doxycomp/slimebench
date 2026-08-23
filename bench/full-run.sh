@@ -230,7 +230,7 @@ done
 # answer, not four.
 python3 bench/run.py bench --preset medium --ticks 100 --warmup 20 \
   --reps "$SB_REPS" --update deferred \
-  --targets cpp,cpp-tiled,rust,rust-tiled,go,go-tiled \
+  --targets cpp,cpp-tiled,rust,rust-tiled,go,go-tiled,java,java-tiled,csharp,csharp-tiled,swift,swift-tiled,haskell,haskell-tiled \
   --out "$OUT/G-agents.jsonl" --append || true
 
 # The four-way kernel comparison, reported as ms_diffuse: the agent pass is
@@ -424,10 +424,16 @@ phase "class G, every preset"
 : > "$OUT/H-gpu.jsonl"
 gpu() { # label cmd...
   local label=$1; shift
+  # argv[0] before the loop: a host that is not built is one missing row, not
+  # five, and it is worth saying once rather than five times or not at all.
+  if [ ! -x "$1" ] && ! command -v "$1" >/dev/null 2>&1; then
+    fail "class G  $label: $1 not built"
+    return
+  fi
   for p in tiny small medium large huge; do
     local j
     j=$(timeout 3600 "$@" --preset "$p" --ticks 100 --update deferred --json 2>/dev/null \
-        | grep -m1 '^{') || continue
+        | grep -m1 '^{') || { fail "class G  $label/$p"; continue; }
     [ -z "$j" ] && continue
     echo "$j" | LBL="$label" python3 -c "
 import sys, json, os
@@ -440,6 +446,12 @@ print(json.dumps(d))" >> "$OUT/H-gpu.jsonl"
 }
 gpu_env_on
 gpu "cuda"        impl/cuda/build/default/slimebench-cuda
+# Vulkan, once per device kind. Three rows on this machine -- NVIDIA, the
+# integrated AMD part and the software rasteriser -- which is the whole
+# reason for a third GPU API: one shader, one interface, three vendors.
+gpu "vulkan-discrete"   impl/vulkan/build/default/slimebench-vk --device discrete
+gpu "vulkan-integrated" impl/vulkan/build/default/slimebench-vk --device integrated
+gpu "vulkan-cpu"        impl/vulkan/build/default/slimebench-vk --device cpu
 if [ "$HAVE_DISPLAY" = 1 ]; then
   gpu "gl43 C"      impl/glcompute/build/default/slimebench-gl
   gpu "gl43 Python" python3 impl/pygl/slimebench_pygl.py

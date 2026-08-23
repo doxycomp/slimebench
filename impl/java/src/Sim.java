@@ -60,6 +60,10 @@ final class Sim {
         int rotSteps = 144;
         int hashEvery = 0;
         boolean simd = false;
+        // Ticks between spatial re-sorts of the agent arrays; 0 = never.
+        // See Sim.agentSort -- it changes which agent sits where, not
+        // what any of them computes.
+        int agentTile = 0;
         String preset = "custom";
     }
 
@@ -73,6 +77,15 @@ final class Sim {
 
     private final float[] cos = new float[Dirtable.NDIR];
     private final float[] sin = new float[Dirtable.NDIR];
+
+    // Spatial ordering (Config.agentTile). aid[j] is the original index of the
+    // agent now in slot j and slot[a] is its inverse; everything that has to
+    // speak in agent indices rather than slots -- the deposit, the agent hash
+    // -- goes through one of them. null when ordering is off.
+    private int[] aid, slot, agentIdx, sortKey, sortU32;
+    private float[] sortF32;
+    private short[] sortU16;
+    private int ticksDone;
 
     long nsAgents, nsDiffuse;
 
@@ -95,6 +108,16 @@ final class Sim {
         ay = new float[c.agents];
         adir = new short[c.agents];
         arng = new int[c.agents * 4];
+        if (c.agentTile > 0) {
+            aid = new int[c.agents];
+            slot = new int[c.agents];
+            agentIdx = new int[c.agents];
+            sortKey = new int[c.agents];
+            sortF32 = new float[c.agents];
+            sortU32 = new int[c.agents * 4];
+            sortU16 = new short[c.agents];
+            for (int i = 0; i < c.agents; i++) { aid[i] = i; slot[i] = i; }
+        }
 
         for (int i = 0; i < Dirtable.NDIR; i++) {
             cos[i] = Float.intBitsToFloat(Dirtable.COS_BITS[i]);
@@ -176,9 +199,71 @@ final class Sim {
 
     // ---- one tick (SPEC-1 section 5.2) ------------------------------------
 
+    /** A counting sort of the agent arrays into 8x8 tiles of the grid, so that
+     * three sensor reads of neighbouring agents land in neighbouring cache
+     * lines. impl/c/sb_core.c carries the measurement behind the tile size;
+     * this is the same algorithm, and what it is worth on a JIT rather than
+     * an ahead-of-time compiler is the question this row answers.
+     *
+     * The arrays are final, so this copies back rather than swapping. */
+    private void agentSort() {
+        final int TILE_SHIFT = 3;               // 8x8 cells
+        final int n = cfg.agents;
+        final int tw = (cfg.width + (1 << TILE_SHIFT) - 1) >>> TILE_SHIFT;
+        final int th = (cfg.height + (1 << TILE_SHIFT) - 1) >>> TILE_SHIFT;
+
+        final int[] count = new int[tw * th + 1];
+        for (int j = 0; j < n; j++) {
+            int x = (int) ax[j] & xmask;
+            int y = (int) ay[j] & ymask;
+            int k = (y >>> TILE_SHIFT) * tw + (x >>> TILE_SHIFT);
+            sortKey[j] = k;
+            count[k + 1]++;
+        }
+        for (int t = 1; t < count.length; t++) count[t] += count[t - 1];
+
+        // Stable: walking the agents in their current order keeps a re-sort
+        // cheap when almost nothing has moved.
+        for (int j = 0; j < n; j++) {
+            int dst = count[sortKey[j]]++;
+            sortF32[dst] = ax[j];
+            sortU16[dst] = adir[j];
+            System.arraycopy(arng, j * 4, sortU32, dst * 4, 4);
+            sortKey[j] = dst;                   // reused as the permutation
+        }
+        System.arraycopy(sortF32, 0, ax, 0, n);
+        System.arraycopy(sortU16, 0, adir, 0, n);
+        System.arraycopy(sortU32, 0, arng, 0, n * 4);
+        for (int j = 0; j < n; j++) sortF32[sortKey[j]] = ay[j];
+        System.arraycopy(sortF32, 0, ay, 0, n);
+        for (int j = 0; j < n; j++) sortU32[sortKey[j]] = aid[j];
+        System.arraycopy(sortU32, 0, aid, 0, n);
+        for (int j = 0; j < n; j++) slot[aid[j]] = j;
+    }
+
     void tick() {
+        // Re-sort inside the timed region, not beside it: the ordering is only
+        // worth having if it pays for itself.
+        if (cfg.agentTile > 0 && ticksDone % cfg.agentTile == 0) agentSort();
+        ticksDone++;
+
         long t0 = System.nanoTime();
-        agentPass(0, cfg.agents);
+        if (aid != null) {
+            // With spatial ordering the step order is no longer the agent
+            // order, so the deposits are buffered and applied afterwards in
+            // ascending *agent* index -- the same order, and therefore the
+            // same floats, as the direct loop.
+            final int n = cfg.agents;
+            agentPass(0, n, agentIdx);
+            final float[] target = (dep != null) ? dep : grid;
+            final float d = cfg.deposit;
+            for (int a = 0; a < n; a++) {
+                int idx = agentIdx[slot[a]];
+                target[idx] = target[idx] + d;
+            }
+        } else {
+            agentPass(0, cfg.agents);
+        }
         long t1 = System.nanoTime();
 
         if (dep != null) mergeRows(0, cfg.height);
@@ -332,7 +417,11 @@ final class Sim {
 
     int hashAgents() {
         int h = FNV_OFFSET;
-        for (int i = 0; i < cfg.agents; i++) {
+        // In agent order, which is slot order only when the arrays have not
+        // been spatially re-sorted. A checksum that changed with a performance
+        // flag would defeat the point of having one.
+        for (int a = 0; a < cfg.agents; a++) {
+            final int i = (slot == null) ? a : slot[a];
             h = (h ^ Float.floatToRawIntBits(ax[i])) * FNV_PRIME;
             h = (h ^ Float.floatToRawIntBits(ay[i])) * FNV_PRIME;
             h = (h ^ (adir[i] & 0xFFFF)) * FNV_PRIME;

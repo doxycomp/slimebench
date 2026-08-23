@@ -75,6 +75,65 @@ extra_args = ["--simd-agents", "--agent-tile", "2"]
 updates  = ["deferred"]
 
 [[target]]
+# Four more, and the question they answer is whether the factor survives a
+# runtime that compiles while it runs and one whose idiom is not a mutable
+# array. It does: the JIT languages gain more than C does, not less.
+id       = "java-tiled"
+lang     = "Java"
+backend  = "scalar"
+class    = "V"
+dir      = "impl/java"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["javac"]
+profiles  = ["default"]
+extra_args = ["--agent-tile", "2"]
+updates  = ["deferred"]
+
+[[target]]
+id       = "csharp-tiled"
+lang     = "C#"
+backend  = "scalar"
+class    = "V"
+dir      = "impl/csharp"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["dotnet"]
+profiles  = ["jit"]
+extra_args = ["--agent-tile", "2"]
+updates  = ["deferred"]
+
+[[target]]
+id       = "swift-tiled"
+lang     = "Swift"
+backend  = "scalar"
+class    = "V"
+dir      = "impl/swift"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["swift"]
+profiles  = ["unchecked"]
+extra_args = ["--agent-tile", "2"]
+updates  = ["deferred"]
+
+[[target]]
+id       = "haskell-tiled"
+lang     = "Haskell"
+backend  = "scalar"
+class    = "V"
+dir      = "impl/haskell"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench"
+run      = ["{binary}"]
+compilers = ["ghc"]
+profiles  = ["o2-llvm"]
+extra_args = ["--agent-tile", "2"]
+updates  = ["deferred"]
+
+[[target]]
 # The same spatial ordering in C++ and in Rust. Three languages doing the same
 # thing to the same bottleneck: the interesting number is not any one of them
 # but whether the factor survives a different memory model and a different
@@ -1159,6 +1218,52 @@ binary   = "slimebench_pygl.py"
 run      = ["python3", "{binary}"]
 compilers = ["python3"]
 profiles  = ["default"]
+updates  = ["deferred"]
+
+[[target]]
+# The same GLSL compute shaders through Vulkan. impl/vulkan/gen_shaders.py
+# moves the default-block uniforms into push constants and asserts every other
+# line is byte-identical to the OpenGL source, so a difference between the two
+# rows is a difference between drivers rather than between programs.
+#
+# The point of a third GPU API is vendor coverage: CUDA is one vendor and
+# OpenGL under WSL2 is Mesa translating to D3D12, while Vulkan reaches an
+# NVIDIA, an AMD and a software device through one interface. Measured here,
+# all three agree with each other bit for bit.
+id       = "vulkan"
+lang     = "GLSL"
+backend  = "vulkan"
+class    = "G"
+dir      = "impl/vulkan"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench-vk"
+run      = ["{binary}"]
+compilers = ["glslc"]
+profiles  = ["default"]
+extra_args = ["--device", "discrete"]
+updates  = ["deferred"]
+tier     = "B"
+# Same position as glcompute, confirmed independently: bit-exact on Mesa's
+# software rasteriser, and off by a little on the D3D12 path -- NVIDIA and AMD
+# diverge *identically*, which places it in the translation rather than in
+# either driver. See vulkan-cpu for the tier A half.
+skip_conformance = true
+
+[[target]]
+# The software device, which is where the exactness claim is checkable. Tier A
+# and not skipped: the shaders are the OpenGL ones, so this also re-checks that
+# the push-constant transformation changed nothing.
+id       = "vulkan-cpu"
+lang     = "GLSL"
+backend  = "vulkan"
+class    = "G"
+dir      = "impl/vulkan"
+build    = "bash build.sh {profile}"
+binary   = "build/{profile}/slimebench-vk"
+run      = ["{binary}"]
+compilers = ["glslc"]
+profiles  = ["default"]
+extra_args = ["--device", "cpu"]
 updates  = ["deferred"]
 
 [[target]]

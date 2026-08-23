@@ -20,54 +20,54 @@
 
 <text x="16" y="22" class="ttl">Class R: the pixel format decides, not the language</text>
 <text x="16" y="39" class="sub">1024x1024, --freeze-sim, RTX 5080 via Mesa D3D12. Log scale.</text>
-<line x1="216.9" y1="44" x2="216.9" y2="416" class="grid"/>
-<text x="216.9" y="430" class="lbl-s" text-anchor="middle">2</text>
-<line x1="312.2" y1="44" x2="312.2" y2="416" class="grid"/>
-<text x="312.2" y="430" class="lbl-s" text-anchor="middle">5</text>
-<line x1="384.3" y1="44" x2="384.3" y2="416" class="grid"/>
-<text x="384.3" y="430" class="lbl-s" text-anchor="middle">10</text>
-<line x1="456.4" y1="44" x2="456.4" y2="416" class="grid"/>
-<text x="456.4" y="430" class="lbl-s" text-anchor="middle">20</text>
-<line x1="551.8" y1="44" x2="551.8" y2="416" class="grid"/>
-<text x="551.8" y="430" class="lbl-s" text-anchor="middle">50</text>
-<line x1="623.9" y1="44" x2="623.9" y2="416" class="grid"/>
-<text x="623.9" y="430" class="lbl-s" text-anchor="middle">100</text>
+<line x1="242.8" y1="44" x2="242.8" y2="416" class="grid"/>
+<text x="242.8" y="430" class="lbl-s" text-anchor="middle">2</text>
+<line x1="335.6" y1="44" x2="335.6" y2="416" class="grid"/>
+<text x="335.6" y="430" class="lbl-s" text-anchor="middle">5</text>
+<line x1="405.7" y1="44" x2="405.7" y2="416" class="grid"/>
+<text x="405.7" y="430" class="lbl-s" text-anchor="middle">10</text>
+<line x1="475.9" y1="44" x2="475.9" y2="416" class="grid"/>
+<text x="475.9" y="430" class="lbl-s" text-anchor="middle">20</text>
+<line x1="568.7" y1="44" x2="568.7" y2="416" class="grid"/>
+<text x="568.7" y="430" class="lbl-s" text-anchor="middle">50</text>
+<line x1="638.9" y1="44" x2="638.9" y2="416" class="grid"/>
+<text x="638.9" y="430" class="lbl-s" text-anchor="middle">100</text>
 <text x="430" y="442" class="lbl-s" text-anchor="middle">ms per frame (log)</text>
 <text x="180" y="69" class="lbl" text-anchor="end">c sdl2</text>
-<rect x="190" y="52" width="135.1" height="24" rx="2" fill="#4c78a8"/>
-<text x="333.1" y="69" class="lbl-s">5.66</text>
+<rect x="190" y="52" width="119.9" height="24" rx="2" fill="#4c78a8"/>
+<text x="317.9" y="69" class="lbl-s">3.88</text>
 <text x="180" y="99" class="lbl" text-anchor="end">c raylib</text>
-<rect x="190" y="82" width="48.9" height="24" rx="2" fill="#4c78a8"/>
-<text x="246.9" y="99" class="lbl-s">2.47</text>
+<rect x="190" y="82" width="49.4" height="24" rx="2" fill="#4c78a8"/>
+<text x="247.4" y="99" class="lbl-s">1.93</text>
 <text x="180" y="129" class="lbl" text-anchor="end">cpp sdl2</text>
-<rect x="190" y="112" width="135.8" height="24" rx="2" fill="#f58518"/>
-<text x="333.8" y="129" class="lbl-s">5.70</text>
+<rect x="190" y="112" width="119.0" height="24" rx="2" fill="#f58518"/>
+<text x="317.0" y="129" class="lbl-s">3.84</text>
 <text x="180" y="159" class="lbl" text-anchor="end">cpp raylib</text>
-<rect x="190" y="142" width="52.1" height="24" rx="2" fill="#f58518"/>
-<text x="250.1" y="159" class="lbl-s">2.55</text>
+<rect x="190" y="142" width="49.3" height="24" rx="2" fill="#f58518"/>
+<text x="247.3" y="159" class="lbl-s">1.93</text>
 <text x="180" y="189" class="lbl" text-anchor="end">haskell sdl2</text>
-<rect x="190" y="172" width="134.2" height="24" rx="2" fill="#b279a2"/>
-<text x="332.2" y="189" class="lbl-s">5.61</text>
+<rect x="190" y="172" width="115.6" height="24" rx="2" fill="#b279a2"/>
+<text x="313.6" y="189" class="lbl-s">3.72</text>
 <text x="180" y="219" class="lbl" text-anchor="end">haskell raylib</text>
-<rect x="190" y="202" width="50.8" height="24" rx="2" fill="#b279a2"/>
-<text x="248.8" y="219" class="lbl-s">2.52</text>
+<rect x="190" y="202" width="47.6" height="24" rx="2" fill="#b279a2"/>
+<text x="245.6" y="219" class="lbl-s">1.90</text>
 <text x="180" y="249" class="lbl" text-anchor="end">rust sdl2</text>
-<rect x="190" y="232" width="141.6" height="24" rx="2" fill="#54a24b"/>
-<text x="339.6" y="249" class="lbl-s">6.02</text>
+<rect x="190" y="232" width="121.4" height="24" rx="2" fill="#54a24b"/>
+<text x="319.4" y="249" class="lbl-s">3.94</text>
 <text x="180" y="279" class="lbl" text-anchor="end">rust raylib</text>
-<rect x="190" y="262" width="54.3" height="24" rx="2" fill="#54a24b"/>
-<text x="252.3" y="279" class="lbl-s">2.60</text>
+<rect x="190" y="262" width="52.1" height="24" rx="2" fill="#54a24b"/>
+<text x="250.1" y="279" class="lbl-s">1.99</text>
 <text x="180" y="309" class="lbl" text-anchor="end">python pygame</text>
-<rect x="190" y="292" width="148.5" height="24" rx="2" fill="#72b7b2"/>
-<text x="346.5" y="309" class="lbl-s">6.44</text>
+<rect x="190" y="292" width="152.8" height="24" rx="2" fill="#72b7b2"/>
+<text x="350.8" y="309" class="lbl-s">5.37</text>
 <text x="180" y="339" class="lbl" text-anchor="end">python raylib</text>
-<rect x="190" y="322" width="133.1" height="24" rx="2" fill="#72b7b2"/>
-<text x="331.1" y="339" class="lbl-s">5.55</text>
+<rect x="190" y="322" width="137.2" height="24" rx="2" fill="#72b7b2"/>
+<text x="335.2" y="339" class="lbl-s">4.60</text>
 <text x="180" y="369" class="lbl" text-anchor="end">perl sdl2</text>
-<rect x="190" y="352" width="465.5" height="24" rx="2" fill="#eeca3b"/>
-<text x="663.5" y="369" class="lbl-s">135</text>
+<rect x="190" y="352" width="465.8" height="24" rx="2" fill="#eeca3b"/>
+<text x="663.8" y="369" class="lbl-s">118</text>
 <text x="180" y="399" class="lbl" text-anchor="end">perl raylib</text>
-<rect x="190" y="382" width="422.5" height="24" rx="2" fill="#eeca3b"/>
-<text x="620.5" y="399" class="lbl-s">90</text>
+<rect x="190" y="382" width="424.6" height="24" rx="2" fill="#eeca3b"/>
+<text x="622.6" y="399" class="lbl-s">79</text>
 <line x1="190" y1="44" x2="190" y2="416" class="axis"/>
 </svg>

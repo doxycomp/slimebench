@@ -56,6 +56,10 @@ internal sealed class Sim
         public int SensorSteps = 144, RotSteps = 144;
         public int HashEvery = 0;
         public bool Simd = false;
+        /// <summary>Ticks between spatial re-sorts of the agent arrays;
+        /// 0 = never. See Sim.AgentSort -- it changes which agent sits
+        /// where, not what any of them computes.</summary>
+        public int AgentTile = 0;
         // Force the portable Vector<T> even where Vector512 is available.
         public bool SimdPortable = false;
         public string Preset = "custom";
@@ -69,6 +73,16 @@ internal sealed class Sim
     public readonly float[] Ax, Ay;
     public readonly ushort[] Adir;
     public readonly uint[] Arng;
+
+    // Spatial ordering (Config.AgentTile). _aid[j] is the original index of
+    // the agent now in slot j and _slot[a] is its inverse; everything that has
+    // to speak in agent indices rather than slots -- the deposit, the agent
+    // hash -- goes through one of them. null when ordering is off.
+    private int[]? _aid, _slot, _agentIdx, _sortKey;
+    private uint[]? _sortU32;
+    private float[]? _sortF32;
+    private ushort[]? _sortU16;
+    private int _ticksDone;
 
     private readonly float[] _cos = new float[Dirtable.NDIR];
     private readonly float[] _sin = new float[Dirtable.NDIR];
@@ -95,6 +109,17 @@ internal sealed class Sim
         Ay = new float[c.Agents];
         Adir = new ushort[c.Agents];
         Arng = new uint[c.Agents * 4];
+        if (c.AgentTile > 0)
+        {
+            _aid = new int[c.Agents];
+            _slot = new int[c.Agents];
+            _agentIdx = new int[c.Agents];
+            _sortKey = new int[c.Agents];
+            _sortF32 = new float[c.Agents];
+            _sortU32 = new uint[c.Agents * 4];
+            _sortU16 = new ushort[c.Agents];
+            for (int i = 0; i < c.Agents; i++) { _aid[i] = i; _slot[i] = i; }
+        }
 
         for (int i = 0; i < Dirtable.NDIR; i++)
         {
@@ -173,10 +198,79 @@ internal sealed class Sim
 
     // ---- one tick (SPEC-1 section 5.2) ------------------------------------
 
+    /// <summary>
+    /// A counting sort of the agent arrays into 8x8 tiles of the grid, so that
+    /// three sensor reads of neighbouring agents land in neighbouring cache
+    /// lines. impl/c/sb_core.c carries the measurement behind the tile size.
+    /// The arrays are readonly, so this copies back rather than swapping.
+    /// </summary>
+    private void AgentSort()
+    {
+        const int TileShift = 3;                // 8x8 cells
+        int n = Cfg.Agents;
+        int tw = (Cfg.Width + (1 << TileShift) - 1) >> TileShift;
+        int th = (Cfg.Height + (1 << TileShift) - 1) >> TileShift;
+
+        var count = new int[tw * th + 1];
+        var key = _sortKey!;
+        for (int j = 0; j < n; j++)
+        {
+            int x = (int)Ax[j] & _xmask;
+            int y = (int)Ay[j] & _ymask;
+            int k = (y >> TileShift) * tw + (x >> TileShift);
+            key[j] = k;
+            count[k + 1]++;
+        }
+        for (int t = 1; t < count.Length; t++) count[t] += count[t - 1];
+
+        // Stable: walking the agents in their current order keeps a re-sort
+        // cheap when almost nothing has moved.
+        for (int j = 0; j < n; j++)
+        {
+            int dst = count[key[j]]++;
+            _sortF32![dst] = Ax[j];
+            _sortU16![dst] = Adir[j];
+            Array.Copy(Arng, j * 4, _sortU32!, dst * 4, 4);
+            key[j] = dst;                       // reused as the permutation
+        }
+        Array.Copy(_sortF32!, Ax, n);
+        Array.Copy(_sortU16!, Adir, n);
+        Array.Copy(_sortU32!, Arng, n * 4);
+        for (int j = 0; j < n; j++) _sortF32![key[j]] = Ay[j];
+        Array.Copy(_sortF32!, Ay, n);
+        for (int j = 0; j < n; j++) _sortU32![key[j]] = (uint)_aid![j];
+        for (int j = 0; j < n; j++) _aid![j] = (int)_sortU32![j];
+        for (int j = 0; j < n; j++) _slot![_aid![j]] = j;
+    }
+
     public void Tick()
     {
+        // Re-sort inside the timed region, not beside it: the ordering is only
+        // worth having if it pays for itself.
+        if (Cfg.AgentTile > 0 && _ticksDone % Cfg.AgentTile == 0) AgentSort();
+        _ticksDone++;
+
         long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
-        AgentPass(0, Cfg.Agents, null);
+        if (_aid != null)
+        {
+            // With spatial ordering the step order is no longer the agent
+            // order, so the deposits are buffered and applied afterwards in
+            // ascending *agent* index -- the same order, and therefore the
+            // same floats, as the direct loop.
+            int n = Cfg.Agents;
+            AgentPass(0, n, _agentIdx);
+            float[] target = Dep ?? Grid;
+            float d = Cfg.Deposit;
+            for (int a = 0; a < n; a++)
+            {
+                int idx = _agentIdx![_slot![a]];
+                target[idx] = target[idx] + d;
+            }
+        }
+        else
+        {
+            AgentPass(0, Cfg.Agents, null);
+        }
         long t1 = System.Diagnostics.Stopwatch.GetTimestamp();
 
         if (Dep != null) MergeRows(0, Cfg.Height);
@@ -333,8 +427,12 @@ internal sealed class Sim
     public uint HashAgents()
     {
         uint h = FnvOffset;
-        for (int i = 0; i < Cfg.Agents; i++)
+        // In agent order, which is slot order only when the arrays have not
+        // been spatially re-sorted. A checksum that changed with a performance
+        // flag would defeat the point of having one.
+        for (int a = 0; a < Cfg.Agents; a++)
         {
+            int i = _slot == null ? a : _slot[a];
             h = (h ^ BitConverter.SingleToUInt32Bits(Ax[i])) * FnvPrime;
             h = (h ^ BitConverter.SingleToUInt32Bits(Ay[i])) * FnvPrime;
             h = (h ^ Adir[i]) * FnvPrime;
