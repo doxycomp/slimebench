@@ -1,3 +1,10 @@
+// The shared prelude: buffer bindings and uniforms for every pass.
+//
+// Concatenated in front of each .comp rather than #included, because
+// glslc resolves includes relative to the file and one flat file per
+// stage keeps the SPIR-V build a single command with nothing to
+// configure. impl/vulkan reuses this file with the default-block
+// uniforms swapped for push constants; see impl/vulkan/gen_shaders.py.
 #version 430
 layout(std430, binding = 0) buffer BGrid    { float grid[]; };
 layout(std430, binding = 1) buffer BScratch { float scratch[]; };

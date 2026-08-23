@@ -1,3 +1,17 @@
+/* The vectorised diffusion kernel declared in sb_simd.h (class V).
+ *
+ * The header holds the design and the tier-A argument -- no cross-lane
+ * work, so each lane performs exactly the scalar computation for its own
+ * cell in the same order (SPEC-1 section 8.1). What is here is the kernel
+ * body and the width, chosen at compile time by #if on __AVX512F__ or
+ * __AVX2__ and falling back to scalar. There is no runtime dispatch: the
+ * build's -march decides, so the profile name in the results says which
+ * kernel actually ran.
+ *
+ * The agent pass is not in this file. It is vectorised separately in
+ * sb_simd_agents.c, because gathering three sensor reads per agent is a
+ * different problem from a nine-point stencil -- and it turned out to be
+ * worth several times more. */
 #include "sb_simd.h"
 
 #include "sb_agent.h"

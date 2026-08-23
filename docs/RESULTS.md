@@ -1871,8 +1871,11 @@ difference between a conformance result and a plausible one.
 The C host and the Python host run **the same shader**, and that is verifiable
 rather than asserted: the GLSL lives in
 [`impl/glcompute/shaders/`](../impl/glcompute/shaders/), the C header is
-generated from it, and both hosts print an FNV-32 of their compiled source —
-`0xB949F398` in both.
+generated from it, and both hosts print an FNV-32 of their compiled source.
+The table above prints the value — `0xB949F398` in this series, in both hosts.
+What matters is that the two agree, not the constant: the hash is over the
+shader text, so editing a comment in it moves the number and proves nothing
+about the arithmetic.
 
 The times are **under 5 % apart** (under 1 % at `small` and `huge`), and every
 grid hash agrees — **including the ones that deviate from the driver's**. So

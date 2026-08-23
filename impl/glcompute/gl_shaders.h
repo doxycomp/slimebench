@@ -29,6 +29,13 @@
 #define SB_GL_SHADERS_H
 
 #define SB_GLSL_COMMON \
+    "// The shared prelude: buffer bindings and uniforms for every pass.\n" \
+    "//\n" \
+    "// Concatenated in front of each .comp rather than #included, because\n" \
+    "// glslc resolves includes relative to the file and one flat file per\n" \
+    "// stage keeps the SPIR-V build a single command with nothing to\n" \
+    "// configure. impl/vulkan reuses this file with the default-block\n" \
+    "// uniforms swapped for push constants; see impl/vulkan/gen_shaders.py.\n" \
     "#version 430\n" \
     "layout(std430, binding = 0) buffer BGrid    { float grid[]; };\n" \
     "layout(std430, binding = 1) buffer BScratch { float scratch[]; };\n" \
@@ -45,6 +52,14 @@
 
 static const char *SB_GLSL_AGENTS =
     SB_GLSL_COMMON
+    "// The agent pass, SPEC-1 section 5.3, one invocation per agent.\n"
+    "//\n"
+    "// `deferred` only, and structurally so: the deposit goes into an integer\n"
+    "// hit counter per cell (`atomicAdd(depcount[idx], 1u)`) rather than into\n"
+    "// the grid, because atomicAdd on a float is not deterministic -- the\n"
+    "// arrival order of invocations would decide the rounding. Integer\n"
+    "// addition is exact and order-independent, and merge.comp turns the\n"
+    "// counts into deposits once per tick.\n"
     "layout(local_size_x = 64) in;\n"
     "uint rotl32(uint x, int k) { return (x << k) | (x >> (32 - k)); }\n"
     "float wrapf(float v, float m) {\n"
@@ -96,6 +111,14 @@ static const char *SB_GLSL_AGENTS =
 
 static const char *SB_GLSL_MERGE =
     SB_GLSL_COMMON
+    "// The deposit merge: integer hit counts into the grid, once per tick.\n"
+    "//\n"
+    "// This is the pass that makes the GPU agent kernel deterministic. A cell\n"
+    "// hit `c` times gets one multiplication and one addition in a fixed\n"
+    "// order, instead of `c` float atomics in whatever order the scheduler\n"
+    "// produced. It carries the same limitation as the CPU `private`\n"
+    "// strategy: it works because SPEC-1's deposit is a constant, and stops\n"
+    "// working the moment the deposit depends on the agent.\n"
     "layout(local_size_x = 64) in;\n"
     "void main() {\n"
     "  uint i = gl_GlobalInvocationID.x\n"
@@ -111,6 +134,15 @@ static const char *SB_GLSL_MERGE =
 
 static const char *SB_GLSL_DIFFUSE =
     SB_GLSL_COMMON
+    "// The diffusion and decay pass, SPEC-1 section 5.4, one cell per\n"
+    "// invocation.\n"
+    "//\n"
+    "// The accumulator is `precise`, which is what stops a driver\n"
+    "// reassociating the nine additions or contracting the 4.0*centre term\n"
+    "// into an FMA. It is not sufficient on its own: `precise` says nothing\n"
+    "// about the rounding of the division, which is why two of the three GPU\n"
+    "// backends still deviate from the CPU reference. docs/RESULTS.md section\n"
+    "// 9 has which ones and why.\n"
     "layout(local_size_x = 64) in;\n"
     "void main() {\n"
     "  uint i = gl_GlobalInvocationID.x\n"
@@ -138,6 +170,6 @@ static const char *SB_GLSL_DIFFUSE =
 /* FNV-32 of common.glsl + each pass, in agents/merge/diffuse
  * order. Both hosts print this so a mismatch is visible rather
  * than silently comparing two different shaders. */
-#define SB_GLSL_HASH 0xB949F398u
+#define SB_GLSL_HASH 0x0E015FEEu
 
 #endif /* SB_GL_SHADERS_H */

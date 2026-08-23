@@ -1,3 +1,9 @@
+// The tick, the initialisation and the checksums declared in sim.hpp.
+//
+// sim.hpp carries the design and the three deliberate departures from
+// idiomatic C++; this file is the arithmetic, where SPEC-1's binding
+// summation order lives and where the static assertion below refuses to
+// build on an x87 target.
 #include "sim.hpp"
 #include "agent.hpp"
 #include "simd.hpp"

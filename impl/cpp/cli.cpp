@@ -1,3 +1,9 @@
+// The CLI parser and the result printer declared in cli.hpp.
+//
+// Deliberately a transliteration of impl/c/sb_cli.c rather than a nicer
+// C++ design: class S compares two language implementations of the same
+// simulation, and a command line that parsed differently would be one
+// more difference between them that nobody asked to measure.
 #include "cli.hpp"
 
 #include "simd.hpp"
