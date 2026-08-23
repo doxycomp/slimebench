@@ -661,7 +661,8 @@ def compare_metrics(got: dict[str, float], want: dict[str, float]) -> list[str]:
 
 
 def run_case(t: Target, cc: str, profile: str, size: str, update: str, ticks: int,
-             dump: pathlib.Path | None = None) -> dict | None:
+             dump: pathlib.Path | None = None,
+             why: list[str] | None = None) -> dict | None:
     argv = [t.subst(x, cc, profile) for x in t.run]
     argv[0] = resolve_exe(argv[0])
     argv += CONFORMANCE_SIZES[size]
@@ -671,7 +672,11 @@ def run_case(t: Target, cc: str, profile: str, size: str, update: str, ticks: in
         argv += ["--dump-grid", str(dump)]
     r = spawn_measured(argv, t.dir)
     if not r.ok:
-        sys.stderr.write(r.stderr[-2000:] + "\n")
+        if why is not None:
+            tail = [l for l in r.stderr.splitlines() if l.strip()]
+            why.append(tail[-1].strip() if tail else f"exit {r.exit_code}")
+        else:
+            sys.stderr.write(r.stderr[-2000:] + "\n")
         return None
     return last_json_line(r.stdout)
 
@@ -747,6 +752,7 @@ def cmd_conformance(a: argparse.Namespace) -> int:
         print(f"-- {t.id} ({cc}/{profile}){note}")
 
         first_bad: str | None = None
+        ran_any = False
         with tempfile.TemporaryDirectory() as td:
             dump = pathlib.Path(td) / "grid.f32"
             for size, update, n in case_list(t.conformance_set, t.updates):
@@ -756,13 +762,27 @@ def cmd_conformance(a: argparse.Namespace) -> int:
                     continue
 
                 need_dump = t.tier == "B"
+                why: list[str] = []
                 got = run_case(t, cc, profile, size, update, n,
-                               dump if need_dump else None)
+                               dump if need_dump else None, why)
+                if got is None and not ran_any:
+                    # Nothing has run yet and this one refused, so the target
+                    # cannot run here at all -- a CPU without the instruction
+                    # set it needs, a GPU that is not there, a missing
+                    # library. That is a skip with a reason, not eleven
+                    # divergences: `runnable` above makes the same distinction
+                    # for a binary that will not start, and this is the same
+                    # thing one step later, where the binary starts and then
+                    # says no.
+                    print(f"   cannot run here, skipping: "
+                          f"{why[0] if why else 'no output'}")
+                    break
                 if got is None:
                     print(f"   {key:22s} ERROR")
                     failures += 1
                     first_bad = first_bad or key
                     continue
+                ran_any = True
 
                 if t.tier == "A":
                     gok = got["grid_hash"] == want["grid_hash"]
