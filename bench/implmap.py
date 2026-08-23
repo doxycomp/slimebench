@@ -214,7 +214,12 @@ def sources(d: pathlib.Path) -> list[pathlib.Path]:
             continue
         if p.suffix in SOURCE_EXT or p.name in SUPPORT:
             files.append(p)
-    return sorted(files)
+    # Sort on the POSIX string, not on the Path. Path comparison is
+    # case-insensitive on Windows and case-sensitive on Linux, so sorting the
+    # objects put `build.sh` in a different row on each -- and the CI check
+    # failed against a map written on the other platform. Whichever order this
+    # is, it has to be the same order everywhere.
+    return sorted(files, key=lambda q: q.relative_to(d).as_posix())
 
 
 _TRACKED: tuple[set[str], set[str]] | None = None
@@ -233,16 +238,22 @@ def tracked() -> tuple[set[str], set[str]]:
         out = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT,
                              capture_output=True, text=True, check=True)
         paths = {n for n in out.stdout.split(chr(0)) if n}
-        # A path .gitignore names is a real thing the repository knows about,
-        # it is just built rather than committed -- impl/web/app.js is named
-        # in two READMEs precisely to say it is generated. Tracked or
-        # deliberately ignored are both fine; anything else is a typo.
-        ign = subprocess.run(["git", "ls-files", "-z", "--others", "--ignored",
-                              "--exclude-standard", "--directory"],
-                             cwd=ROOT, capture_output=True, text=True)
-        paths |= {n.rstrip("/") for n in ign.stdout.split(chr(0)) if n}
         _TRACKED = (paths, {p.rsplit("/", 1)[-1] for p in paths})
     return _TRACKED
+
+
+def ignored(rel: str) -> bool:
+    """Whether .gitignore covers this path, whether or not it exists.
+
+    A path .gitignore names is a real thing the repository knows about, it is
+    just built rather than committed -- impl/web/app.js is named in two
+    READMEs precisely to say it is generated. The first version of this asked
+    `git ls-files --others --ignored`, which lists ignored files that *exist*:
+    it passed on a machine where the bundle had been built and failed in CI,
+    where it had not. `check-ignore` asks the rules instead.
+    """
+    return subprocess.run(["git", "check-ignore", "-q", "--", rel],
+                          cwd=ROOT, capture_output=True).returncode == 0
 
 
 def load_targets() -> dict[str, list[dict]]:
@@ -358,6 +369,8 @@ def check(readme: pathlib.Path, blocks: dict[str, str],
             continue
         joined = (d.relative_to(ROOT) / rel).as_posix()
         if joined in paths or rel in paths or rel.rsplit("/", 1)[-1] in names:
+            continue
+        if ignored(rel) or ignored(joined):
             continue
         bad.append(f"{readme.relative_to(ROOT)}: names `{rel}`, "
                    f"which is not a file in this repository")
