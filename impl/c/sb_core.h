@@ -32,6 +32,11 @@ typedef struct {
     sb_reduce_mode reduce;
     int simd;                 /* class V: vectorised diffusion pass */
     int use_asm;              /* class V: hand-written assembly kernel */
+    int simd_agents;          /* vectorised agent pass; deferred only */
+    /* Ticks between spatial re-sorts of the agent arrays; 0 = never.
+     * See sb_agent_sort() -- this changes which agent sits where, not
+     * what any of them computes. */
+    uint32_t agent_tile;
 
     float sensor_dist;
     float step;
@@ -56,6 +61,42 @@ typedef struct {
     float    *ay;
     uint16_t *adir;
     uint32_t *arng;           /* 4 words per agent */
+    /* One target cell per agent, filled by the agent pass so the deposits
+     * can be applied afterwards in ascending agent order. Allocated when
+     * either the vector path or spatial ordering is on -- both need the
+     * deposit separated from the step. */
+    uint32_t *agent_idx;
+
+    /* Spatial ordering (cfg.agent_tile). `aid[j]` is the original index of
+     * the agent now in slot j, and `slot[a]` is the inverse. Everything that
+     * has to speak in agent indices rather than slots -- the deposit, the
+     * agent hash -- goes through one of them. NULL when ordering is off, and
+     * every path checks for that rather than paying an indirection it does
+     * not need. */
+    uint32_t *aid;
+    uint32_t *slot;
+    uint32_t *sort_scratch;   /* tile histogram, then the permutation */
+    float    *sort_f32;       /* staging for ax/ay during the permute */
+    uint32_t *sort_u32;       /* staging for arng */
+    uint16_t *sort_u16;       /* staging for adir */
+    uint32_t  ticks_done;     /* drives the re-sort interval */
+
+    /* The same trig values, multiplied by the two distances the tick uses and
+     * interleaved as (x, y) pairs.
+     *
+     * Bit-identical to computing cos_tab[d] * sensor_dist in the loop -- same
+     * two operands, same multiply, done once instead of a million times a
+     * tick -- and the pairing lets a vector kernel fetch both components of a
+     * direction in one eight-byte gather element instead of two four-byte
+     * ones. That halves the load-port traffic of the eight table gathers the
+     * agent step needs, which measurement puts at 54 % of its time.
+     *
+     * Built in sb_sim_init after cos_tab and sin_tab, used by
+     * sb_simd_agents.c and impl/asm/sb_agents_avx512.S. The scalar path does
+     * not read them: it must keep doing the multiply where SPEC-1 5.3 puts
+     * it, so that the two paths can be compared rather than assumed equal. */
+    float sens_tab[SB_NDIR * 2];   /* cos*sensor_dist, sin*sensor_dist */
+    float move_tab[SB_NDIR * 2];   /* cos*step,        sin*step        */
 
     float cos_tab[SB_NDIR];
     float sin_tab[SB_NDIR];

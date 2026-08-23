@@ -85,7 +85,7 @@ CCNAME   := $(notdir $(CC))
 # stale instrumented object file into a measured binary. It did, once.
 BUILDDIR := build/$(CCNAME)-$(PROFILE)$(if $(filter 1,$(ASM)),-asm,)$(if $(filter 1,$(SB_BRANCH_STATS)),-bstats,)
 
-CORE_SRC := sb_core.c sb_cli.c sb_parallel.c sb_simd.c sb_asm.c
+CORE_SRC := sb_core.c sb_cli.c sb_parallel.c sb_simd.c sb_simd_agents.c sb_asm.c
 CORE_OBJ := $(addprefix $(BUILDDIR)/,$(CORE_SRC:.c=.o))
 ifeq ($(ASM),1)
   ASM_OBJ := $(BUILDDIR)/sb_diffuse_avx512.o

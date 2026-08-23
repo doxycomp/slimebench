@@ -20,17 +20,17 @@ backends and compilers.
 | C | ✅ | ✅ | ✅ | ✅ | ✅ | tier A (reference) |
 | C++ | ✅ | ✅ | ✅ | ✅ | ✅ | tier A |
 | Rust (safe + unchecked) | ✅ | ✅ | ✅ | ✅ | ✅ | tier A |
-| Haskell (2 styles) | ✅ | ✅ | ✅ | ✅ | — | tier A |
+| Haskell (2 styles) | ✅ | ✅ | ✅ | ✅ | ✅ | tier A |
 | Go | ✅ | ✅ | — | — | — | tier A |
 | Swift | ✅ | ✅ | — | — | — | tier A |
 | Lean 4 | ✅ | — | — | — | — | tier A |
 | Java | ✅ | ✅ | — | — | — | tier A |
 | C# / .NET | ✅ | ✅ | — | — | — | tier A, 4 build strategies |
 | OCaml | ✅ | — | — | — | — | tier A, B with `--f64-intermediates` |
-| Fortran | ✅ | — | — | — | — | tier A |
+| Fortran | ✅ | ✅ | — | — | — | tier A |
 | TypeScript / Node | ✅ | ✅ | — | — | — | tier A |
 | TypeScript / Canvas | — | — | ✅ browser | — | sliders | tier A |
-| Python / numpy | ✅ | ✅ | ✅ pygame | ✅ | — | tier A, `deferred` only |
+| Python / numpy | ✅ | ✅ | ✅ pygame | ✅ | ✅ | tier A, `deferred` only |
 | Python / numba | ✅ | — | — | — | — | tier A, tier C with `--fastmath` |
 | Python / pure | ✅ | — | — | — | — | tier B, A with `--strict-f32` |
 | Perl | ✅ | ✅ | ✅ | ✅ | — | tier B, A with `--strict-f32` |

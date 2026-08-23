@@ -56,6 +56,17 @@ Sim::Sim(const Config& cfg) : cfg_(cfg) {
     adir_.resize(cfg.agents);
     arng_.resize(std::size_t{cfg.agents} * 4);
 
+    if (cfg.agent_tile) {
+        aid_.resize(cfg.agents);
+        slot_.resize(cfg.agents);
+        agentIdx_.resize(cfg.agents);
+        sortKey_.resize(cfg.agents);
+        sortF32_.resize(cfg.agents);
+        sortU32_.resize(std::size_t{cfg.agents} * 4);
+        sortU16_.resize(cfg.agents);
+        for (std::uint32_t i = 0; i < cfg.agents; ++i) { aid_[i] = i; slot_[i] = i; }
+    }
+
     // Grid init: its own SplitMix32 stream (SPEC-1 section 3.3).
     std::uint32_t sm = cfg.seed ^ 0x5BF03635u;
     for (std::size_t i = 0; i < cells; ++i) {
@@ -80,10 +91,72 @@ Sim::Sim(const Config& cfg) : cfg_(cfg) {
     }
 }
 
+// A counting sort of the agent arrays into 8x8 tiles of the grid, so that
+// three sensor reads of neighbouring agents land in neighbouring cache lines.
+//
+// The C reference explains the choice of tile size and the measurement behind
+// it (impl/c/sb_core.c). This is the same algorithm; what it is worth in C++
+// rather than C is the question the two rows answer.
+namespace {
+constexpr std::uint32_t kTileShift = 3;   // 8x8 cells
+}
+
+void Sim::agentSort() noexcept {
+    const std::uint32_t n = cfg_.agents;
+    const std::uint32_t xmask = cfg_.width - 1u;
+    const std::uint32_t ymask = cfg_.height - 1u;
+    const std::uint32_t tw = (cfg_.width + (1u << kTileShift) - 1u) >> kTileShift;
+    const std::uint32_t th = (cfg_.height + (1u << kTileShift) - 1u) >> kTileShift;
+
+    std::vector<std::uint32_t> count(static_cast<std::size_t>(tw) * th + 1u, 0u);
+    for (std::uint32_t j = 0; j < n; ++j) {
+        const std::uint32_t x = static_cast<std::uint32_t>(ax_[j]) & xmask;
+        const std::uint32_t y = static_cast<std::uint32_t>(ay_[j]) & ymask;
+        sortKey_[j] = (y >> kTileShift) * tw + (x >> kTileShift);
+        ++count[sortKey_[j] + 1u];
+    }
+    for (std::size_t t = 1; t < count.size(); ++t) count[t] += count[t - 1u];
+
+    // Stable: walking the agents in their current order keeps a re-sort cheap
+    // when almost nothing has moved.
+    for (std::uint32_t j = 0; j < n; ++j) {
+        const std::uint32_t dst = count[sortKey_[j]]++;
+        sortF32_[dst] = ax_[j];
+        sortU16_[dst] = adir_[j];
+        for (int w = 0; w < 4; ++w)
+            sortU32_[static_cast<std::size_t>(dst) * 4 + w] =
+                arng_[static_cast<std::size_t>(j) * 4 + w];
+        sortKey_[j] = dst;                  // reused as the permutation
+    }
+    ax_.swap(sortF32_);
+    adir_.swap(sortU16_);
+    arng_.swap(sortU32_);
+    for (std::uint32_t j = 0; j < n; ++j) sortF32_[sortKey_[j]] = ay_[j];
+    ay_.swap(sortF32_);
+    for (std::uint32_t j = 0; j < n; ++j) sortU32_[sortKey_[j]] = aid_[j];
+    for (std::uint32_t j = 0; j < n; ++j) aid_[j] = sortU32_[j];
+    for (std::uint32_t j = 0; j < n; ++j) slot_[aid_[j]] = j;
+}
+
 void Sim::agentPass() noexcept {
     const Ctx k = makeCtx();
     const float deposit = cfg_.deposit;
     float* target = (cfg_.update == Update::Deferred) ? dep_.data() : grid_.data();
+
+    // With spatial ordering the step order is no longer the agent order, so
+    // the deposits are buffered and applied afterwards in ascending *agent*
+    // index -- the same order, and therefore the same floats, as the direct
+    // loop below.
+    if (!agentIdx_.empty()) {
+        const std::uint32_t n = cfg_.agents;
+        for (std::uint32_t j = 0; j < n; ++j)
+            agentIdx_[aid_[j]] = agentStep(k, j);
+        for (std::uint32_t i = 0; i < n; ++i) {
+            const std::uint32_t idx = agentIdx_[i];
+            target[idx] = target[idx] + deposit;
+        }
+        return;
+    }
 
     for (std::uint32_t i = 0; i < cfg_.agents; ++i) {
         const std::uint32_t idx = agentStep(k, i);
@@ -134,6 +207,11 @@ void Sim::diffusePass() noexcept {
 
 void Sim::tick() {
     const std::uint64_t t0 = nowNs();
+    // Re-sort inside the timed region, not beside it: the ordering is only
+    // worth having if it pays for itself.
+    if (cfg_.agent_tile && ticksDone_ % cfg_.agent_tile == 0) agentSort();
+    ++ticksDone_;
+
     agentPass();
     const std::uint64_t t1 = nowNs();
 
@@ -160,7 +238,11 @@ std::uint32_t Sim::hashGrid() const noexcept {
 
 std::uint32_t Sim::hashAgents() const noexcept {
     std::uint32_t h = kFnvOffset;
-    for (std::uint32_t i = 0; i < cfg_.agents; ++i) {
+    // In agent order, which is slot order only when the arrays have not been
+    // spatially re-sorted. A checksum that changed with a performance flag
+    // would defeat the point of having one.
+    for (std::uint32_t a = 0; a < cfg_.agents; ++a) {
+        const std::uint32_t i = slot_.empty() ? a : slot_[a];
         h = fnvStep(h, std::bit_cast<std::uint32_t>(ax_[i]));
         h = fnvStep(h, std::bit_cast<std::uint32_t>(ay_[i]));
         h = fnvStep(h, static_cast<std::uint32_t>(adir_[i]));

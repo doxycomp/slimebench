@@ -46,9 +46,60 @@ sb_commit() {
   echo unknown
 }
 
-OUT=${1:-results/run-$(date +%Y%m%d-%H%M)}
+# ---- how much measuring to do ---------------------------------------------
+# Three profiles, differing only in repetition count. `standard` is what the
+# published numbers use. `quick` is for checking that a change did not break a
+# port, not for comparing anything. `thorough` is for comparing two machines,
+# where the question is whether a 3 % difference is real.
+#
+#   quick      1 repetition    ~10 min
+#   standard   3               ~40 min
+#   thorough   5               ~55 min
+#
+# The estimates come from bench/estimate.py, which prices a plan from a series
+# already in results/ rather than from constants written here.
+SB_PROFILE=standard
+SB_REPS=""
+SB_P_REPS=""
+DRY=0
+ARGS=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --profile) SB_PROFILE=$2; shift 2 ;;
+    --reps)    SB_REPS=$2; shift 2 ;;
+    --p-reps)  SB_P_REPS=$2; shift 2 ;;
+    --dry-run) DRY=1; shift ;;
+    -h|--help)
+      sed -n '2,20p' "$0"
+      echo
+      echo "usage: $0 [--profile quick|standard|thorough] [--reps N]"
+      echo "          [--p-reps N] [--dry-run] [OUTDIR]"
+      exit 0 ;;
+    *) ARGS+=("$1"); shift ;;
+  esac
+done
+case "$SB_PROFILE" in
+  quick)    : "${SB_REPS:=1}" ;;
+  standard) : "${SB_REPS:=3}" ;;
+  thorough) : "${SB_REPS:=5}" ;;
+  *) echo "unknown profile: $SB_PROFILE (quick|standard|thorough)" >&2; exit 2 ;;
+esac
+# Class P used to have no repetitions at all, which made it the one phase
+# outside the statistics rule -- and its single-thread row is the denominator
+# of every speedup in the table. It follows the same count as everything else
+# unless told otherwise; at `standard` that is about ten minutes.
+: "${SB_P_REPS:=$SB_REPS}"
+export SB_REPS SB_P_REPS SB_PROFILE
+
+if [ "$DRY" = 1 ]; then
+  exec python3 bench/estimate.py --reps "$SB_REPS" --p-reps "$SB_P_REPS" \
+       --profile "$SB_PROFILE"
+fi
+
+OUT=${ARGS[0]:-results/run-$(date +%Y%m%d-%H%M)}
 mkdir -p "$OUT"
-echo "==> writing to $OUT"
+SB_STARTED=$(date +%s)
+echo "==> writing to $OUT  (profile $SB_PROFILE, reps $SB_REPS, class P $SB_P_REPS)"
 
 # Paths that exist on the machine this was written on, added only if they are
 # there. A missing one is not an error: the tool is either elsewhere on PATH or
@@ -132,13 +183,13 @@ phase() { echo; echo "=== $* ==="; }
 phase "class S, all languages, 256x256"
 for upd in serial deferred; do
   python3 bench/run.py bench --width 256 --height 256 --agents 16384 \
-    --ticks 100 --warmup 50 --reps 3 --update "$upd" \
+    --ticks 100 --warmup 50 --reps "$SB_REPS" --update "$upd" \
     --out "$OUT/A-crosslang-$upd.jsonl" || true
 done
 
 # ---- 2. compiler matrix --------------------------------------------------
 phase "compiler matrix, 1024x1024, 300 ticks"
-python3 bench/run.py bench --preset small --ticks 300 --reps 3 \
+python3 bench/run.py bench --preset small --ticks 300 --reps "$SB_REPS" \
   --targets c,cpp,rust,haskell,haskell-vector,c-pgo,go,swift,fortran,ocaml,java,csharp \
   --out "$OUT/C-compiler-matrix.jsonl" || true
 
@@ -148,9 +199,39 @@ python3 bench/run.py bench --preset small --ticks 300 --reps 3 \
 # Without it Java's vector kernel measured 179 ms of diffusion against C's
 # 64, which is the ramp and not the vector unit.
 phase "class V (SIMD), 1024x1024, 300 ticks"
-python3 bench/run.py bench --preset small --ticks 300 --warmup 100 --reps 3 \
+python3 bench/run.py bench --preset small --ticks 300 --warmup 100 --reps "$SB_REPS" \
   --targets c-simd,cpp-simd,rust-simd,java-simd,csharp-simd,csharp-simd-portable \
   --out "$OUT/G-simd.jsonl" || true
+
+# The agent pass, which is the other 78 to 89 % of a tick and which nothing
+# above vectorises. Its own phase and its own file, at four sizes, because the
+# interesting part is how the factors move with the grid -- and they move in
+# opposite directions. Four targets, so the two changes can be told apart:
+# vectorising cuts instructions, spatial ordering cuts the distance between
+# the addresses those instructions touch, and at `large` the ordering alone
+# beats the vector unit alone.
+phase "class V, the agent pass: scalar against vectorised"
+: > "$OUT/G-agents.jsonl"
+for pre in tiny small medium large; do
+  # One compiler and one profile on both sides: the question is what the
+  # kernel does, and letting the scalar side bring twelve compiler/profile
+  # combinations to a two-row comparison only adds rows to filter out
+  # again.
+  python3 bench/run.py bench --preset "$pre" --ticks 100 --warmup 20 \
+    --reps "$SB_REPS" --update deferred \
+    --targets c,c-tiled,c-simd-agents,c-simd-agents-tiled \
+    --compilers gcc --profiles o3-native \
+    --out "$OUT/G-agents.jsonl" --append || true
+done
+
+# The same ordering in C++ and in Rust, at one size. Whether the factor
+# survives a different memory model and a different standard library is a
+# separate question from how big it is in C, and it needs one preset to
+# answer, not four.
+python3 bench/run.py bench --preset medium --ticks 100 --warmup 20 \
+  --reps "$SB_REPS" --update deferred \
+  --targets cpp,cpp-tiled,rust,rust-tiled,go,go-tiled \
+  --out "$OUT/G-agents.jsonl" --append || true
 
 # The four-way kernel comparison, reported as ms_diffuse: the agent pass is
 # identical in all of them and would dilute the difference. Needs AVX-512 and
@@ -214,34 +295,75 @@ psweep() { # label preset ticks extra-args... -- cmd...
       local -a args=(--preset "$preset" --ticks "$ticks" --update deferred
                      --threads "$t")
       [ "$t" -gt 1 ] && [ -n "$r" ] && args+=(--deposit-reduce "$r")
-      local j cpu=""
+      local j cpu="" rep=0
+      local -a js=()
       # The general form of that bug is a row that used more of the machine
       # than its label claims, and no language reports its effective thread
       # count. The kernel is compute-bound, so the OS knows: one thread means
       # about 100 % of one core. Measured on the T=1 rows only, where the
       # answer is unambiguous and the cost is one process per language.
-      if [ "$t" = 1 ]; then
-        j=$(timeout 3600 /usr/bin/time -f "SB_CPU %P" "$@" "${args[@]}" \
-              --json 2>"$OUT/.cpu" | grep -m1 '^{') || continue
-        cpu=$(sed -n 's/^SB_CPU \([0-9]*\)%$/\1/p' "$OUT/.cpu" | tail -1)
-        if [ -n "$cpu" ] && [ "$cpu" -gt 150 ]; then
-          msg=$(printf '  %-12s T=1 used %s%% CPU -- not one thread' \
-                  "$label" "$cpu")
-          echo "$msg" | tee -a "$OUT/WARNINGS.txt"
+      while [ "$rep" -lt "$SB_P_REPS" ]; do
+        rep=$((rep + 1))
+        # The CPU check runs once, on the first repetition of the T=1 row:
+        # it answers a yes/no question about how many cores the process used,
+        # and asking it three times costs three processes for one answer.
+        if [ "$t" = 1 ] && [ "$rep" = 1 ]; then
+          j=$(timeout 3600 /usr/bin/time -f "SB_CPU %P" "$@" "${args[@]}" \
+                --json 2>"$OUT/.cpu" | grep -m1 '^{') || j=""
+          cpu=$(sed -n 's/^SB_CPU \([0-9]*\)%$/\1/p' "$OUT/.cpu" | tail -1)
+          # Measured twice before it warns. This reads whole-process CPU, so
+          # anything else busy on the machine inflates it: Go's T=1 row once
+          # came back at 160 % and three clean re-runs of the same command
+          # gave 100 %, which cost twenty minutes to establish. A second
+          # measurement is one process; a false warning is an investigation.
+          if [ -n "$cpu" ] && [ "$cpu" -gt 150 ]; then
+            timeout 3600 /usr/bin/time -f "SB_CPU %P" "$@" "${args[@]}" \
+              --json 2>"$OUT/.cpu" >/dev/null || true
+            cpu2=$(sed -n 's/^SB_CPU \([0-9]*\)%$/\1/p' "$OUT/.cpu" | tail -1)
+            if [ -n "$cpu2" ] && [ "$cpu2" -gt 150 ]; then
+              msg=$(printf '  %-12s T=1 used %s%% then %s%% CPU -- not one thread' \
+                      "$label" "$cpu" "$cpu2")
+              echo "$msg" | tee -a "$OUT/WARNINGS.txt"
+            else
+              printf '  %-12s T=1 read %s%% CPU once, %s%% on re-measure -- noise\n' \
+                "$label" "$cpu" "${cpu2:-?}"
+            fi
+            cpu=$cpu2
+          fi
+        else
+          j=$(timeout 3600 "$@" "${args[@]}" --json 2>/dev/null | grep -m1 '^{') \
+            || j=""
         fi
-      else
-        j=$(timeout 3600 "$@" "${args[@]}" --json 2>/dev/null | grep -m1 '^{') \
-          || { fail "class P  $label T=$t $r"; continue; }
+        [ -n "$j" ] && js+=("$j")
+      done
+      if [ ${#js[@]} -eq 0 ]; then
+        fail "class P  $label T=$t $r"
+        continue
       fi
-      [ -z "$j" ] && { fail "class P  $label T=$t $r: no json"; continue; }
-      echo "$j" | LBL="$label" T="$t" CPU="$cpu" python3 -c "
+      out=$(printf '%s\n' "${js[@]}" | LBL="$label" T="$t" CPU="$cpu" python3 -c "
+import sys, json, os
+ds = [json.loads(l) for l in sys.stdin if l.strip()]
+ms = [d['ms_total'] for d in ds]
+d = min(ds, key=lambda x: x['ms_total'])
+d['lang_label'] = os.environ['LBL']; d['threads'] = int(os.environ['T'])
+d['reps'] = len(ms)
+d['ms_total_reps'] = [round(v, 4) for v in ms]
+d['ms_total_spread'] = round((max(ms) - min(ms)) / min(ms), 4) if min(ms) > 0 else 0.0
+# A thread count that changes the answer is the thing class P exists to rule
+# out, so disagreement between repetitions of one configuration is recorded
+# rather than averaged away.
+d['deterministic_across_reps'] = len({x['grid_hash'] for x in ds}) == 1
+if os.environ.get('CPU'): d['cpu_pct'] = int(os.environ['CPU'])
+print(json.dumps(d))")
+      echo "$out" >> "$OUT/P-parallel.jsonl"
+      echo "$out" | LBL="$label" T="$t" R="$r" python3 -c "
 import sys, json, os
 d = json.load(sys.stdin)
-d['lang_label'] = os.environ['LBL']; d['threads'] = int(os.environ['T'])
-if os.environ.get('CPU'): d['cpu_pct'] = int(os.environ['CPU'])
-print(json.dumps(d))" >> "$OUT/P-parallel.jsonl"
-      printf "  %-12s T=%-3s %-8s %8.0f ms\n" "$label" "$t" "$r" \
-        "$(echo "$j" | python3 -c 'import sys,json; print(json.load(sys.stdin)["ms_total"])')"
+sp = d['ms_total_spread'] * 100
+mark = ' noisy' if sp > 5 else ''
+print('  %-12s T=%-3s %-8s %8.0f ms  %4.1f%%%s'
+      % (os.environ['LBL'], os.environ['T'], os.environ['R'],
+         d['ms_total'], sp, mark))"
     done
   done
 }
@@ -415,6 +537,20 @@ if [ -f "$OUT/WARNINGS.txt" ]; then
   nwarn=$(grep -c '' "$OUT/WARNINGS.txt" || true)
 fi
 
+# What the run cost, recorded so the next dry run can price a plan from a
+# measurement instead of from a constant somebody typed. Wall clock, not the
+# sum of the measurements: builds, warm-up and process start-up are most of
+# the difference and a plan has to pay for them too.
+SB_ELAPSED=$(( $(date +%s) - SB_STARTED ))
+python3 - "$OUT" "$SB_PROFILE" "$SB_REPS" "$SB_P_REPS" "$SB_ELAPSED" <<'PYEOF' \
+  > "$OUT/run.json"
+import json, sys
+out, profile, reps, preps, elapsed = sys.argv[1:6]
+print(json.dumps({"out": out, "profile": profile, "reps": int(reps),
+                  "p_reps": int(preps), "wall_seconds": int(elapsed)},
+                 indent=2))
+PYEOF
+printf "    wall clock   %d min %d s\n" $((SB_ELAPSED / 60)) $((SB_ELAPSED % 60))
 echo "    failures     $nfail"
 echo "    empty files  $empty"
 echo "    warnings     $nwarn"

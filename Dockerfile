@@ -6,13 +6,25 @@
 #         by CI on every push -- the conformance suite runs inside it, so this
 #         image is verified rather than merely written.
 #
-#   full  adds GHC, Swift and Lean, about 14 GiB. Those three are 12 GiB
-#         between them, which does not fit a GitHub runner's disk, so this
-#         target is NOT built by CI -- and therefore not verified. It is
-#         written from the install steps in scripts/setup-wsl.sh, which are
-#         known to work on the machine the published series ran on, but nobody
-#         has built this stage. Treat a failure in it as a bug report rather
-#         than as your mistake. `core` is verified on every push.
+#   full  adds GHC, Swift and Lean and comes to 20.9 GiB, which does not fit
+#         a GitHub runner's disk -- so CI does not build it and every push
+#         verifies `core` only. It has been built and run by hand, and all
+#         fourteen languages pass the conformance gate inside it; the only
+#         target that skips is pygl, which needs a GL device a container does
+#         not have. Three things found by doing that, all of them guesses
+#         before:
+#
+#           - the size. This said 14 GiB, from adding up download sizes.
+#           - the Haskell build failed on a file from the author's laptop.
+#             `cabal install --lib` writes .ghc.environment.* next to the
+#             sources with the absolute path of its package store baked in;
+#             copied into the image it pointed at a home directory that is not
+#             there. It is in .dockerignore now.
+#           - with that file gone, impl/haskell/build.sh refused the `vector`
+#             profiles: it checked for the file rather than for the package,
+#             and the package was reachable without it. It asks GHC now.
+#
+#         Treat a failure here as a bug report rather than as your mistake.
 #
 #     docker build --target core -t slimebench:core .
 #     docker run --rm slimebench:core bench/run.py conformance
@@ -98,6 +110,30 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/b
 ENV SLIMEBENCH_NUMBAPY=/opt/numba/bin/python \
     SLIMEBENCH_PY314T=/opt/ft314/bin/python
 
+# The GL compute host, headless.
+#
+# pygl is class G, not class R: it runs GLSL 4.3 compute shaders and never
+# shows anything. It still needs a GL context, and pygame is what creates one
+# -- three lines, and it was already a dependency of the class R target.
+#
+# SDL's `offscreen` video driver gives that context with no display and no
+# device, over Mesa's software rasteriser, and SDL_VIDEODRIVER is set here so
+# the target works without the caller knowing any of this.
+#
+# Software on purpose, not as a fallback. docs/RESULTS.md measured the two GL
+# paths separately: llvmpipe is tier A and the D3D12/NVIDIA path is about two
+# ULP off. Passing a GPU into the container -- under WSL2 that is
+# `--device=/dev/dxg -v /usr/lib/wsl/lib` -- would make the conformance result
+# depend on the host's driver, which is the one thing an image built for
+# reproducibility must not do. The GPU belongs in a measurement run, where the
+# renderer string is recorded in the row; it does not belong in the gate.
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        --no-install-recommends python3-pygame python3-opengl \
+        libgl1-mesa-dri libglx-mesa0 libegl1 libegl-mesa0 libgbm1 \
+    && rm -rf /var/lib/apt/lists/*
+ENV SDL_VIDEODRIVER=offscreen \
+    LIBGL_ALWAYS_SOFTWARE=1
+
 # Perl's FFI bindings are only needed by the windowed targets, which a
 # container has no display for. The headless Perl target needs nothing.
 
@@ -132,7 +168,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
             BOOTSTRAP_HASKELL_INSTALL_NO_STACK=1 \
             BOOTSTRAP_HASKELL_ADJUST_BASHRC=0 sh
 ENV PATH=/opt/.ghcup/bin:${PATH}
-RUN cabal update && cabal install --lib vector
+# vector is the only non-boot package the ports need, but naming just it
+# builds a package environment that *hides* the boot packages -- GHC then
+# refuses `Data.Array.Unboxed` as "a member of the hidden package array".
+# So every package the sources import is named, boot or not.
+#
+# This has to happen inside the image. impl/haskell/build.sh documents a local
+# `--package-env .` file instead, which cabal writes with the absolute path of
+# its store baked in; that file is machine-specific and is excluded from the
+# build context for exactly that reason.
+RUN cabal update     && cabal install --lib vector array bytestring text
 
 # Swift ships its own clang. It goes on the PATH *after* the system one on
 # purpose: prepending it would shadow clang 18 and silently change what the

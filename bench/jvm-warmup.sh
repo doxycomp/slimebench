@@ -42,6 +42,10 @@ echo "# host: $(uname -sr)  cores: $(nproc)"
 echo "# java: $(java -version 2>&1 | head -1)"
 echo
 
+# shellcheck source=bench/jsonl.sh
+. "$(dirname "$0")/jsonl.sh"
+jsonl_for "$OUT"
+
 # ---- A. the ramp ---------------------------------------------------------
 echo "=== A. per-tick milliseconds from a cold JVM (256x256/16384, serial, no warmup)"
 printf '%-14s %10s %10s\n' "ticks" "tiered" "c2-only"
@@ -51,16 +55,30 @@ for p in default c2; do
   awk '/^tick_ms/{print $3}' "$OUT.$p.raw" > "$OUT.$p.ms"
   rm -f "$OUT.$p.raw"
 done
-python3 - "$OUT.default.ms" "$OUT.c2.ms" <<'PY'
-import sys
+python3 - "$OUT.default.ms" "$OUT.c2.ms" "$JSONL" <<'PY'
+import json, sys
 a = [float(x) for x in open(sys.argv[1])]
 b = [float(x) for x in open(sys.argv[2])]
+rows = []
 def blk(v, lo, hi): return sum(v[lo:hi]) / (hi - lo)
 for lo, hi in ((0,5),(5,10),(10,25),(25,50),(50,100),(100,200),(200,400)):
-    print("%-14s %10.3f %10.3f" % (f"{lo+1}-{hi}", blk(a,lo,hi), blk(b,lo,hi)))
+    label = f"{lo+1}-{hi}"
+    print("%-14s %10.3f %10.3f" % (label, blk(a,lo,hi), blk(b,lo,hi)))
+    rows.append({"table": "ramp", "block": label,
+                 "java_tiered": round(blk(a,lo,hi), 3),
+                 "java_c2": round(blk(b,lo,hi), 3)})
 print("%-14s %10.3f %10.3f" % ("first tick", a[0], b[0]))
 print("%-14s %10.3f %10.3f" % ("best tick", min(a), min(b)))
 print("%-14s %9.1fx %9.1fx" % ("first / best", a[0]/min(a), b[0]/min(b)))
+rows.append({"table": "ramp", "block": "first tick",
+             "java_tiered": round(a[0], 3), "java_c2": round(b[0], 3)})
+rows.append({"table": "ramp", "block": "best tick",
+             "java_tiered": round(min(a), 3), "java_c2": round(min(b), 3)})
+rows.append({"table": "ramp", "block": "first / best",
+             "java_tiered": round(a[0]/min(a), 1), "java_c2": round(b[0]/min(b), 1)})
+with open(sys.argv[3], "a") as f:
+    for r in rows:
+        f.write(json.dumps(r) + "\n")
 PY
 rm -f "$OUT.default.ms" "$OUT.c2.ms"
 echo
@@ -75,16 +93,24 @@ lad() { # label reps cmd...
   local label=$1 reps=$2; shift 2
   for _ in $(seq "$reps"); do
     "$@" $SIZE --ticks 100 --warmup 50 --update serial --json 2>/dev/null | grep -m1 '^{'
-  done | LBL="$label" python3 -c '
+  done | LBL="$label" JSONL="$JSONL" python3 -c '
 import json, os, sys
 rows = [json.loads(l) for l in sys.stdin if l.startswith("{")]
 if not rows:
     print("%-28s NO OUTPUT" % os.environ["LBL"])
 else:
     v = sorted(r["ms_per_tick_mean"] for r in rows)
-    sp = "—" if len(v) < 2 else "%.1f%%" % ((v[-1] - v[0]) / v[0] * 100)
+    sp = None if len(v) < 2 else (v[-1] - v[0]) / v[0]
     print("%-28s %-12s %12.4f %8s"
-          % (os.environ["LBL"], rows[0]["grid_hash"], v[0], sp))'
+          % (os.environ["LBL"], rows[0]["grid_hash"], v[0],
+             "—" if sp is None else "%.1f%%" % (sp * 100)))
+    with open(os.environ["JSONL"], "a") as f:
+        f.write(json.dumps({"table": "interpreters",
+                            "runtime": os.environ["LBL"],
+                            "grid_hash": rows[0]["grid_hash"],
+                            "ms_per_tick": round(v[0], 4),
+                            "spread": None if sp is None else round(sp, 4),
+                            "reps": len(v)}) + chr(10))'
 }
 lad "c gcc -O3 -march=native" 3 impl/c/build/gcc-o3-native/slimebench-headless
 lad "java, C2 only"           3 impl/java/build/c2/slimebench

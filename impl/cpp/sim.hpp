@@ -41,6 +41,10 @@ struct Config {
     Update update = Update::Serial;
     Reduce reduce = Reduce::Private;
     bool simd = false;            // class V: vectorised diffusion pass
+    // Ticks between spatial re-sorts of the agent arrays; 0 = never.
+    // See Sim::agentSort -- it changes which agent sits where, not what
+    // any of them computes.
+    std::uint32_t agent_tile = 0;
 
     float sensor_dist = 9.0f;
     float step = 1.0f;
@@ -156,6 +160,21 @@ class Sim {
     std::vector<float> ay_;
     std::vector<std::uint16_t> adir_;
     std::vector<std::uint32_t> arng_;
+
+    // Spatial ordering (Config::agent_tile). aid_[j] is the original index of
+    // the agent now in slot j and slot_[a] is its inverse; everything that has
+    // to speak in agent indices rather than slots -- the deposit, the agent
+    // hash -- goes through one of them. Empty when ordering is off.
+    std::vector<std::uint32_t> aid_;
+    std::vector<std::uint32_t> slot_;
+    std::vector<std::uint32_t> agentIdx_;   // one target cell per agent
+    std::vector<std::uint32_t> sortKey_;
+    std::vector<float> sortF32_;
+    std::vector<std::uint32_t> sortU32_;
+    std::vector<std::uint16_t> sortU16_;
+    std::uint32_t ticksDone_ = 0;
+
+    void agentSort() noexcept;
 
     std::array<float, kNdir> cos_{};
     std::array<float, kNdir> sin_{};

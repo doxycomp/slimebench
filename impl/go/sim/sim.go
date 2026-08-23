@@ -81,7 +81,11 @@ type Config struct {
 	SensorSteps   uint32
 	RotSteps      uint32
 	HashEvery     uint32
-	Preset        string
+	// Ticks between spatial re-sorts of the agent arrays; 0 = never. See
+	// agentSort -- it changes which agent sits where, not what any of them
+	// computes.
+	AgentTile uint32
+	Preset    string
 }
 
 func DefaultConfig() Config {
@@ -154,6 +158,19 @@ type Sim struct {
 	cos []float32
 	sin []float32
 
+	// Spatial ordering (Config.AgentTile). aid[j] is the original index of the
+	// agent now in slot j and slot[a] is its inverse; everything that has to
+	// speak in agent indices rather than slots -- the deposit, the agent hash
+	// -- goes through one of them. nil when ordering is off.
+	aid       []uint32
+	slot      []uint32
+	agentIdx  []int32
+	sortKey   []uint32
+	sortF32   []float32
+	sortU32   []uint32
+	sortU16   []uint16
+	ticksDone uint32
+
 	NsAgents int64
 	NsDiff   int64
 }
@@ -184,6 +201,19 @@ func New(cfg Config) (*Sim, error) {
 	}
 	if cfg.Update == Deferred {
 		s.Dep = make([]float32, cells)
+	}
+	if cfg.AgentTile > 0 {
+		s.aid = make([]uint32, n)
+		s.slot = make([]uint32, n)
+		s.agentIdx = make([]int32, n)
+		s.sortKey = make([]uint32, n)
+		s.sortF32 = make([]float32, n)
+		s.sortU32 = make([]uint32, n*4)
+		s.sortU16 = make([]uint16, n)
+		for i := 0; i < n; i++ {
+			s.aid[i] = uint32(i)
+			s.slot[i] = uint32(i)
+		}
 	}
 	for i := 0; i < NDIR; i++ {
 		s.cos[i] = math.Float32frombits(CosBits[i])
@@ -230,9 +260,85 @@ func (s *Sim) Log2w() uint32          { return s.log2w }
 func (s *Sim) Masks() (uint32, uint32) { return s.xmask, s.ymask }
 
 // Tick is SPEC-1 section 5.2.
+// agentSort counting-sorts the agent arrays into 8x8 tiles of the grid, so
+// that three sensor reads of neighbouring agents land in neighbouring cache
+// lines. impl/c/sb_core.c carries the measurement behind the tile size; this
+// is the same algorithm, and what it is worth in a garbage-collected language
+// -- where the permutation allocates nothing but does move 26 bytes per agent
+// -- is the question this row answers.
+func (s *Sim) agentSort() {
+	const tileShift = 3 // 8x8 cells
+	n := int(s.Cfg.Agents)
+	tw := (s.Cfg.Width + (1 << tileShift) - 1) >> tileShift
+	th := (s.Cfg.Height + (1 << tileShift) - 1) >> tileShift
+
+	count := make([]uint32, int(tw)*int(th)+1)
+	for j := 0; j < n; j++ {
+		x := uint32(s.Ax[j]) & s.xmask
+		y := uint32(s.Ay[j]) & s.ymask
+		k := (y >> tileShift) * tw + (x >> tileShift)
+		s.sortKey[j] = k
+		count[k+1]++
+	}
+	for t := 1; t < len(count); t++ {
+		count[t] += count[t-1]
+	}
+
+	// Stable: walking the agents in their current order keeps a re-sort cheap
+	// when almost nothing has moved.
+	for j := 0; j < n; j++ {
+		k := s.sortKey[j]
+		dst := count[k]
+		count[k]++
+		s.sortF32[dst] = s.Ax[j]
+		s.sortU16[dst] = s.Adir[j]
+		copy(s.sortU32[dst*4:dst*4+4], s.Arng[j*4:j*4+4])
+		s.sortKey[j] = dst // reused as the permutation
+	}
+	s.Ax, s.sortF32 = s.sortF32, s.Ax
+	s.Adir, s.sortU16 = s.sortU16, s.Adir
+	s.Arng, s.sortU32 = s.sortU32, s.Arng
+	for j := 0; j < n; j++ {
+		s.sortF32[s.sortKey[j]] = s.Ay[j]
+	}
+	s.Ay, s.sortF32 = s.sortF32, s.Ay
+	for j := 0; j < n; j++ {
+		s.sortU32[s.sortKey[j]] = s.aid[j]
+	}
+	copy(s.aid, s.sortU32[:n])
+	for j := 0; j < n; j++ {
+		s.slot[s.aid[j]] = uint32(j)
+	}
+}
+
 func (s *Sim) Tick() {
+	// Re-sort inside the timed region, not beside it: the ordering is only
+	// worth having if it pays for itself.
+	if s.Cfg.AgentTile > 0 && s.ticksDone%s.Cfg.AgentTile == 0 {
+		s.agentSort()
+	}
+	s.ticksDone++
+
 	t0 := time.Now()
-	s.AgentRange(0, int(s.Cfg.Agents), nil)
+	if s.aid != nil {
+		// With spatial ordering the step order is no longer the agent order,
+		// so the deposits are buffered and applied afterwards in ascending
+		// *agent* index -- the same order, and therefore the same floats, as
+		// the direct loop.
+		n := int(s.Cfg.Agents)
+		s.AgentRange(0, n, s.agentIdx)
+		target := s.Grid
+		if s.Dep != nil {
+			target = s.Dep
+		}
+		deposit := s.Cfg.Deposit
+		for a := 0; a < n; a++ {
+			idx := s.agentIdx[s.slot[a]]
+			target[idx] += deposit
+		}
+	} else {
+		s.AgentRange(0, int(s.Cfg.Agents), nil)
+	}
 	t1 := time.Now()
 
 	if s.Dep != nil {
@@ -380,7 +486,14 @@ func (s *Sim) HashGrid() uint32 {
 
 func (s *Sim) HashAgents() uint32 {
 	h := fnvOffset
-	for i := 0; i < int(s.Cfg.Agents); i++ {
+	// In agent order, which is slot order only when the arrays have not been
+	// spatially re-sorted. A checksum that changed with a performance flag
+	// would defeat the point of having one.
+	for a := 0; a < int(s.Cfg.Agents); a++ {
+		i := a
+		if s.slot != nil {
+			i = int(s.slot[a])
+		}
 		h = (h ^ math.Float32bits(s.Ax[i])) * fnvPrime
 		h = (h ^ math.Float32bits(s.Ay[i])) * fnvPrime
 		h = (h ^ uint32(s.Adir[i])) * fnvPrime

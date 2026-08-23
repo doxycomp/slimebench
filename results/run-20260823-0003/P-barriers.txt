@@ -1,0 +1,60 @@
+# host: Linux 6.18.33.2-microsoft-standard-WSL2  cores: 32
+# medium (2048x2048, 1 M agents), 60 ticks after 20 of warm-up, binned
+# work and barrier are worker 0's, in ms per tick
+
+=== what the instrumentation itself costs (ms/tick at T=32)
+  lang            off         on    ratio
+  c             7.319      7.779    1.06x
+  go            6.443      7.224    1.12x
+  java         11.009     12.012    1.09x
+  csharp       23.079     22.201    0.96x
+
+=== work and barrier as the thread count grows
+  lang        T       work    barrier      total
+  c           4     19.840      1.151     20.991
+  c           8     10.387      4.166     14.553
+  c          16      6.607      4.036     10.644
+  c          32      3.357      4.978      8.335
+  go          4     17.164      1.211     18.375
+  go          8      7.342      2.370      9.713
+  go         16      3.900      2.275      6.174
+  go         32      2.169      2.852      5.020
+  java        4     13.960      0.794     14.755
+  java        8      8.774      2.521     11.296
+  java       16      8.698      3.513     12.211
+  java       32      7.161      7.903     15.063
+  csharp      4     18.362      1.830     20.191
+  csharp      8      9.317      3.429     12.746
+  csharp     16      4.399      6.271     10.670
+  csharp     32      2.726     13.406     16.132
+
+=== the per-phase barrier at T=32, where the two managed runtimes differ
+  lang     phase            work    barrier
+  c        agents          2.144      1.509
+  c        prefix          0.001      0.754
+  c        scatter         0.069      0.766
+  c        deposit         0.353      0.890
+  c        merge           0.238      0.899
+  c        diffuse         0.286      0.000
+  go       agents          1.307      0.609
+  go       prefix          0.001      0.223
+  go       scatter         0.064      0.503
+  go       deposit         0.231      0.708
+  go       merge           0.286      0.826
+  go       diffuse         0.363      0.000
+  java     agents          7.062      2.560
+  java     prefix          0.016      1.128
+  java     scatter         0.345      1.338
+  java     deposit         0.332      1.373
+  java     merge           0.956      1.434
+  java     diffuse         0.907      0.000
+  csharp   agents          1.793      2.783
+  csharp   prefix          0.001      2.630
+  csharp   scatter         0.135      2.683
+  csharp   deposit         0.242      2.693
+  csharp   merge           0.263      2.657
+  csharp   diffuse         0.201      0.000
+
+Reading: work that halves as T doubles is a decomposition doing its job.
+Work that stops halving is not a barrier problem, whatever the barrier
+column says next to it.

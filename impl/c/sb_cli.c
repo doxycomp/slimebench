@@ -15,6 +15,8 @@ void sb_print_usage(FILE *f, const char *argv0) {
         "  --agents N  --ticks N  --warmup N  --seed N\n"
         "  --update MODE        serial|deferred\n"
         "  --threads N          class P, requires --update deferred\n"
+        "  --simd-agents        vectorised agent pass, deferred only\n"
+        "  --agent-tile N       re-sort agents into 32x32 tiles every N ticks\n"
         "  --deposit-reduce M   private|binned  (SPEC-1 5.6)\n"
         "  --sensor-dist F  --sensor-steps N  --rot-steps N\n"
         "  --step F  --deposit F  --decay F\n"
@@ -106,6 +108,15 @@ int sb_parse_args(int argc, char **argv, sb_config *cfg, sb_cli_opts *opt) {
         else if (!strcmp(a, "--json"))       { opt->want_json = 1; }
         else if (!strcmp(a, "--freeze-sim")) { opt->freeze_sim = 1; }
         else if (!strcmp(a, "--simd"))       { cfg->simd = 1; }
+        /* The agent pass, separately: it answers a different question from
+         * the stencil and must not be folded into what class V measures. */
+        else if (!strcmp(a, "--simd-agents")) { cfg->simd_agents = 1; }
+        /* Spatial ordering of the agent arrays; the argument is how
+         * many ticks between re-sorts. 0 keeps creation order. */
+        else if (!strcmp(a, "--agent-tile")) {
+            NEED_VALUE(a);
+            cfg->agent_tile = (uint32_t)strtoul(argv[++i], NULL, 10);
+        }
         else if (!strcmp(a, "--no-simd"))    { cfg->simd = 0; }
         else if (!strcmp(a, "--hud"))        { opt->want_hud = 1; }
         else if (!strcmp(a, "--no-hud"))     { opt->want_hud = 0; }
@@ -131,6 +142,29 @@ int sb_parse_args(int argc, char **argv, sb_config *cfg, sb_cli_opts *opt) {
             return 2;
         }
     }
+    if (cfg->agent_tile && cfg->update != SB_UPDATE_DEFERRED) {
+        /* Same reason as --simd-agents: reordering the step is only sound
+         * when no agent can read another's deposit within the tick. */
+        fprintf(stderr, "error: --agent-tile requires --update deferred "
+                        "(SPEC-1 5.5)\n");
+        return 2;
+    }
+    if (cfg->simd_agents) {
+        /* Refused rather than ignored. A flag that quietly does nothing is
+         * how a measurement comes to be labelled as something it is not --
+         * the same failure as a `--threads 1` that ran thirty-two. */
+        if (cfg->update != SB_UPDATE_DEFERRED) {
+            fprintf(stderr, "error: --simd-agents requires --update deferred: "
+                            "in serial mode an agent reads deposits its "
+                            "predecessors made this tick (SPEC-1 5.5)\n");
+            return 2;
+        }
+        if (!sb_simd_agents_available()) {
+            fprintf(stderr, "error: --simd-agents unavailable: this build has "
+                            "no AVX-512 agent kernel\n");
+            return 2;
+        }
+    }
     return 0;
 }
 
@@ -148,12 +182,22 @@ void sb_emit_json(const sb_sim *s, const char *impl, const char *backend,
 
     /* One field describing what actually ran: reduction strategy for class P,
      * and the vector ISA the diffusion pass was compiled for. */
-    char variant[48];
-    snprintf(variant, sizeof variant, "%s%s%s",
+    char variant[80];
+    char tiled[24] = "";
+    if (s->cfg.agent_tile)
+        snprintf(tiled, sizeof tiled, "+tile%u", s->cfg.agent_tile);
+    snprintf(variant, sizeof variant, "%s%s%s%s%s",
              parallel ? (s->cfg.reduce == SB_REDUCE_BINNED ? "binned" : "private")
                       : "scalar",
              s->cfg.use_asm ? "+" : (s->cfg.simd ? "+simd-" : ""),
-             s->cfg.use_asm ? sb_asm_name() : (s->cfg.simd ? sb_simd_name() : ""));
+             s->cfg.use_asm ? sb_asm_name() : (s->cfg.simd ? sb_simd_name() : ""),
+             /* Named separately from the stencil: they are two kernels
+              * answering two questions, and a row has to say which it used. */
+             s->cfg.simd_agents ? "+simd-agents" : "",
+             /* Spatial ordering changes which agent sits where, not what any
+              * of them computes -- but it changes the number in the row, so
+              * the row says so, with the interval it used. */
+             tiled);
     double median = 0.0, p99 = 0.0, mean = 0.0;
     if (n_ticks > 0) {
         double *sorted = (double *)malloc(n_ticks * sizeof(double));

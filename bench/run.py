@@ -355,7 +355,9 @@ def cmd_bench(a: argparse.Namespace) -> int:
     outpath.parent.mkdir(parents=True, exist_ok=True)
 
     rows: list[dict] = []
-    with outpath.open("w", encoding="utf-8") as sink:
+    # "a" when asked: a phase that sweeps several presets is one table, and
+    # writing it needs several invocations because --preset takes one value.
+    with outpath.open("a" if a.append else "w", encoding="utf-8") as sink:
         for t in selected:
             if not t.headless_capable:
                 print(f"-- {t.id}: skipped (not headless-capable)")
@@ -460,6 +462,8 @@ def bench_one(t: Target, cc: str, profile: str, a: argparse.Namespace) -> dict:
 
     ms = [p["ms_total"] for p in reps]
     per_tick = [p["ms_per_tick_median"] for p in reps]
+    agents_ms = [p["ms_agents"] for p in reps]
+    diffuse_ms = [p["ms_diffuse"] for p in reps]
     spread = _spread(ms)
     best = min(reps, key=lambda p: p["ms_total"])
     hashes = {(p["grid_hash"], p["agent_hash"]) for p in reps}
@@ -483,7 +487,17 @@ def bench_one(t: Target, cc: str, profile: str, a: argparse.Namespace) -> dict:
         "ms_total_reps": [round(v, 4) for v in ms],
         "ms_per_tick_spread": round(_spread(per_tick), 4),
         "ms_per_tick_reps": [round(v, 6) for v in per_tick],
-        "ms_agents": best["ms_agents"], "ms_diffuse": best["ms_diffuse"],
+        # Minimum across repetitions and their own spread, like every other
+        # timing here. These came from `best` -- whichever repetition happened
+        # to win on ms_total -- which is a different rule, and left the class V
+        # table ranking on ms_diffuse with no way to say how firm the ranking
+        # was. 57.3 against 59.4 ms means nothing without it.
+        "ms_agents": min(agents_ms),
+        "ms_agents_spread": round(_spread(agents_ms), 4),
+        "ms_agents_reps": [round(v, 4) for v in agents_ms],
+        "ms_diffuse": min(diffuse_ms),
+        "ms_diffuse_spread": round(_spread(diffuse_ms), 4),
+        "ms_diffuse_reps": [round(v, 4) for v in diffuse_ms],
         # Minimum across repetitions, like every other time here; taking
         # it from whichever rep won on ms_total would mix two rules.
         "ms_per_tick_median": min(per_tick),
@@ -647,7 +661,8 @@ def compare_metrics(got: dict[str, float], want: dict[str, float]) -> list[str]:
 
 
 def run_case(t: Target, cc: str, profile: str, size: str, update: str, ticks: int,
-             dump: pathlib.Path | None = None) -> dict | None:
+             dump: pathlib.Path | None = None,
+             why: list[str] | None = None) -> dict | None:
     argv = [t.subst(x, cc, profile) for x in t.run]
     argv[0] = resolve_exe(argv[0])
     argv += CONFORMANCE_SIZES[size]
@@ -657,7 +672,11 @@ def run_case(t: Target, cc: str, profile: str, size: str, update: str, ticks: in
         argv += ["--dump-grid", str(dump)]
     r = spawn_measured(argv, t.dir)
     if not r.ok:
-        sys.stderr.write(r.stderr[-2000:] + "\n")
+        if why is not None:
+            tail = [l for l in r.stderr.splitlines() if l.strip()]
+            why.append(tail[-1].strip() if tail else f"exit {r.exit_code}")
+        else:
+            sys.stderr.write(r.stderr[-2000:] + "\n")
         return None
     return last_json_line(r.stdout)
 
@@ -733,6 +752,7 @@ def cmd_conformance(a: argparse.Namespace) -> int:
         print(f"-- {t.id} ({cc}/{profile}){note}")
 
         first_bad: str | None = None
+        ran_any = False
         with tempfile.TemporaryDirectory() as td:
             dump = pathlib.Path(td) / "grid.f32"
             for size, update, n in case_list(t.conformance_set, t.updates):
@@ -742,13 +762,27 @@ def cmd_conformance(a: argparse.Namespace) -> int:
                     continue
 
                 need_dump = t.tier == "B"
+                why: list[str] = []
                 got = run_case(t, cc, profile, size, update, n,
-                               dump if need_dump else None)
+                               dump if need_dump else None, why)
+                if got is None and not ran_any:
+                    # Nothing has run yet and this one refused, so the target
+                    # cannot run here at all -- a CPU without the instruction
+                    # set it needs, a GPU that is not there, a missing
+                    # library. That is a skip with a reason, not eleven
+                    # divergences: `runnable` above makes the same distinction
+                    # for a binary that will not start, and this is the same
+                    # thing one step later, where the binary starts and then
+                    # says no.
+                    print(f"   cannot run here, skipping: "
+                          f"{why[0] if why else 'no output'}")
+                    break
                 if got is None:
                     print(f"   {key:22s} ERROR")
                     failures += 1
                     first_bad = first_bad or key
                     continue
+                ran_any = True
 
                 if t.tier == "A":
                     gok = got["grid_hash"] == want["grid_hash"]
@@ -963,6 +997,8 @@ def main() -> int:
     b.add_argument("--compilers", help="comma-separated compiler filter")
     b.add_argument("--profiles", help="comma-separated profile filter")
     b.add_argument("--out", help="output .jsonl path")
+    b.add_argument("--append", action="store_true",
+                   help="add to --out instead of replacing it")
     b.add_argument("-v", "--verbose", action="store_true")
     b.set_defaults(fn=cmd_bench)
 

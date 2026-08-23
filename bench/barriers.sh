@@ -23,6 +23,10 @@ mkdir -p "$(dirname "$OUT")"
 
 [ -d "$HOME/opt/go/bin" ] && export PATH="$PATH:$HOME/opt/go/bin"
 
+# shellcheck source=bench/jsonl.sh
+. "$(dirname "$0")/jsonl.sh"
+jsonl_for "$OUT"
+
 C=impl/c/build/gcc-o3-native/slimebench-headless
 GO=impl/go/build/nobounds/slimebench
 JAVA=impl/java/build/default/slimebench
@@ -49,6 +53,7 @@ cost() { # label binary
         --update deferred --threads 32 --deposit-reduce binned --json 2>/dev/null \
       | python3 -c 'import sys,json; print(json.load(sys.stdin)["ms_per_tick_mean"])')
   python3 -c "print('  %-8s %10.3f %10.3f %7.2fx' % ('$1', $a, $b, $b/$a))"
+  jrow table=instr-cost lang="$1" off="$a" on="$b"
 }
 cost c "$C"; cost go "$GO"; cost java "$JAVA"; cost csharp "$CS"
 echo
@@ -57,10 +62,16 @@ echo "=== work and barrier as the thread count grows"
 printf '  %-8s %4s %10s %10s %10s\n' lang T work barrier total
 sweep() { # label binary
   [ -x "$2" ] || { printf '  %-8s not built\n' "$1"; return; }
+  local row l t2 w b tot
   for t in 4 8 16 32; do
-    SLIMEBENCH_PHASE_STATS=1 "$2" --preset medium --ticks 60 --warmup 20 \
+    row=$(SLIMEBENCH_PHASE_STATS=1 "$2" --preset medium --ticks 60 --warmup 20 \
       --update deferred --threads "$t" --deposit-reduce binned --json 2>&1 >/dev/null \
-      | awk -v L="$1" -v T="$t" '/^  total/{printf "  %-8s %4s %10.3f %10.3f %10.3f\n", L, T, $2, $3, $4}'
+      | awk -v L="$1" -v T="$t" '/^  total/{print L, T, $2, $3, $4}')
+    [ -z "$row" ] && continue
+    read -r l t2 w b tot <<<"$row"
+    printf '  %-8s %4s %10.3f %10.3f %10.3f\n' "$l" "$t2" "$w" "$b" "$tot"
+    jrow table=barrier-sweep lang="$l" threads="$t2" work="$w" barrier="$b" \
+         total="$tot"
   done
 }
 sweep c "$C"; sweep go "$GO"; sweep java "$JAVA"; sweep csharp "$CS"
@@ -74,7 +85,11 @@ for pair in "c $C" "go $GO" "java $JAVA" "csharp $CS"; do
   SLIMEBENCH_PHASE_STATS=1 "$2" --preset medium --ticks 60 --warmup 20 \
     --update deferred --threads 32 --deposit-reduce binned --json 2>&1 >/dev/null \
     | awk -v L="$1" '/^  (agents|prefix|scatter|deposit|merge|diffuse)/ \
-        {printf "  %-8s %-10s %10.3f %10.3f\n", L, $1, $2, $3}'
+        {print L, $1, $2, $3}' \
+    | while read -r l ph w b; do
+        printf '  %-8s %-10s %10.3f %10.3f\n' "$l" "$ph" "$w" "$b"
+        jrow table=barrier-phase lang="$l" phase="$ph" work="$w" barrier="$b"
+      done
 done
 echo
 echo "Reading: work that halves as T doubles is a decomposition doing its job."

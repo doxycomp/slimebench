@@ -88,15 +88,17 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Three generators write source that is committed: the trig table into
-      # every language, the GLSL shaders into a C header, and the Rust copy of
-      # the bitmap font. Committed generated output drifts from its generator
+      # Five generators write source that is committed: the trig table into
+      # every language, the GLSL shaders into a C header, and the Rust, Python
+      # and Haskell copies of the bitmap font. Committed generated output drifts from its generator
       # the first time someone edits the output by hand, and nothing notices.
       # This job notices.
       - name: Re-run the generators
         run: |
           python3 spec/tools/gen_dirtable.py
           python3 spec/tools/gen_rust_font.py
+          python3 spec/tools/gen_python_font.py
+          python3 spec/tools/gen_haskell_font.py
           python3 impl/glcompute/gen_shaders.py
 
       - name: Working tree must be unchanged
@@ -108,6 +110,27 @@ jobs:
             git --no-pager diff
             exit 1
           fi
+
+      # The same rule for the document. Half of docs/RESULTS.md was generated
+      # and half typed by hand, and the file claimed all of it was generated.
+      # Every table bench/tables.py knows how to produce is now marked with
+      # `<!-- sb:table id -->` and checked against the series the document
+      # names, so a hand edit or a replaced series fails here instead of
+      # shipping.
+      - name: Tables must match the series the document names
+        run: |
+          series=$(sed -n 's#.*(\.\./\(results/run-[0-9-]*\)/).*#\1#p' \
+                     docs/RESULTS.md | head -1)
+          if [ -z "$series" ]; then
+            echo "::error::docs/RESULTS.md does not name a series directory."
+            exit 1
+          fi
+          echo "document names $series"
+          if [ ! -d "$series" ]; then
+            echo "::error::$series is named by the document but not committed."
+            exit 1
+          fi
+          python3 bench/tables.py --check docs/RESULTS.md "$series"
 
   scripts:
     name: shell scripts

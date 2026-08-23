@@ -18,18 +18,31 @@
  *
  * ## What is NOT vectorised, and why
  *
- * The agent pass. Its three sensor reads are a gather with data-dependent
- * addresses (AVX2 has `vgatherdps`, and on Zen it is barely faster than
- * scalar loads), and the deposit is a scatter where several agents routinely
- * target the same cell within one vector. Handling that needs AVX-512
- * conflict detection plus a serialising fallback, which costs more than it
- * saves. Measuring that claim is future work; asserting it here would be
- * cheating, so the agent pass simply runs scalar in class V too.
+ * The deposit. Several agents in one vector routinely target the same cell,
+ * so a scatter needs AVX-512 conflict detection and a serialising fallback.
+ * It stays scalar, which also makes the exactness argument trivial.
+ *
+ * The agent *step* used to be in this list, on the argument that its three
+ * sensor reads are a gather with data-dependent addresses and that gathers on
+ * Zen are barely faster than scalar loads. That was plausible and unmeasured.
+ * sb_simd_agents.c measures it; docs/RESULTS.md says what came out.
  */
 #ifndef SB_SIMD_H
 #define SB_SIMD_H
 
 #include "sb_core.h"
+
+/* 0 if this build has no vector path for the agent pass. See
+ * sb_simd_agents.c for why that is a separate question from the stencil. */
+int sb_simd_agents_available(void);
+
+/* SPEC-1 section 5.3 for agents [i0, i1), vectorised. Writes each agent's
+ * target cell into out[i - i0]; the caller applies the deposits, in that
+ * order, which is what keeps this bit-identical to the scalar loop.
+ *
+ * `deferred` only: in `serial` mode an agent sees its predecessors' deposits
+ * and the pass is not independent (SPEC-1 5.5). */
+void sb_simd_agents(sb_sim *s, uint32_t i0, uint32_t i1, uint32_t *out);
 
 /* 0 if this build has no vector path (kernel falls back to scalar). */
 int sb_simd_available(void);
